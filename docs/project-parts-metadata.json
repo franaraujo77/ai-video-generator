@@ -1,0 +1,25 @@
+{
+  "repository_type": "monolith",
+  "project_name": "ai-video-generator",
+  "description": "Generic video generation automation",
+  "parts": [
+    {
+      "part_id": "main",
+      "project_type_id": "cli",
+      "display_name": "AI Video Generator CLI",
+      "root_path": "/Users/francisaraujo/repos/ai-video-generator",
+      "primary_language": "Python",
+      "framework": "Custom CLI pipeline",
+      "entry_points": [
+        "scripts/generate_asset.py",
+        "scripts/generate_video.py",
+        "scripts/generate_audio.py",
+        "scripts/generate_sound_effects.py",
+        "scripts/assemble_video.py",
+        "scripts/create_composite.py",
+        "scripts/create_split_screen.py"
+      ]
+    }
+  ],
+  "integration_points": []
+}
