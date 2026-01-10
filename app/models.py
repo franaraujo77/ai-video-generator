@@ -4,12 +4,23 @@ This module contains all SQLAlchemy models for the orchestration layer.
 All models use the Mapped[type] annotation pattern required by SQLAlchemy 2.0.
 
 Models are kept in a single file until ~500 lines, then split by domain.
+
+Encrypted Fields Pattern:
+    Sensitive credentials (OAuth tokens, API keys) are stored encrypted using
+    Fernet symmetric encryption. Encrypted columns follow the naming convention
+    `{field}_encrypted` and use LargeBinary type since Fernet outputs bytes.
+
+    Example:
+        youtube_token_encrypted: Mapped[bytes | None]  # OAuth refresh token
+        notion_token_encrypted: Mapped[bytes | None]   # Integration token
+
+    NEVER expose encrypted fields in __repr__ or log statements.
 """
 
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy import Boolean, DateTime, LargeBinary, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -38,6 +49,14 @@ class Channel(Base):
         created_at: Timestamp when channel was registered.
         updated_at: Timestamp of last configuration change.
         is_active: Whether channel is enabled for video generation.
+        youtube_token_encrypted: Fernet-encrypted YouTube OAuth refresh token.
+        notion_token_encrypted: Fernet-encrypted Notion integration token.
+        gemini_key_encrypted: Fernet-encrypted Gemini API key.
+        elevenlabs_key_encrypted: Fernet-encrypted ElevenLabs API key.
+
+    Note:
+        Encrypted fields store credentials as bytes. Use CredentialService
+        to encrypt/decrypt credentials - NEVER access encrypted fields directly.
     """
 
     __tablename__ = "channels"
@@ -72,6 +91,29 @@ class Channel(Base):
         index=True,  # Index for filtering active/inactive channels
     )
 
+    # Encrypted credentials (Fernet symmetric encryption)
+    # Use CredentialService for encrypt/decrypt operations
+    youtube_token_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+    notion_token_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+    gemini_key_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+    elevenlabs_key_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+
     def __repr__(self) -> str:
-        """Return string representation for debugging."""
+        """Return string representation for debugging.
+
+        Note:
+            NEVER expose encrypted fields in repr - security risk.
+        """
         return f"<Channel(channel_id={self.channel_id!r}, name={self.channel_name!r})>"
