@@ -83,6 +83,11 @@ def create_composite(character_path: str, environment_path: str, output_path: st
     final = Image.new("RGB", composite.size, (0, 0, 0))
     final.paste(composite, mask=composite.split()[3])  # Use alpha channel as mask
 
+    # Create output directory if needed
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+
     # Save
     final.save(output_path, "PNG")
     print(f"✅ Composite saved: {output_path} (1920x1080 16:9)")

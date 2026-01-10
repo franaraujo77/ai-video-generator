@@ -40,7 +40,7 @@ class Channel(Base):
     """YouTube channel configuration and tracking.
 
     Each channel represents a distinct YouTube channel with its own
-    credentials, voice settings, and content configuration.
+    credentials, voice settings, branding, and content configuration.
 
     Attributes:
         id: Internal UUID primary key.
@@ -53,10 +53,16 @@ class Channel(Base):
         notion_token_encrypted: Fernet-encrypted Notion integration token.
         gemini_key_encrypted: Fernet-encrypted Gemini API key.
         elevenlabs_key_encrypted: Fernet-encrypted ElevenLabs API key.
+        voice_id: ElevenLabs voice ID for narration (FR10). Not sensitive, stored plaintext.
+        default_voice_id: Fallback voice ID when channel voice is None.
+        branding_intro_path: Relative path to intro video for video assembly (FR11).
+        branding_outro_path: Relative path to outro video for video assembly (FR11).
+        branding_watermark_path: Relative path to watermark image for video assembly (FR11).
 
     Note:
         Encrypted fields store credentials as bytes. Use CredentialService
         to encrypt/decrypt credentials - NEVER access encrypted fields directly.
+        Voice IDs are NOT encrypted - they are not sensitive (public ElevenLabs IDs).
     """
 
     __tablename__ = "channels"
@@ -110,10 +116,38 @@ class Channel(Base):
         nullable=True,
     )
 
+    # Voice configuration (FR10)
+    # Voice IDs are NOT encrypted - they are public ElevenLabs identifiers
+    voice_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+    default_voice_id: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
+    # Branding configuration (FR11)
+    # Paths are relative to channel workspace, validated in schema
+    branding_intro_path: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    branding_outro_path: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    branding_watermark_path: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
         Note:
             NEVER expose encrypted fields in repr - security risk.
+            Shows voice_id presence (not value) for debugging.
         """
-        return f"<Channel(channel_id={self.channel_id!r}, name={self.channel_name!r})>"
+        voice_info = "set" if self.voice_id else "not_set"
+        return f"<Channel(channel_id={self.channel_id!r}, name={self.channel_name!r}, voice_id={voice_info})>"
