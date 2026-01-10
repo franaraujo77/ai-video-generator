@@ -14,6 +14,9 @@ dependencies = [
     "asyncpg>=0.29.0",
     "alembic>=1.13.0",
     "aiosqlite>=0.19.0",  # For async SQLite tests
+    "pydantic>=2.8.0",  # Schema validation (Story 1.2+)
+    "pyyaml>=6.0",  # YAML config parsing (Story 1.2+)
+    "structlog>=23.2.0",  # Structured logging (Story 1.2+)
 ]
 
 [dependency-groups]
