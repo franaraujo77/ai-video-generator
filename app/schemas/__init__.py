@@ -1,5 +1,5 @@
 """Pydantic schemas for validation and serialization."""
 
-from app.schemas.channel_config import ChannelConfigSchema
+from app.schemas.channel_config import BrandingConfig, ChannelConfigSchema
 
-__all__ = ["ChannelConfigSchema"]
+__all__ = ["BrandingConfig", "ChannelConfigSchema"]

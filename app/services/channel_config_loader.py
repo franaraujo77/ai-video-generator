@@ -3,6 +3,14 @@
 This module provides the ChannelConfigLoader class for loading channel
 configurations from YAML files, and the ConfigManager singleton for
 managing loaded configurations with hot reload support.
+
+Syncing Configuration to Database:
+    The ChannelConfigLoader.sync_to_database() method persists voice and branding
+    configuration from YAML to the Channel model. This enables the orchestration
+    layer to read voice_id and branding paths directly from the database without
+    parsing YAML files at runtime.
+
+    YAML → ChannelConfigSchema → sync_to_database() → Channel model
 """
 
 import asyncio
@@ -11,7 +19,10 @@ from pathlib import Path
 import structlog
 import yaml
 from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models import Channel
 from app.schemas.channel_config import ChannelConfigSchema
 
 log = structlog.get_logger()
@@ -22,7 +33,19 @@ class ChannelConfigLoader:
 
     This class handles loading individual YAML files and scanning directories
     for channel configurations. Invalid files are logged and skipped.
+
+    Also provides sync_to_database() for persisting voice and branding config
+    from YAML to the Channel database model.
     """
+
+    def __init__(self, workspace_root: Path | None = None) -> None:
+        """Initialize ChannelConfigLoader.
+
+        Args:
+            workspace_root: Base path for validating branding file existence.
+                           If None, file existence checks are skipped.
+        """
+        self._workspace_root = workspace_root
 
     def load_channel_config(self, file_path: Path) -> ChannelConfigSchema | None:
         """Load and validate channel config from YAML file.
@@ -123,6 +146,150 @@ class ChannelConfigLoader:
         )
 
         return configs
+
+    def validate_branding_files(
+        self, config: ChannelConfigSchema, channel_workspace: Path | None = None
+    ) -> list[str]:
+        """Validate branding file paths exist on filesystem.
+
+        Args:
+            config: Channel configuration with branding section.
+            channel_workspace: Base path for branding files. If None, uses
+                              self._workspace_root if set.
+
+        Returns:
+            List of warning messages for missing branding files.
+            Empty list if all files exist or no branding configured.
+        """
+        warnings: list[str] = []
+        workspace = channel_workspace or self._workspace_root
+
+        if workspace is None:
+            # Cannot validate without workspace path
+            return warnings
+
+        if config.branding is None:
+            return warnings
+
+        branding = config.branding
+
+        if branding.intro_video:
+            intro_path = workspace / branding.intro_video
+            if not intro_path.exists():
+                warnings.append(f"Branding intro video not found: {intro_path}")
+                log.warning(
+                    "branding_file_not_found",
+                    channel_id=config.channel_id,
+                    file_type="intro_video",
+                    path=str(intro_path),
+                )
+
+        if branding.outro_video:
+            outro_path = workspace / branding.outro_video
+            if not outro_path.exists():
+                warnings.append(f"Branding outro video not found: {outro_path}")
+                log.warning(
+                    "branding_file_not_found",
+                    channel_id=config.channel_id,
+                    file_type="outro_video",
+                    path=str(outro_path),
+                )
+
+        if branding.watermark_image:
+            watermark_path = workspace / branding.watermark_image
+            if not watermark_path.exists():
+                warnings.append(f"Branding watermark not found: {watermark_path}")
+                log.warning(
+                    "branding_file_not_found",
+                    channel_id=config.channel_id,
+                    file_type="watermark_image",
+                    path=str(watermark_path),
+                )
+
+        return warnings
+
+    async def sync_to_database(
+        self, config: ChannelConfigSchema, db: AsyncSession
+    ) -> Channel:
+        """Persist voice and branding config from YAML to database.
+
+        Creates or updates a Channel record with voice_id and branding paths
+        from the parsed YAML configuration. This enables the orchestration
+        layer to read configuration from the database at runtime.
+
+        Logs warning if voice_id is missing (AC #2).
+
+        Args:
+            config: Validated ChannelConfigSchema from YAML.
+            db: Async database session.
+
+        Returns:
+            Created or updated Channel model.
+
+        Example:
+            >>> config = loader.load_channel_config(Path("poke1.yaml"))
+            >>> channel = await loader.sync_to_database(config, db)
+        """
+        # Check for existing channel
+        result = await db.execute(
+            select(Channel).where(Channel.channel_id == config.channel_id)
+        )
+        channel = result.scalar_one_or_none()
+
+        if channel is None:
+            # Create new channel
+            channel = Channel(
+                channel_id=config.channel_id,
+                channel_name=config.channel_name,
+                is_active=config.is_active,
+            )
+            db.add(channel)
+            log.info(
+                "channel_created",
+                channel_id=config.channel_id,
+                channel_name=config.channel_name,
+            )
+        else:
+            # Update existing channel
+            channel.channel_name = config.channel_name
+            channel.is_active = config.is_active
+            log.info(
+                "channel_updated",
+                channel_id=config.channel_id,
+                channel_name=config.channel_name,
+            )
+
+        # Sync voice_id (AC #2 - log warning if missing)
+        channel.voice_id = config.voice_id
+        if config.voice_id is None:
+            log.warning(
+                "channel_voice_id_not_set",
+                channel_id=config.channel_id,
+                message="Channel will use DEFAULT_VOICE_ID for narration",
+            )
+
+        # Sync branding paths
+        if config.branding:
+            channel.branding_intro_path = config.branding.intro_video
+            channel.branding_outro_path = config.branding.outro_video
+            channel.branding_watermark_path = config.branding.watermark_image
+            log.info(
+                "channel_branding_synced",
+                channel_id=config.channel_id,
+                has_intro=config.branding.intro_video is not None,
+                has_outro=config.branding.outro_video is not None,
+                has_watermark=config.branding.watermark_image is not None,
+            )
+        else:
+            # Clear branding if not configured
+            channel.branding_intro_path = None
+            channel.branding_outro_path = None
+            channel.branding_watermark_path = None
+
+        await db.commit()
+        await db.refresh(channel)
+
+        return channel
 
 
 class ConfigManager:
