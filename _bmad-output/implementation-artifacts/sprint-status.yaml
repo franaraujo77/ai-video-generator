@@ -44,7 +44,7 @@ development_status:
   epic-1: in-progress
   1-1-database-foundation-channel-model: done
   1-2-channel-configuration-yaml-loader: done
-  1-3-per-channel-encrypted-credentials-storage: backlog
+  1-3-per-channel-encrypted-credentials-storage: done
   1-4-channel-voice-branding-configuration: backlog
   1-5-channel-storage-strategy-configuration: backlog
   1-6-channel-capacity-tracking: backlog
