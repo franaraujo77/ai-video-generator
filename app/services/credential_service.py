@@ -41,9 +41,7 @@ class CredentialService:
         >>> token = await service.get_youtube_token("poke1", db)
     """
 
-    async def _get_channel(
-        self, channel_id: str, db: AsyncSession
-    ) -> Channel | None:
+    async def _get_channel(self, channel_id: str, db: AsyncSession) -> Channel | None:
         """Get channel by business identifier.
 
         Args:
@@ -53,14 +51,10 @@ class CredentialService:
         Returns:
             Channel model or None if not found.
         """
-        result = await db.execute(
-            select(Channel).where(Channel.channel_id == channel_id)
-        )
+        result = await db.execute(select(Channel).where(Channel.channel_id == channel_id))
         return result.scalar_one_or_none()
 
-    async def store_youtube_token(
-        self, channel_id: str, token: str, db: AsyncSession
-    ) -> None:
+    async def store_youtube_token(self, channel_id: str, token: str, db: AsyncSession) -> None:
         """Store encrypted YouTube OAuth refresh token for channel.
 
         Args:
@@ -97,9 +91,7 @@ class CredentialService:
             success=True,
         )
 
-    async def get_youtube_token(
-        self, channel_id: str, db: AsyncSession
-    ) -> str | None:
+    async def get_youtube_token(self, channel_id: str, db: AsyncSession) -> str | None:
         """Retrieve and decrypt YouTube OAuth refresh token for channel.
 
         Args:
@@ -158,9 +150,7 @@ class CredentialService:
             )
             raise
 
-    async def store_notion_token(
-        self, channel_id: str, token: str, db: AsyncSession
-    ) -> None:
+    async def store_notion_token(self, channel_id: str, token: str, db: AsyncSession) -> None:
         """Store encrypted Notion integration token for channel.
 
         Args:
@@ -197,9 +187,7 @@ class CredentialService:
             success=True,
         )
 
-    async def get_notion_token(
-        self, channel_id: str, db: AsyncSession
-    ) -> str | None:
+    async def get_notion_token(self, channel_id: str, db: AsyncSession) -> str | None:
         """Retrieve and decrypt Notion integration token for channel.
 
         Args:
@@ -258,9 +246,7 @@ class CredentialService:
             )
             raise
 
-    async def store_gemini_key(
-        self, channel_id: str, api_key: str, db: AsyncSession
-    ) -> None:
+    async def store_gemini_key(self, channel_id: str, api_key: str, db: AsyncSession) -> None:
         """Store encrypted Gemini API key for channel.
 
         Args:
@@ -294,9 +280,7 @@ class CredentialService:
             success=True,
         )
 
-    async def get_gemini_key(
-        self, channel_id: str, db: AsyncSession
-    ) -> str | None:
+    async def get_gemini_key(self, channel_id: str, db: AsyncSession) -> str | None:
         """Retrieve and decrypt Gemini API key for channel.
 
         Args:
@@ -350,9 +334,7 @@ class CredentialService:
             )
             raise
 
-    async def store_elevenlabs_key(
-        self, channel_id: str, api_key: str, db: AsyncSession
-    ) -> None:
+    async def store_elevenlabs_key(self, channel_id: str, api_key: str, db: AsyncSession) -> None:
         """Store encrypted ElevenLabs API key for channel.
 
         Args:
@@ -386,9 +368,7 @@ class CredentialService:
             success=True,
         )
 
-    async def get_elevenlabs_key(
-        self, channel_id: str, db: AsyncSession
-    ) -> str | None:
+    async def get_elevenlabs_key(self, channel_id: str, db: AsyncSession) -> str | None:
         """Retrieve and decrypt ElevenLabs API key for channel.
 
         Args:

@@ -214,9 +214,7 @@ class ChannelConfigLoader:
 
         return warnings
 
-    async def sync_to_database(
-        self, config: ChannelConfigSchema, db: AsyncSession
-    ) -> Channel:
+    async def sync_to_database(self, config: ChannelConfigSchema, db: AsyncSession) -> Channel:
         """Persist voice, branding, storage, max_concurrent, and R2 config to database.
 
         Creates or updates a Channel record with voice_id, branding paths,
@@ -240,9 +238,7 @@ class ChannelConfigLoader:
             >>> channel = await loader.sync_to_database(config, db)
         """
         # Check for existing channel
-        result = await db.execute(
-            select(Channel).where(Channel.channel_id == config.channel_id)
-        )
+        result = await db.execute(select(Channel).where(Channel.channel_id == config.channel_id))
         channel = result.scalar_one_or_none()
 
         if channel is None:
@@ -319,9 +315,7 @@ class ChannelConfigLoader:
 
         return channel
 
-    async def _sync_r2_credentials(
-        self, config: ChannelConfigSchema, channel: Channel
-    ) -> None:
+    async def _sync_r2_credentials(self, config: ChannelConfigSchema, channel: Channel) -> None:
         """Encrypt and persist R2 credentials to Channel model.
 
         If r2_config is provided in the YAML config, encrypts the credentials
@@ -355,9 +349,7 @@ class ChannelConfigLoader:
         # Encrypt and persist R2 credentials
         encryption_service = get_encryption_service()
 
-        channel.r2_account_id_encrypted = encryption_service.encrypt(
-            config.r2_config.account_id
-        )
+        channel.r2_account_id_encrypted = encryption_service.encrypt(config.r2_config.account_id)
         channel.r2_access_key_id_encrypted = encryption_service.encrypt(
             config.r2_config.access_key_id
         )
@@ -420,9 +412,7 @@ class ConfigManager:
         """
         async with self._lock:
             # Use to_thread to avoid blocking event loop during file I/O
-            new_configs = await asyncio.to_thread(
-                self._loader.load_all_configs, self._config_dir
-            )
+            new_configs = await asyncio.to_thread(self._loader.load_all_configs, self._config_dir)
 
             # Log changes
             added = set(new_configs.keys()) - set(self._configs.keys())

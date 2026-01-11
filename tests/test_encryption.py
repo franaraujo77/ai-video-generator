@@ -103,9 +103,7 @@ class TestEncryptionService:
 
         assert isinstance(decrypted, str)
 
-    def test_missing_key_raises_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_key_raises_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that EncryptionKeyMissingError is raised when FERNET_KEY not set."""
         monkeypatch.delenv("FERNET_KEY", raising=False)
 
@@ -114,9 +112,7 @@ class TestEncryptionService:
 
         assert "FERNET_KEY environment variable is required" in str(exc_info.value)
 
-    def test_empty_key_raises_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_empty_key_raises_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that EncryptionKeyMissingError is raised when FERNET_KEY is empty."""
         monkeypatch.setenv("FERNET_KEY", "")
 
@@ -125,9 +121,7 @@ class TestEncryptionService:
 
         assert "FERNET_KEY environment variable is required" in str(exc_info.value)
 
-    def test_invalid_key_format_raises_error(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_invalid_key_format_raises_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that EncryptionKeyMissingError is raised when FERNET_KEY has invalid format.
 
         Fernet keys must be 32 url-safe base64-encoded bytes. Invalid formats

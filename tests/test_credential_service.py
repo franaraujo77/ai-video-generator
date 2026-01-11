@@ -131,9 +131,7 @@ class TestCredentialServiceYouTubeToken:
         monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
 
         with pytest.raises(ValueError) as exc_info:
-            await credential_service.store_youtube_token(
-                "nonexistent", "token", async_session
-            )
+            await credential_service.store_youtube_token("nonexistent", "token", async_session)
 
         assert "Channel not found: nonexistent" in str(exc_info.value)
 
@@ -149,14 +147,10 @@ class TestCredentialServiceYouTubeToken:
         monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
 
         # Store first token
-        await credential_service.store_youtube_token(
-            "poke1", "first_token", async_session
-        )
+        await credential_service.store_youtube_token("poke1", "first_token", async_session)
 
         # Store second token (should overwrite)
-        await credential_service.store_youtube_token(
-            "poke1", "second_token", async_session
-        )
+        await credential_service.store_youtube_token("poke1", "second_token", async_session)
 
         # Should get the second token
         retrieved = await credential_service.get_youtube_token("poke1", async_session)
@@ -220,20 +214,12 @@ class TestCredentialServiceMultiChannel:
         nature1_token = "ya29.nature1_specific_token"
 
         # Store tokens for each channel
-        await credential_service.store_youtube_token(
-            "poke1", poke1_token, async_session
-        )
-        await credential_service.store_youtube_token(
-            "nature1", nature1_token, async_session
-        )
+        await credential_service.store_youtube_token("poke1", poke1_token, async_session)
+        await credential_service.store_youtube_token("nature1", nature1_token, async_session)
 
         # Retrieve and verify isolation
-        retrieved_poke1 = await credential_service.get_youtube_token(
-            "poke1", async_session
-        )
-        retrieved_nature1 = await credential_service.get_youtube_token(
-            "nature1", async_session
-        )
+        retrieved_poke1 = await credential_service.get_youtube_token("poke1", async_session)
+        retrieved_nature1 = await credential_service.get_youtube_token("nature1", async_session)
 
         assert retrieved_poke1 == poke1_token
         assert retrieved_nature1 == nature1_token
@@ -256,33 +242,16 @@ class TestCredentialServiceMultiChannel:
         elevenlabs_key = "el_elevenlabs_key"
 
         # Store all credential types
-        await credential_service.store_youtube_token(
-            "poke1", youtube_token, async_session
-        )
-        await credential_service.store_notion_token(
-            "poke1", notion_token, async_session
-        )
+        await credential_service.store_youtube_token("poke1", youtube_token, async_session)
+        await credential_service.store_notion_token("poke1", notion_token, async_session)
         await credential_service.store_gemini_key("poke1", gemini_key, async_session)
-        await credential_service.store_elevenlabs_key(
-            "poke1", elevenlabs_key, async_session
-        )
+        await credential_service.store_elevenlabs_key("poke1", elevenlabs_key, async_session)
 
         # Retrieve and verify all credentials
-        assert (
-            await credential_service.get_youtube_token("poke1", async_session)
-            == youtube_token
-        )
-        assert (
-            await credential_service.get_notion_token("poke1", async_session)
-            == notion_token
-        )
-        assert (
-            await credential_service.get_gemini_key("poke1", async_session) == gemini_key
-        )
-        assert (
-            await credential_service.get_elevenlabs_key("poke1", async_session)
-            == elevenlabs_key
-        )
+        assert await credential_service.get_youtube_token("poke1", async_session) == youtube_token
+        assert await credential_service.get_notion_token("poke1", async_session) == notion_token
+        assert await credential_service.get_gemini_key("poke1", async_session) == gemini_key
+        assert await credential_service.get_elevenlabs_key("poke1", async_session) == elevenlabs_key
 
 
 class TestCredentialServiceDecryptionErrors:
@@ -300,9 +269,7 @@ class TestCredentialServiceDecryptionErrors:
         """Test that DecryptionError is raised when decrypting with wrong key (AC: #2)."""
         # Store with first key
         monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
-        await credential_service.store_youtube_token(
-            "poke1", "test_token", async_session
-        )
+        await credential_service.store_youtube_token("poke1", "test_token", async_session)
 
         # Reset singleton and try to retrieve with different key
         EncryptionService.reset_instance()
@@ -326,9 +293,7 @@ class TestCredentialServiceDecryptionErrors:
         """Test that decryption failure raises DecryptionError, not generic Exception (AC: #2)."""
         # Store with first key
         monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
-        await credential_service.store_youtube_token(
-            "poke1", "test_token", async_session
-        )
+        await credential_service.store_youtube_token("poke1", "test_token", async_session)
 
         # Reset singleton and try to retrieve with different key
         EncryptionService.reset_instance()
@@ -429,9 +394,7 @@ class TestCredentialServiceDatabaseStorage:
 
         plaintext_token = "ya29.a0_plaintext_token"
 
-        await credential_service.store_youtube_token(
-            "poke1", plaintext_token, async_session
-        )
+        await credential_service.store_youtube_token("poke1", plaintext_token, async_session)
 
         # Refresh to get latest data from database
         await async_session.refresh(channel_poke1)

@@ -294,7 +294,4 @@ class Task(Base):
 
     def __repr__(self) -> str:
         """Return string representation for debugging."""
-        return (
-            f"<Task(id={self.id!s:.8}, channel_id={self.channel_id!r}, "
-            f"status={self.status!r})>"
-        )
+        return f"<Task(id={self.id!s:.8}, channel_id={self.channel_id!r}, status={self.status!r})>"

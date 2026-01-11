@@ -173,9 +173,7 @@ class R2Config(BaseModel):
             NEVER expose credentials in repr - security risk.
             Shows bucket_name and credential presence only.
         """
-        has_credentials = all(
-            [self.account_id, self.access_key_id, self.secret_access_key]
-        )
+        has_credentials = all([self.account_id, self.access_key_id, self.secret_access_key])
         creds = "set" if has_credentials else "incomplete"
         return f"R2Config(bucket_name={self.bucket_name!r}, credentials={creds})"
 

@@ -24,7 +24,9 @@ class TestGetDatabaseUrl:
                 del os.environ["DATABASE_URL"]
 
             with patch.dict(os.environ, {}, clear=True):
-                with pytest.raises(ValueError, match="DATABASE_URL environment variable is required"):
+                with pytest.raises(
+                    ValueError, match="DATABASE_URL environment variable is required"
+                ):
                     _get_database_url()
 
     def test_returns_url_unchanged_when_already_asyncpg(self):
@@ -129,9 +131,7 @@ async def test_session_rollback_on_exception(async_engine):
     async with session_factory() as session:
         from sqlalchemy import select
 
-        result = await session.execute(
-            select(Channel).where(Channel.channel_id == "rollback-test")
-        )
+        result = await session.execute(select(Channel).where(Channel.channel_id == "rollback-test"))
         found = result.scalar_one()
         assert found.channel_name == "Rollback Test"
 

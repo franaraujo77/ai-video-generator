@@ -78,6 +78,7 @@ def create_composite(character_path, environment_path, output_path):
     except Exception as e:
         print(f"❌ Error creating composite: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -139,6 +140,7 @@ def create_split_vertical(top_image_path, bottom_image_path, output_path):
     except Exception as e:
         print(f"❌ Error creating vertical split: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -245,7 +247,7 @@ def main():
     )
     parser.add_argument(
         "--reference-image",
-        action='append',
+        action="append",
         required=False,
         help="Optional reference image(s) for variations (image-to-image generation). Can be specified multiple times for multi-reference generation. Use for character variations based on core assets.",
     )
@@ -269,25 +271,28 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"🎬 Pokémon Natural Geographic - Asset Generator")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"💾 Output: {args.output}")
 
     # Check if split-vertical mode
     if args.split_vertical:
         print(f"🖼️  Mode: Vertical Split Composite")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
         success = create_split_vertical(args.split_vertical[0], args.split_vertical[1], args.output)
     # Check if composite mode
     elif args.character and args.environment:
         # Composite mode
         print(f"🖼️  Mode: Composite")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
         success = create_composite(args.character, args.environment, args.output)
     elif args.character or args.environment:
         # Error: only one specified
-        print("❌ Error: Both --character and --environment required for composite mode", file=sys.stderr)
+        print(
+            "❌ Error: Both --character and --environment required for composite mode",
+            file=sys.stderr,
+        )
         sys.exit(1)
     else:
         # Generation mode
@@ -314,12 +319,12 @@ def main():
                 print(f"🖼️  References ({len(args.reference_image)}):")
                 for i, ref in enumerate(args.reference_image, 1):
                     print(f"     {i}. {ref}")
-        print(f"{'='*60}\n")
+        print(f"{'=' * 60}\n")
 
         # Generate the image
         success = generate_image(args.prompt, args.output, api_key, args.reference_image)
 
-    print(f"\n{'='*60}\n")
+    print(f"\n{'=' * 60}\n")
 
     # Exit with appropriate code
     sys.exit(0 if success else 1)

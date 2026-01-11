@@ -15,6 +15,7 @@ import os
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
@@ -58,11 +59,15 @@ else:
     engine = None  # type: ignore[assignment]
 
 
-async_session_factory = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,  # CRITICAL: prevents attribute expiration after commit
-) if engine else None  # type: ignore[assignment]
+async_session_factory: async_sessionmaker[AsyncSession] | None = (
+    async_sessionmaker(
+        bind=engine,
+        class_=AsyncSession,
+        expire_on_commit=False,  # CRITICAL: prevents attribute expiration after commit
+    )
+    if engine
+    else None
+)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -95,7 +100,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-def create_test_engine(database_url: str = "sqlite+aiosqlite:///:memory:"):
+def create_test_engine(
+    database_url: str = "sqlite+aiosqlite:///:memory:",
+) -> tuple["AsyncEngine", async_sessionmaker[AsyncSession]]:
     """Create an async engine for testing.
 
     Args:

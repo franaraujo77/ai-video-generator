@@ -382,9 +382,7 @@ class TestVoiceBrandingMigration:
         """Test that the migration file exists."""
         from pathlib import Path
 
-        migration_path = Path(
-            "alembic/versions/20260110_0003_003_add_voice_branding_columns.py"
-        )
+        migration_path = Path("alembic/versions/20260110_0003_003_add_voice_branding_columns.py")
         assert migration_path.exists(), f"Migration file not found: {migration_path}"
 
     def test_migration_file_is_valid(self) -> None:
@@ -392,9 +390,7 @@ class TestVoiceBrandingMigration:
         import importlib.util
         from pathlib import Path
 
-        migration_path = Path(
-            "alembic/versions/20260110_0003_003_add_voice_branding_columns.py"
-        )
+        migration_path = Path("alembic/versions/20260110_0003_003_add_voice_branding_columns.py")
 
         # Load the migration module
         spec = importlib.util.spec_from_file_location("migration", migration_path)
@@ -418,9 +414,7 @@ class TestVoiceBrandingMigration:
         """Test that migration upgrade function adds voice columns."""
         from pathlib import Path
 
-        migration_path = Path(
-            "alembic/versions/20260110_0003_003_add_voice_branding_columns.py"
-        )
+        migration_path = Path("alembic/versions/20260110_0003_003_add_voice_branding_columns.py")
         content = migration_path.read_text()
 
         # Verify upgrade adds voice columns
@@ -432,9 +426,7 @@ class TestVoiceBrandingMigration:
         """Test that migration upgrade function adds branding columns."""
         from pathlib import Path
 
-        migration_path = Path(
-            "alembic/versions/20260110_0003_003_add_voice_branding_columns.py"
-        )
+        migration_path = Path("alembic/versions/20260110_0003_003_add_voice_branding_columns.py")
         content = migration_path.read_text()
 
         # Verify upgrade adds branding columns
@@ -446,9 +438,7 @@ class TestVoiceBrandingMigration:
         """Test that migration downgrade function removes all 5 columns."""
         from pathlib import Path
 
-        migration_path = Path(
-            "alembic/versions/20260110_0003_003_add_voice_branding_columns.py"
-        )
+        migration_path = Path("alembic/versions/20260110_0003_003_add_voice_branding_columns.py")
         content = migration_path.read_text()
 
         # Verify downgrade drops columns
