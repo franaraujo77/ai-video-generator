@@ -1,6 +1,10 @@
 """Business logic services for the orchestration layer."""
 
 from app.exceptions import ConfigurationError
+from app.services.channel_capacity_service import (
+    ChannelCapacityService,
+    ChannelQueueStats,
+)
 from app.services.channel_config_loader import (
     ChannelConfigLoader,
     ConfigManager,
@@ -17,7 +21,9 @@ from app.services.voice_branding_service import (
 
 __all__ = [
     "BrandingPaths",
+    "ChannelCapacityService",
     "ChannelConfigLoader",
+    "ChannelQueueStats",
     "ConfigManager",
     "ConfigurationError",
     "CredentialService",

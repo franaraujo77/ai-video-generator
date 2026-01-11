@@ -217,15 +217,16 @@ class ChannelConfigLoader:
     async def sync_to_database(
         self, config: ChannelConfigSchema, db: AsyncSession
     ) -> Channel:
-        """Persist voice, branding, storage strategy, and R2 config from YAML to database.
+        """Persist voice, branding, storage strategy, max_concurrent, and R2 config from YAML to database.
 
         Creates or updates a Channel record with voice_id, branding paths,
-        storage_strategy, and R2 credentials from the parsed YAML configuration.
-        This enables the orchestration layer to read configuration from the
-        database at runtime.
+        storage_strategy, max_concurrent, and R2 credentials from the parsed
+        YAML configuration. This enables the orchestration layer to read
+        configuration from the database at runtime.
 
         Logs warning if voice_id is missing (Story 1.4 AC #2).
         Logs warning if storage_strategy="r2" but R2 credentials are incomplete.
+        Logs max_concurrent value during sync (Story 1.6 - FR13, FR16).
 
         Args:
             config: Validated ChannelConfigSchema from YAML.
@@ -300,6 +301,14 @@ class ChannelConfigLoader:
             "channel_storage_strategy_synced",
             channel_id=config.channel_id,
             storage_strategy=config.storage_strategy,
+        )
+
+        # Sync max_concurrent (Story 1.6 - FR13, FR16)
+        channel.max_concurrent = config.max_concurrent
+        log.info(
+            "channel_max_concurrent_synced",
+            channel_id=config.channel_id,
+            max_concurrent=config.max_concurrent,
         )
 
         # Sync R2 credentials (Story 1.5 - FR12)

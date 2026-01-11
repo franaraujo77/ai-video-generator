@@ -20,9 +20,9 @@ Encrypted Fields Pattern:
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, LargeBinary, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def utcnow() -> datetime:
@@ -63,6 +63,8 @@ class Channel(Base):
         r2_access_key_id_encrypted: Fernet-encrypted R2 access key ID.
         r2_secret_access_key_encrypted: Fernet-encrypted R2 secret access key.
         r2_bucket_name: R2 bucket name for asset storage (not encrypted, not sensitive).
+        max_concurrent: Maximum parallel tasks allowed for this channel (FR13, FR16).
+            Used for capacity tracking and fair scheduling. Default is 2, range 1-10.
 
     Note:
         Encrypted fields store credentials as bytes. Use CredentialService
@@ -177,16 +179,122 @@ class Channel(Base):
         nullable=True,
     )
 
+    # Capacity configuration (FR13, FR16)
+    # Maximum parallel tasks allowed for this channel (range 1-10)
+    max_concurrent: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=2,
+        server_default="2",
+    )
+
+    # Relationship to tasks (one-to-many)
+    tasks: Mapped[list["Task"]] = relationship("Task", back_populates="channel")
+
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
         Note:
             NEVER expose encrypted fields in repr - security risk.
             Shows voice_id presence (not value) for debugging.
-            Shows storage_strategy value for clarity.
+            Shows storage_strategy and max_concurrent values for clarity.
         """
         voice_info = "set" if self.voice_id else "not_set"
         return (
             f"<Channel(channel_id={self.channel_id!r}, name={self.channel_name!r}, "
-            f"voice_id={voice_info}, storage_strategy={self.storage_strategy!r})>"
+            f"voice_id={voice_info}, storage_strategy={self.storage_strategy!r}, "
+            f"max_concurrent={self.max_concurrent})>"
+        )
+
+
+# Task status constants for capacity calculations
+PENDING_STATUSES = ("pending",)
+IN_PROGRESS_STATUSES = ("claimed", "processing", "awaiting_review")
+
+
+class Task(Base):
+    """Video generation task in the pipeline.
+
+    Tasks represent a video generation job that moves through the 8-step
+    pipeline. Status tracks progress and enables capacity calculations.
+
+    Status values and their meanings:
+        - pending: Task created, awaiting worker pickup
+        - claimed: Worker claimed task (transitional state)
+        - processing: Worker actively executing task
+        - awaiting_review: Hit human review gate
+        - approved: Human approved, continue processing
+        - rejected: Human rejected, needs intervention
+        - completed: Successfully finished
+        - failed: Permanent failure (non-retriable)
+        - retry: Temporary failure, will retry
+
+    Capacity calculation uses:
+        - pending_count: status == "pending"
+        - in_progress_count: status IN ("claimed", "processing", "awaiting_review")
+
+    Attributes:
+        id: Internal UUID primary key.
+        channel_id: Foreign key to channel this task belongs to.
+        status: Current task status (see status values above).
+        created_at: Timestamp when task was created.
+        updated_at: Timestamp of last status change.
+        channel: Relationship to the Channel model.
+
+    Note:
+        Composite index on (channel_id, status) optimizes queue queries.
+        Partial index on status='pending' speeds up pending task lookups.
+    """
+
+    __tablename__ = "tasks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    channel_id: Mapped[str] = mapped_column(
+        String(50),
+        ForeignKey("channels.channel_id"),
+        nullable=False,
+        index=True,
+    )
+    # Status column stores task lifecycle state.
+    # Valid values: pending, claimed, processing, awaiting_review, approved,
+    # rejected, completed, failed, retry (see TASK_STATUSES in architecture.md)
+    # Note: Database-level CHECK constraint deferred to Epic 4 (Worker Orchestration)
+    # which implements the full state machine with transitions.
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="pending",
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+    # Relationship to channel
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="tasks")
+
+    # Indexes for efficient queue queries
+    # Note: Migration is source of truth for indexes. Model defines composite
+    # index for SQLAlchemy awareness. Additional indexes in migration:
+    # - idx_tasks_pending: Partial index WHERE status='pending' for fast lookups
+    __table_args__ = (
+        # Composite index for channel + status filtering (capacity queries)
+        Index("ix_tasks_channel_id_status", "channel_id", "status"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<Task(id={self.id!s:.8}, channel_id={self.channel_id!r}, "
+            f"status={self.status!r})>"
         )
