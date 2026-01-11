@@ -38,7 +38,7 @@ COPY uv.lock* ./
 
 # Install production dependencies only (no dev dependencies)
 # Using --system to install into system Python (not virtualenv)
-RUN uv sync --frozen --no-dev --no-editable
+RUN uv sync --frozen --no-dev --no-editable --system
 
 # =============================================================================
 # Stage 3: Application
