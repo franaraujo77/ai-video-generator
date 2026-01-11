@@ -1,0 +1,40 @@
+# Example Channel Configuration
+# Copy this file and rename to your channel's ID (e.g., poke1.yaml)
+#
+# This file is loaded by ChannelConfigLoader and synced to the database.
+# Credentials (OAuth tokens, API keys) should be set via CLI tools, not here.
+
+# Required: Unique identifier for this channel (must match filename without .yaml)
+channel_id: example
+
+# Required: Human-readable display name
+channel_name: "Example Channel"
+
+# Optional: Whether this channel is active (default: true)
+is_active: true
+
+# Optional: ElevenLabs voice ID for narration (channel-specific)
+# Get from ElevenLabs dashboard: https://elevenlabs.io/
+# voice_id: "EXAVITQu4vr4xnSDxMaL"
+
+# Optional: Fallback voice ID if voice_id is not set
+# default_voice_id: "pNInz6obpgDQGcFmaJgB"
+
+# Optional: Branding assets (relative paths from channel workspace)
+# branding:
+#   intro_path: "channel_assets/intro.mp4"
+#   outro_path: "channel_assets/outro.mp4"
+#   watermark_path: "channel_assets/watermark.png"
+
+# Optional: Storage strategy - "notion" (default) or "r2" for Cloudflare R2
+storage_strategy: notion
+
+# Optional: R2 storage configuration (only if storage_strategy: r2)
+# r2_config:
+#   bucket_name: "my-video-bucket"
+#   account_id: "cloudflare-account-id"  # Will be encrypted
+#   access_key_id: "r2-access-key"       # Will be encrypted
+#   secret_access_key: "r2-secret-key"   # Will be encrypted
+
+# Optional: Maximum concurrent tasks for this channel (default: 2, range: 1-10)
+max_concurrent: 2
