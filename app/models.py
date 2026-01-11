@@ -10,7 +10,7 @@ Encrypted Fields Pattern:
     Fernet symmetric encryption. Encrypted columns follow the naming convention
     `{field}_encrypted` and use LargeBinary type since Fernet outputs bytes.
 
-    Example:
+Example:
         youtube_token_encrypted: Mapped[bytes | None]  # OAuth refresh token
         notion_token_encrypted: Mapped[bytes | None]   # Integration token
 

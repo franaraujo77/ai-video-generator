@@ -11,7 +11,7 @@ from cryptography.fernet import Fernet
 
 from app.utils.encryption import (
     DecryptionError,
-    EncryptionKeyMissing,
+    EncryptionKeyMissingError,
     EncryptionService,
     get_encryption_service,
 )
@@ -106,10 +106,10 @@ class TestEncryptionService:
     def test_missing_key_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that EncryptionKeyMissing is raised when FERNET_KEY not set."""
+        """Test that EncryptionKeyMissingError is raised when FERNET_KEY not set."""
         monkeypatch.delenv("FERNET_KEY", raising=False)
 
-        with pytest.raises(EncryptionKeyMissing) as exc_info:
+        with pytest.raises(EncryptionKeyMissingError) as exc_info:
             get_encryption_service()
 
         assert "FERNET_KEY environment variable is required" in str(exc_info.value)
@@ -117,10 +117,10 @@ class TestEncryptionService:
     def test_empty_key_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that EncryptionKeyMissing is raised when FERNET_KEY is empty."""
+        """Test that EncryptionKeyMissingError is raised when FERNET_KEY is empty."""
         monkeypatch.setenv("FERNET_KEY", "")
 
-        with pytest.raises(EncryptionKeyMissing) as exc_info:
+        with pytest.raises(EncryptionKeyMissingError) as exc_info:
             get_encryption_service()
 
         assert "FERNET_KEY environment variable is required" in str(exc_info.value)
@@ -128,14 +128,14 @@ class TestEncryptionService:
     def test_invalid_key_format_raises_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that EncryptionKeyMissing is raised when FERNET_KEY has invalid format.
+        """Test that EncryptionKeyMissingError is raised when FERNET_KEY has invalid format.
 
         Fernet keys must be 32 url-safe base64-encoded bytes. Invalid formats
-        should raise EncryptionKeyMissing with a clear error message.
+        should raise EncryptionKeyMissingError with a clear error message.
         """
         monkeypatch.setenv("FERNET_KEY", "invalid-not-base64-key")
 
-        with pytest.raises(EncryptionKeyMissing) as exc_info:
+        with pytest.raises(EncryptionKeyMissingError) as exc_info:
             get_encryption_service()
 
         assert "Invalid FERNET_KEY format" in str(exc_info.value)
@@ -304,22 +304,22 @@ class TestDecryptionError:
         assert error.channel_id is None
 
 
-class TestEncryptionKeyMissing:
-    """Test suite for EncryptionKeyMissing exception class."""
+class TestEncryptionKeyMissingError:
+    """Test suite for EncryptionKeyMissingError exception class."""
 
     def test_error_message(self) -> None:
-        """Test EncryptionKeyMissing message."""
-        error = EncryptionKeyMissing("Custom error message")
+        """Test EncryptionKeyMissingError message."""
+        error = EncryptionKeyMissingError("Custom error message")
 
         assert str(error) == "Custom error message"
 
     def test_error_is_exception(self) -> None:
-        """Test that EncryptionKeyMissing is a proper Exception."""
-        error = EncryptionKeyMissing("Test")
+        """Test that EncryptionKeyMissingError is a proper Exception."""
+        error = EncryptionKeyMissingError("Test")
 
         assert isinstance(error, Exception)
 
     def test_error_can_be_raised_and_caught(self) -> None:
-        """Test that EncryptionKeyMissing can be raised and caught."""
-        with pytest.raises(EncryptionKeyMissing):
-            raise EncryptionKeyMissing("FERNET_KEY not set")
+        """Test that EncryptionKeyMissingError can be raised and caught."""
+        with pytest.raises(EncryptionKeyMissingError):
+            raise EncryptionKeyMissingError("FERNET_KEY not set")

@@ -217,7 +217,7 @@ class ChannelConfigLoader:
     async def sync_to_database(
         self, config: ChannelConfigSchema, db: AsyncSession
     ) -> Channel:
-        """Persist voice, branding, storage strategy, max_concurrent, and R2 config from YAML to database.
+        """Persist voice, branding, storage, max_concurrent, and R2 config to database.
 
         Creates or updates a Channel record with voice_id, branding paths,
         storage_strategy, max_concurrent, and R2 credentials from the parsed
