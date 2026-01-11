@@ -10,6 +10,14 @@ Branding Configuration (FR11):
 Voice Configuration (FR10):
     Each channel can specify an ElevenLabs voice_id for narration.
     If not set, the system falls back to DEFAULT_VOICE_ID from environment.
+
+Storage Strategy Configuration (FR12):
+    Channels can specify where generated assets are stored:
+    - "notion" (default): Assets stored as Notion file attachments
+    - "r2": Assets uploaded to Cloudflare R2 storage
+
+    When storage_strategy="r2", the r2_config section must be provided with
+    Cloudflare R2 credentials (account_id, access_key_id, secret_access_key, bucket_name).
 """
 
 import re
@@ -89,6 +97,86 @@ class BrandingConfig(BaseModel):
         return f"BrandingConfig({', '.join(fields) if fields else 'empty'})"
 
 
+# R2 bucket name validation pattern (S3/R2 compliant):
+# - Start and end with lowercase alphanumeric
+# - Middle can contain lowercase alphanumeric and hyphens
+# - Length constraint (3-63 chars) enforced by Pydantic Field validators
+R2_BUCKET_NAME_PATTERN = re.compile(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?$")
+
+
+class R2Config(BaseModel):
+    """Cloudflare R2 storage configuration for channel assets (FR12).
+
+    When storage_strategy is set to "r2", this configuration provides the
+    credentials needed to upload assets to Cloudflare R2 object storage.
+
+    All credential fields (account_id, access_key_id, secret_access_key) are
+    stored encrypted in the database using Fernet symmetric encryption.
+    The bucket_name is not encrypted as it is not sensitive.
+
+    Attributes:
+        account_id: Cloudflare account ID (sensitive, will be encrypted).
+        access_key_id: R2 access key ID (sensitive, will be encrypted).
+        secret_access_key: R2 secret access key (sensitive, will be encrypted).
+        bucket_name: R2 bucket name (3-63 chars, lowercase alphanumeric + hyphens).
+
+    Example YAML:
+        storage_strategy: "r2"
+        r2_config:
+          account_id: "cloudflare-account-id"
+          access_key_id: "r2-access-key-id"
+          secret_access_key: "r2-secret-access-key"
+          bucket_name: "pokemon-assets"
+    """
+
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+    )
+
+    account_id: str = Field(..., min_length=1, max_length=100)
+    access_key_id: str = Field(..., min_length=1, max_length=100)
+    secret_access_key: str = Field(..., min_length=1, max_length=200)
+    bucket_name: str = Field(..., min_length=3, max_length=63)
+
+    @field_validator("bucket_name")
+    @classmethod
+    def validate_bucket_name(cls, v: str) -> str:
+        """Validate R2 bucket name format.
+
+        R2 bucket names must be:
+        - 3-63 characters long
+        - Lowercase alphanumeric and hyphens only
+        - Start and end with alphanumeric character
+        - Cannot start or end with hyphen
+
+        Args:
+            v: The bucket_name value to validate.
+
+        Returns:
+            Normalized lowercase bucket_name.
+
+        Raises:
+            ValueError: If bucket_name format is invalid.
+        """
+        v_lower = v.lower()
+        if not R2_BUCKET_NAME_PATTERN.match(v_lower):
+            raise ValueError(
+                f"R2 bucket name must be 3-63 chars, lowercase alphanumeric "
+                f"and hyphens, start/end with alphanumeric: {v}"
+            )
+        return v_lower
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging.
+
+        Note:
+            NEVER expose credentials in repr - security risk.
+            Shows bucket_name and credential presence only.
+        """
+        has_credentials = all([self.account_id, self.access_key_id, self.secret_access_key])
+        return f"R2Config(bucket_name={self.bucket_name!r}, credentials={'set' if has_credentials else 'incomplete'})"
+
+
 class ChannelConfigSchema(BaseModel):
     """Channel configuration loaded from YAML file.
 
@@ -105,6 +193,8 @@ class ChannelConfigSchema(BaseModel):
         storage_strategy: Asset storage strategy (notion or r2).
         max_concurrent: Maximum parallel tasks per channel.
         budget_daily_usd: Daily spending limit in USD (optional).
+        branding: Branding configuration for video assembly (optional).
+        r2_config: Cloudflare R2 storage configuration (required when storage_strategy="r2").
     """
 
     model_config = ConfigDict(
@@ -134,6 +224,36 @@ class ChannelConfigSchema(BaseModel):
         default=None,
         description="Intro/outro video and watermark configuration for video assembly",
     )
+
+    # R2 storage configuration (FR12)
+    # Required when storage_strategy="r2", ignored when storage_strategy="notion"
+    r2_config: R2Config | None = Field(
+        default=None,
+        description="Cloudflare R2 storage credentials (required when storage_strategy='r2')",
+    )
+
+    @model_validator(mode="after")
+    def validate_r2_config_required(self) -> "ChannelConfigSchema":
+        """Validate that r2_config is provided when storage_strategy is 'r2'.
+
+        If storage_strategy is 'r2' but r2_config is not provided, raises
+        a validation error since R2 credentials are required for R2 storage.
+
+        If storage_strategy is 'notion' and r2_config is provided, the r2_config
+        is silently ignored (no error raised).
+
+        Returns:
+            Self with validated configuration.
+
+        Raises:
+            ValueError: If storage_strategy='r2' but r2_config is None.
+        """
+        if self.storage_strategy == "r2" and self.r2_config is None:
+            raise ValueError(
+                "r2_config is required when storage_strategy is 'r2'. "
+                "Provide account_id, access_key_id, secret_access_key, and bucket_name."
+            )
+        return self
 
     @field_validator("channel_id")
     @classmethod
@@ -194,15 +314,18 @@ class ChannelConfigSchema(BaseModel):
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
-        Shows voice_id presence (not value) and branding status for security.
+        Shows voice_id presence (not value), branding, and r2_config status for security.
         """
         voice_info = "set" if self.voice_id else "not_set"
         branding_info = "configured" if self.branding else "not_configured"
+        r2_info = "configured" if self.r2_config else "not_configured"
         return (
             f"ChannelConfigSchema(channel_id={self.channel_id!r}, "
             f"channel_name={self.channel_name!r}, "
             f"priority={self.priority!r}, "
             f"is_active={self.is_active!r}, "
             f"voice_id={voice_info}, "
-            f"branding={branding_info})"
+            f"storage_strategy={self.storage_strategy!r}, "
+            f"branding={branding_info}, "
+            f"r2_config={r2_info})"
         )
