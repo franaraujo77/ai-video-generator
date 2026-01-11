@@ -82,8 +82,13 @@ ignore = [
 convention = "google"
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "D", "B008"]  # Allow assert, skip docstrings in tests
-"scripts/*" = ["T20"]              # Allow print in CLI scripts
+# Tests: allow assert, skip docstrings, allow hardcoded test passwords, unused imports/vars
+"tests/*" = ["S101", "S105", "S106", "S110", "D", "B008", "SIM117", "F401", "F841", "I001", "E501", "RUF022"]
+# Scripts: "dumb scripts" by design (CLAUDE.md) - minimal linting
+# Allow: print, subprocess, docstrings, f-strings, line length, imports
+"scripts/*" = ["T20", "S603", "S607", "S113", "D", "F541", "F401", "N806", "UP015", "UP022", "RUF005", "E501", "I001"]
+# Alembic: auto-generated migration environment
+"alembic/*" = ["D", "I001"]
 
 [tool.ruff.format]
 quote-style = "double"

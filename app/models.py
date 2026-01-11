@@ -18,7 +18,7 @@ Example:
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String
 from sqlalchemy.dialects.postgresql import UUID
@@ -27,7 +27,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 def utcnow() -> datetime:
     """Get current UTC datetime (timezone-aware)."""
-    return datetime.now(UTC)
+    return datetime.now(timezone.utc)
 
 
 class Base(DeclarativeBase):
