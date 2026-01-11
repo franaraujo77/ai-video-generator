@@ -82,9 +82,7 @@ class StorageStrategyService:
         ...     r2_config = await service.get_r2_config("poke1", db)
     """
 
-    async def _get_channel(
-        self, channel_id: str, db: AsyncSession
-    ) -> Channel | None:
+    async def _get_channel(self, channel_id: str, db: AsyncSession) -> Channel | None:
         """Get channel by business identifier.
 
         Args:
@@ -94,14 +92,10 @@ class StorageStrategyService:
         Returns:
             Channel model or None if not found.
         """
-        result = await db.execute(
-            select(Channel).where(Channel.channel_id == channel_id)
-        )
+        result = await db.execute(select(Channel).where(Channel.channel_id == channel_id))
         return result.scalar_one_or_none()
 
-    async def get_storage_strategy(
-        self, channel_id: str, db: AsyncSession
-    ) -> str:
+    async def get_storage_strategy(self, channel_id: str, db: AsyncSession) -> str:
         """Get storage strategy for channel with fallback to default.
 
         Resolution:
@@ -135,9 +129,7 @@ class StorageStrategyService:
 
         return strategy
 
-    async def get_r2_config(
-        self, channel_id: str, db: AsyncSession
-    ) -> R2Credentials:
+    async def get_r2_config(self, channel_id: str, db: AsyncSession) -> R2Credentials:
         """Retrieve and decrypt R2 credentials for channel.
 
         This method retrieves and decrypts the R2 credentials stored in the
@@ -167,9 +159,7 @@ class StorageStrategyService:
                 "r2_config_channel_not_found",
                 channel_id=channel_id,
             )
-            raise ConfigurationError(
-                f"Channel not found: {channel_id}"
-            )
+            raise ConfigurationError(f"Channel not found: {channel_id}")
 
         # Validate storage strategy
         if channel.storage_strategy != "r2":
@@ -205,6 +195,12 @@ class StorageStrategyService:
                 f"Channel {channel_id} has storage_strategy='r2' but missing R2 credentials: "
                 f"{', '.join(missing_fields)}"
             )
+
+        # Type narrowing assertions (validated by missing_fields check above)
+        assert channel.r2_account_id_encrypted is not None
+        assert channel.r2_access_key_id_encrypted is not None
+        assert channel.r2_secret_access_key_encrypted is not None
+        assert channel.r2_bucket_name is not None
 
         # Decrypt credentials
         encryption_service = get_encryption_service()

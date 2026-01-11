@@ -51,7 +51,7 @@ class BrandingPaths:
         >>> branding = BrandingPaths(
         ...     intro_path="channel_assets/intro.mp4",
         ...     outro_path="channel_assets/outro.mp4",
-        ...     watermark_path=None
+        ...     watermark_path=None,
         ... )
         >>> if branding.intro_path:
         ...     # Apply intro video during assembly
@@ -104,9 +104,7 @@ class VoiceBrandingService:
         >>> branding = await service.get_branding_paths("poke1", db)
     """
 
-    async def _get_channel(
-        self, channel_id: str, db: AsyncSession
-    ) -> Channel | None:
+    async def _get_channel(self, channel_id: str, db: AsyncSession) -> Channel | None:
         """Get channel by business identifier.
 
         Args:
@@ -116,9 +114,7 @@ class VoiceBrandingService:
         Returns:
             Channel model or None if not found.
         """
-        result = await db.execute(
-            select(Channel).where(Channel.channel_id == channel_id)
-        )
+        result = await db.execute(select(Channel).where(Channel.channel_id == channel_id))
         return result.scalar_one_or_none()
 
     async def get_voice_id(self, channel_id: str, db: AsyncSession) -> str:
@@ -187,9 +183,7 @@ class VoiceBrandingService:
             f"No voice_id configured for channel {channel_id} and no DEFAULT_VOICE_ID set"
         )
 
-    async def get_branding_paths(
-        self, channel_id: str, db: AsyncSession
-    ) -> BrandingPaths:
+    async def get_branding_paths(self, channel_id: str, db: AsyncSession) -> BrandingPaths:
         """Get branding asset paths for channel (FR11).
 
         Returns branding paths from the channel's database record.
@@ -236,9 +230,7 @@ class VoiceBrandingService:
 
         return branding
 
-    async def store_voice_id(
-        self, channel_id: str, voice_id: str | None, db: AsyncSession
-    ) -> None:
+    async def store_voice_id(self, channel_id: str, voice_id: str | None, db: AsyncSession) -> None:
         """Store voice ID for channel.
 
         Args:

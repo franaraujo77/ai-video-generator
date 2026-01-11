@@ -104,9 +104,7 @@ class TestStorageStrategyResolution:
         channel_notion: Channel,
     ) -> None:
         """Test that get_storage_strategy returns 'notion' for notion channel."""
-        strategy = await storage_service.get_storage_strategy(
-            "notion_channel", async_session
-        )
+        strategy = await storage_service.get_storage_strategy("notion_channel", async_session)
         assert strategy == "notion"
 
     @pytest.mark.asyncio
@@ -121,9 +119,7 @@ class TestStorageStrategyResolution:
         """Test that get_storage_strategy returns 'r2' for r2 channel."""
         monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
 
-        strategy = await storage_service.get_storage_strategy(
-            "r2_channel", async_session
-        )
+        strategy = await storage_service.get_storage_strategy("r2_channel", async_session)
         assert strategy == "r2"
 
     @pytest.mark.asyncio
@@ -133,9 +129,7 @@ class TestStorageStrategyResolution:
         async_session: AsyncSession,
     ) -> None:
         """Test that get_storage_strategy returns 'notion' for nonexistent channel."""
-        strategy = await storage_service.get_storage_strategy(
-            "nonexistent_channel", async_session
-        )
+        strategy = await storage_service.get_storage_strategy("nonexistent_channel", async_session)
         assert strategy == "notion"
 
     @pytest.mark.asyncio
@@ -155,9 +149,7 @@ class TestStorageStrategyResolution:
         async_session.add(channel)
         await async_session.commit()
 
-        strategy = await storage_service.get_storage_strategy(
-            "null_strategy", async_session
-        )
+        strategy = await storage_service.get_storage_strategy("null_strategy", async_session)
         assert strategy == "notion"
 
 
@@ -311,9 +303,7 @@ class TestMultiChannelStorageIsolation:
         notion_strategy = await storage_service.get_storage_strategy(
             "notion_channel", async_session
         )
-        r2_strategy = await storage_service.get_storage_strategy(
-            "r2_channel", async_session
-        )
+        r2_strategy = await storage_service.get_storage_strategy("r2_channel", async_session)
 
         assert notion_strategy == "notion"
         assert r2_strategy == "r2"
@@ -417,9 +407,7 @@ class TestDatabaseMigration:
 
         # Find migration with "storage_strategy" in name
         migration_files = list(migrations_dir.glob("*storage_strategy*.py"))
-        assert len(migration_files) >= 1, (
-            "No migration file found with 'storage_strategy' in name"
-        )
+        assert len(migration_files) >= 1, "No migration file found with 'storage_strategy' in name"
 
         migration_path = migration_files[0]
 

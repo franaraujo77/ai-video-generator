@@ -83,9 +83,7 @@ class ChannelCapacityService:
                 Channel.channel_id,
                 Channel.channel_name,
                 Channel.max_concurrent,
-                func.count(case((Task.status.in_(PENDING_STATUSES), 1))).label(
-                    "pending_count"
-                ),
+                func.count(case((Task.status.in_(PENDING_STATUSES), 1))).label("pending_count"),
                 func.count(case((Task.status.in_(IN_PROGRESS_STATUSES), 1))).label(
                     "in_progress_count"
                 ),
@@ -137,9 +135,7 @@ class ChannelCapacityService:
                 Channel.channel_id,
                 Channel.channel_name,
                 Channel.max_concurrent,
-                func.count(case((Task.status.in_(PENDING_STATUSES), 1))).label(
-                    "pending_count"
-                ),
+                func.count(case((Task.status.in_(PENDING_STATUSES), 1))).label("pending_count"),
                 func.count(case((Task.status.in_(IN_PROGRESS_STATUSES), 1))).label(
                     "in_progress_count"
                 ),

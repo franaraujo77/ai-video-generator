@@ -17,16 +17,20 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file in same directory as script
 script_dir = Path(__file__).parent
-load_dotenv(script_dir / '.env')
+load_dotenv(script_dir / ".env")
 
 # ElevenLabs API Configuration
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io"
 
 
-def generate_sound_effect(text, output_path, api_key,
-                         duration_seconds=10.0,
-                         prompt_influence=0.3,
-                         output_format="mp3_44100_128"):
+def generate_sound_effect(
+    text,
+    output_path,
+    api_key,
+    duration_seconds=10.0,
+    prompt_influence=0.3,
+    output_format="mp3_44100_128",
+):
     """
     Generate ambient sound effect using ElevenLabs Sound Effects API.
 
@@ -43,15 +47,12 @@ def generate_sound_effect(text, output_path, api_key,
     """
     try:
         # Prepare request
-        headers = {
-            "xi-api-key": api_key,
-            "Content-Type": "application/json"
-        }
+        headers = {"xi-api-key": api_key, "Content-Type": "application/json"}
 
         payload = {
             "text": text,
             "duration_seconds": duration_seconds,
-            "prompt_influence": prompt_influence
+            "prompt_influence": prompt_influence,
         }
 
         # Make API request
@@ -74,7 +75,7 @@ def generate_sound_effect(text, output_path, api_key,
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(output_path, 'wb') as f:
+        with open(output_path, "wb") as f:
             f.write(response.content)
 
         file_size = output_path.stat().st_size / 1024  # KB
@@ -85,6 +86,7 @@ def generate_sound_effect(text, output_path, api_key,
     except Exception as e:
         print(f"❌ Error generating sound effect: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -108,20 +110,18 @@ def normalize_audio(input_path, target_lufs=-30.0):
 
         # Use ffmpeg loudnorm filter for consistent volume
         cmd = [
-            'ffmpeg',
-            '-i', str(input_path),
-            '-af', f'loudnorm=I={target_lufs}:TP=-2:LRA=7',
-            '-ar', '44100',
-            '-y',  # Overwrite output file
-            str(temp_path)
+            "ffmpeg",
+            "-i",
+            str(input_path),
+            "-af",
+            f"loudnorm=I={target_lufs}:TP=-2:LRA=7",
+            "-ar",
+            "44100",
+            "-y",  # Overwrite output file
+            str(temp_path),
         ]
 
-        result = subprocess.run(
-            cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
         if result.returncode != 0:
             print(f"❌ Normalization failed: {result.stderr}", file=sys.stderr)
@@ -136,58 +136,51 @@ def normalize_audio(input_path, target_lufs=-30.0):
     except Exception as e:
         print(f"❌ Error normalizing audio: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return False
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate ambient sound effects using ElevenLabs Sound Effects API'
+        description="Generate ambient sound effects using ElevenLabs Sound Effects API"
     )
     parser.add_argument(
-        '--text',
+        "--text",
         required=True,
-        help='Description of the sound effect (e.g., "Abandoned power station with rain and thunder")'
+        help='Description of the sound effect (e.g., "Abandoned power station with rain and thunder")',
     )
     parser.add_argument(
-        '--output',
+        "--output",
         required=True,
-        help='Output file path (e.g., haunter/audio/background_ambient.mp3)'
+        help="Output file path (e.g., haunter/audio/background_ambient.mp3)",
     )
     parser.add_argument(
-        '--duration',
-        type=float,
-        default=10.0,
-        help='Duration in seconds (0.5-30, default: 10.0)'
+        "--duration", type=float, default=10.0, help="Duration in seconds (0.5-30, default: 10.0)"
     )
     parser.add_argument(
-        '--prompt-influence',
+        "--prompt-influence",
         type=float,
         default=0.3,
-        help='Prompt adherence 0-1 (default: 0.3, higher = stricter)'
+        help="Prompt adherence 0-1 (default: 0.3, higher = stricter)",
     )
     parser.add_argument(
-        '--format',
-        default='mp3_44100_128',
-        help='Output format (default: mp3_44100_128)'
+        "--format", default="mp3_44100_128", help="Output format (default: mp3_44100_128)"
     )
     parser.add_argument(
-        '--normalize',
-        action='store_true',
+        "--normalize",
+        action="store_true",
         default=True,
-        help='Normalize audio volume for consistent levels (default: True)'
+        help="Normalize audio volume for consistent levels (default: True)",
     )
     parser.add_argument(
-        '--no-normalize',
-        action='store_false',
-        dest='normalize',
-        help='Skip audio normalization'
+        "--no-normalize", action="store_false", dest="normalize", help="Skip audio normalization"
     )
     parser.add_argument(
-        '--target-volume',
+        "--target-volume",
         type=float,
         default=-30.0,
-        help='Target volume in LUFS for normalization (default: -30.0 for background effects)'
+        help="Target volume in LUFS for normalization (default: -30.0 for background effects)",
     )
 
     args = parser.parse_args()
@@ -203,7 +196,7 @@ def main():
         sys.exit(1)
 
     # Verify API key exists
-    api_key = os.getenv('ELEVENLABS_API_KEY')
+    api_key = os.getenv("ELEVENLABS_API_KEY")
 
     if not api_key:
         print("❌ Error: ELEVENLABS_API_KEY not found in environment variables", file=sys.stderr)
@@ -211,11 +204,11 @@ def main():
         print("   ELEVENLABS_API_KEY=your_api_key_here", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"🔊 Pokémon Natural Geographic - Sound Effects Generator")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"💾 Output: {args.output}")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Generate the sound effect
     success = generate_sound_effect(
@@ -224,18 +217,18 @@ def main():
         api_key,
         duration_seconds=args.duration,
         prompt_influence=args.prompt_influence,
-        output_format=args.format
+        output_format=args.format,
     )
 
     # Normalize audio if requested
     if success and args.normalize:
         success = normalize_audio(args.output, target_lufs=args.target_volume)
 
-    print(f"\n{'='*60}\n")
+    print(f"\n{'=' * 60}\n")
 
     # Exit with appropriate code
     sys.exit(0 if success else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

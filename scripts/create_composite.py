@@ -10,7 +10,9 @@ from PIL import Image
 import argparse
 
 
-def create_composite(character_path: str, environment_path: str, output_path: str, character_scale: float = 1.0):
+def create_composite(
+    character_path: str, environment_path: str, output_path: str, character_scale: float = 1.0
+):
     """
     Create a composite image by overlaying character on environment.
     Forces output to 1920x1080 (16:9) for YouTube compatibility.
@@ -42,7 +44,9 @@ def create_composite(character_path: str, environment_path: str, output_path: st
         new_env_height = TARGET_HEIGHT
         new_env_width = int(env_height * target_aspect)
         # Scale to target height first
-        environment = environment.resize((int(env_width * TARGET_HEIGHT / env_height), TARGET_HEIGHT), Image.Resampling.LANCZOS)
+        environment = environment.resize(
+            (int(env_width * TARGET_HEIGHT / env_height), TARGET_HEIGHT), Image.Resampling.LANCZOS
+        )
         # Crop to target width (center crop)
         left = (environment.size[0] - TARGET_WIDTH) // 2
         environment = environment.crop((left, 0, left + TARGET_WIDTH, TARGET_HEIGHT))
@@ -96,11 +100,15 @@ def create_composite(character_path: str, environment_path: str, output_path: st
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Create composite image from character + environment")
+    parser = argparse.ArgumentParser(
+        description="Create composite image from character + environment"
+    )
     parser.add_argument("--character", required=True, help="Path to character PNG")
     parser.add_argument("--environment", required=True, help="Path to environment PNG")
     parser.add_argument("--output", required=True, help="Path to save composite PNG")
-    parser.add_argument("--scale", type=float, default=1.0, help="Character scale factor (default: 1.0)")
+    parser.add_argument(
+        "--scale", type=float, default=1.0, help="Character scale factor (default: 1.0)"
+    )
 
     args = parser.parse_args()
 

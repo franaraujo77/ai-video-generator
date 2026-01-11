@@ -15,11 +15,18 @@ HALF_WIDTH = TARGET_WIDTH // 2  # 960 pixels per side
 
 # Left side: Magneton in generator room
 magneton_env = Image.open("haunter/assets/environments/env_generator_room_lit.png").convert("RGBA")
-magneton_char = Image.open("haunter/assets/characters/magneton_hovering_standard_core.png").convert("RGBA")
+magneton_char = Image.open("haunter/assets/characters/magneton_hovering_standard_core.png").convert(
+    "RGBA"
+)
 
 # Right side: Haunter in poisoned basement
-haunter_env = Image.open("haunter/assets/environments/env_flooded_basement_poisoned.png").convert("RGBA")
-haunter_char = Image.open("haunter/assets/characters/haunter_victorious_floating.png").convert("RGBA")
+haunter_env = Image.open("haunter/assets/environments/env_flooded_basement_poisoned.png").convert(
+    "RGBA"
+)
+haunter_char = Image.open("haunter/assets/characters/haunter_victorious_floating.png").convert(
+    "RGBA"
+)
+
 
 # Resize environments to fit half-width while maintaining aspect ratio
 def resize_and_crop_to_half(img):
@@ -47,6 +54,7 @@ def resize_and_crop_to_half(img):
         img = img.crop((0, top, HALF_WIDTH, top + TARGET_HEIGHT))
 
     return img
+
 
 # Resize both environments
 magneton_env = resize_and_crop_to_half(magneton_env)

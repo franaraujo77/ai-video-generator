@@ -87,9 +87,7 @@ class TestTaskModel:
         await async_session.commit()
 
         # Verify all were created
-        result = await async_session.execute(
-            select(Task).where(Task.channel_id == "testchan")
-        )
+        result = await async_session.execute(select(Task).where(Task.channel_id == "testchan"))
         tasks = result.scalars().all()
         assert len(tasks) == len(valid_statuses)
 
@@ -106,9 +104,7 @@ class TestTaskModel:
 
         # Use explicit eager loading for async access
         result = await async_session.execute(
-            select(Task)
-            .options(selectinload(Task.channel))
-            .where(Task.id == task.id)
+            select(Task).options(selectinload(Task.channel)).where(Task.id == task.id)
         )
         loaded_task = result.scalar_one()
 

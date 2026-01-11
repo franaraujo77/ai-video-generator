@@ -5,7 +5,7 @@ and default value behavior.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 from sqlalchemy import select
@@ -65,7 +65,7 @@ async def test_channel_is_active_default_true(async_session):
 @pytest.mark.asyncio
 async def test_channel_created_at_auto_populated(async_session):
     """Test that created_at is auto-populated on creation."""
-    before_create = datetime.now(UTC)
+    before_create = datetime.now(timezone.utc)
 
     channel = Channel(
         channel_id="timestamp-test",
@@ -74,11 +74,13 @@ async def test_channel_created_at_auto_populated(async_session):
     async_session.add(channel)
     await async_session.commit()
 
-    after_create = datetime.now(UTC)
+    after_create = datetime.now(timezone.utc)
 
     assert channel.created_at is not None
     # Compare timestamps (SQLite may not preserve timezone, so compare naive)
-    created_naive = channel.created_at.replace(tzinfo=None) if channel.created_at.tzinfo else channel.created_at
+    created_naive = (
+        channel.created_at.replace(tzinfo=None) if channel.created_at.tzinfo else channel.created_at
+    )
     before_naive = before_create.replace(tzinfo=None)
     after_naive = after_create.replace(tzinfo=None)
     assert before_naive <= created_naive <= after_naive
@@ -113,9 +115,7 @@ async def test_channel_isolation_query_by_channel_id(async_session):
     await async_session.commit()
 
     # Query for specific channel
-    result = await async_session.execute(
-        select(Channel).where(Channel.channel_id == "poke1")
-    )
+    result = await async_session.execute(select(Channel).where(Channel.channel_id == "poke1"))
     filtered_channel = result.scalar_one()
 
     # Verify isolation - only requested channel returned
@@ -303,9 +303,7 @@ async def test_channel_update_channel_name(async_session):
     await async_session.commit()
 
     # Re-query to verify persistence
-    result = await async_session.execute(
-        select(Channel).where(Channel.channel_id == "name-update")
-    )
+    result = await async_session.execute(select(Channel).where(Channel.channel_id == "name-update"))
     updated = result.scalar_one()
 
     assert updated.channel_name == "New Name"
@@ -337,17 +335,14 @@ async def test_channel_count(async_session):
 async def test_channel_bulk_create(async_session):
     """Test creating multiple channels at once with add_all."""
     channels = [
-        Channel(channel_id=f"bulk-{i}", channel_name=f"Bulk Channel {i}")
-        for i in range(10)
+        Channel(channel_id=f"bulk-{i}", channel_name=f"Bulk Channel {i}") for i in range(10)
     ]
 
     async_session.add_all(channels)
     await async_session.commit()
 
     # Verify all were created
-    result = await async_session.execute(
-        select(Channel).where(Channel.channel_id.like("bulk-%"))
-    )
+    result = await async_session.execute(select(Channel).where(Channel.channel_id.like("bulk-%")))
     saved = result.scalars().all()
 
     assert len(saved) == 10
