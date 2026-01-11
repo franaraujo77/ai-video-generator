@@ -196,11 +196,11 @@ class StorageStrategyService:
                 f"{', '.join(missing_fields)}"
             )
 
-        # Type narrowing assertions (validated by missing_fields check above)
-        assert channel.r2_account_id_encrypted is not None
-        assert channel.r2_access_key_id_encrypted is not None
-        assert channel.r2_secret_access_key_encrypted is not None
-        assert channel.r2_bucket_name is not None
+        # Type narrowing for mypy (runtime check done by missing_fields above)
+        assert channel.r2_account_id_encrypted is not None  # noqa: S101, RUF100
+        assert channel.r2_access_key_id_encrypted is not None  # noqa: S101, RUF100
+        assert channel.r2_secret_access_key_encrypted is not None  # noqa: S101, RUF100
+        assert channel.r2_bucket_name is not None  # noqa: S101, RUF100
 
         # Decrypt credentials
         encryption_service = get_encryption_service()
