@@ -5,12 +5,17 @@ configurations from YAML files, and the ConfigManager singleton for
 managing loaded configurations with hot reload support.
 
 Syncing Configuration to Database:
-    The ChannelConfigLoader.sync_to_database() method persists voice and branding
-    configuration from YAML to the Channel model. This enables the orchestration
-    layer to read voice_id and branding paths directly from the database without
-    parsing YAML files at runtime.
+    The ChannelConfigLoader.sync_to_database() method persists voice, branding,
+    storage strategy, and R2 credentials from YAML to the Channel model. This
+    enables the orchestration layer to read configuration from the database
+    at runtime without parsing YAML files.
 
     YAML → ChannelConfigSchema → sync_to_database() → Channel model
+
+Storage Strategy Syncing (FR12):
+    - storage_strategy is always persisted ("notion" or "r2")
+    - R2 credentials are encrypted before storage using CredentialService pattern
+    - Warning logged if storage_strategy="r2" but R2 credentials are incomplete
 """
 
 import asyncio
@@ -24,6 +29,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Channel
 from app.schemas.channel_config import ChannelConfigSchema
+from app.utils.encryption import get_encryption_service
 
 log = structlog.get_logger()
 
@@ -211,13 +217,15 @@ class ChannelConfigLoader:
     async def sync_to_database(
         self, config: ChannelConfigSchema, db: AsyncSession
     ) -> Channel:
-        """Persist voice and branding config from YAML to database.
+        """Persist voice, branding, storage strategy, and R2 config from YAML to database.
 
-        Creates or updates a Channel record with voice_id and branding paths
-        from the parsed YAML configuration. This enables the orchestration
-        layer to read configuration from the database at runtime.
+        Creates or updates a Channel record with voice_id, branding paths,
+        storage_strategy, and R2 credentials from the parsed YAML configuration.
+        This enables the orchestration layer to read configuration from the
+        database at runtime.
 
-        Logs warning if voice_id is missing (AC #2).
+        Logs warning if voice_id is missing (Story 1.4 AC #2).
+        Logs warning if storage_strategy="r2" but R2 credentials are incomplete.
 
         Args:
             config: Validated ChannelConfigSchema from YAML.
@@ -259,7 +267,7 @@ class ChannelConfigLoader:
                 channel_name=config.channel_name,
             )
 
-        # Sync voice_id (AC #2 - log warning if missing)
+        # Sync voice_id (Story 1.4 AC #2 - log warning if missing)
         channel.voice_id = config.voice_id
         if config.voice_id is None:
             log.warning(
@@ -286,10 +294,75 @@ class ChannelConfigLoader:
             channel.branding_outro_path = None
             channel.branding_watermark_path = None
 
+        # Sync storage strategy (Story 1.5 - FR12)
+        channel.storage_strategy = config.storage_strategy
+        log.info(
+            "channel_storage_strategy_synced",
+            channel_id=config.channel_id,
+            storage_strategy=config.storage_strategy,
+        )
+
+        # Sync R2 credentials (Story 1.5 - FR12)
+        await self._sync_r2_credentials(config, channel)
+
         await db.commit()
         await db.refresh(channel)
 
         return channel
+
+    async def _sync_r2_credentials(
+        self, config: ChannelConfigSchema, channel: Channel
+    ) -> None:
+        """Encrypt and persist R2 credentials to Channel model.
+
+        If r2_config is provided in the YAML config, encrypts the credentials
+        and persists them to the Channel model. If r2_config is None but
+        storage_strategy is "r2", logs a warning about incomplete credentials.
+
+        Args:
+            config: Validated ChannelConfigSchema from YAML.
+            channel: Channel model to update.
+        """
+        if config.r2_config is None:
+            # Clear R2 credentials if not configured
+            channel.r2_account_id_encrypted = None
+            channel.r2_access_key_id_encrypted = None
+            channel.r2_secret_access_key_encrypted = None
+            channel.r2_bucket_name = None
+
+            # Warn if storage_strategy is "r2" but no r2_config
+            # Note: Schema validation should prevent this, but belt-and-suspenders
+            if config.storage_strategy == "r2":
+                log.warning(
+                    "channel_r2_credentials_incomplete",
+                    channel_id=config.channel_id,
+                    message=(
+                        "Channel storage_strategy is 'r2' but r2_config is missing. "
+                        "R2 storage will not work until credentials are provided."
+                    ),
+                )
+            return
+
+        # Encrypt and persist R2 credentials
+        encryption_service = get_encryption_service()
+
+        channel.r2_account_id_encrypted = encryption_service.encrypt(
+            config.r2_config.account_id
+        )
+        channel.r2_access_key_id_encrypted = encryption_service.encrypt(
+            config.r2_config.access_key_id
+        )
+        channel.r2_secret_access_key_encrypted = encryption_service.encrypt(
+            config.r2_config.secret_access_key
+        )
+        channel.r2_bucket_name = config.r2_config.bucket_name
+
+        log.info(
+            "channel_r2_credentials_synced",
+            channel_id=config.channel_id,
+            bucket_name=config.r2_config.bucket_name,
+            has_credentials=True,
+        )
 
 
 class ConfigManager:

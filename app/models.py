@@ -40,7 +40,7 @@ class Channel(Base):
     """YouTube channel configuration and tracking.
 
     Each channel represents a distinct YouTube channel with its own
-    credentials, voice settings, branding, and content configuration.
+    credentials, voice settings, branding, storage, and content configuration.
 
     Attributes:
         id: Internal UUID primary key.
@@ -58,11 +58,17 @@ class Channel(Base):
         branding_intro_path: Relative path to intro video for video assembly (FR11).
         branding_outro_path: Relative path to outro video for video assembly (FR11).
         branding_watermark_path: Relative path to watermark image for video assembly (FR11).
+        storage_strategy: Asset storage strategy - "notion" (default) or "r2" (FR12).
+        r2_account_id_encrypted: Fernet-encrypted Cloudflare account ID for R2 storage.
+        r2_access_key_id_encrypted: Fernet-encrypted R2 access key ID.
+        r2_secret_access_key_encrypted: Fernet-encrypted R2 secret access key.
+        r2_bucket_name: R2 bucket name for asset storage (not encrypted, not sensitive).
 
     Note:
         Encrypted fields store credentials as bytes. Use CredentialService
         to encrypt/decrypt credentials - NEVER access encrypted fields directly.
         Voice IDs are NOT encrypted - they are not sensitive (public ElevenLabs IDs).
+        R2 bucket names are NOT encrypted - they are not sensitive.
     """
 
     __tablename__ = "channels"
@@ -142,12 +148,45 @@ class Channel(Base):
         nullable=True,
     )
 
+    # Storage strategy configuration (FR12)
+    # "notion" (default) or "r2" for Cloudflare R2 storage
+    storage_strategy: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="notion",
+        server_default="notion",
+    )
+
+    # R2 credentials (Fernet encrypted) - only used when storage_strategy="r2"
+    # Use CredentialService for encrypt/decrypt operations
+    r2_account_id_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+    r2_access_key_id_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+    r2_secret_access_key_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary,
+        nullable=True,
+    )
+    # R2 bucket name is NOT encrypted - not sensitive
+    r2_bucket_name: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
         Note:
             NEVER expose encrypted fields in repr - security risk.
             Shows voice_id presence (not value) for debugging.
+            Shows storage_strategy value for clarity.
         """
         voice_info = "set" if self.voice_id else "not_set"
-        return f"<Channel(channel_id={self.channel_id!r}, name={self.channel_name!r}, voice_id={voice_info})>"
+        return (
+            f"<Channel(channel_id={self.channel_id!r}, name={self.channel_name!r}, "
+            f"voice_id={voice_info}, storage_strategy={self.storage_strategy!r})>"
+        )

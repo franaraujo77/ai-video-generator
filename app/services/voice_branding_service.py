@@ -26,20 +26,13 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.exceptions import ConfigurationError
 from app.models import Channel
 
 log = structlog.get_logger(__name__)
 
-
-class ConfigurationError(Exception):
-    """Raised when required configuration is missing.
-
-    This error indicates a configuration problem that prevents
-    video generation from proceeding (e.g., no voice_id configured
-    and no global default set).
-    """
-
-    pass
+# Re-export for backward compatibility
+__all__ = ["BrandingPaths", "ConfigurationError", "VoiceBrandingService"]
 
 
 @dataclass(frozen=True)

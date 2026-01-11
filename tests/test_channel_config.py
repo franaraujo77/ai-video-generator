@@ -24,6 +24,8 @@ class TestChannelConfigSchema:
 
     def test_valid_config_all_fields(self):
         """Test valid config with all fields provided."""
+        from app.schemas.channel_config import R2Config
+
         config = ChannelConfigSchema(
             channel_id="pokemon_nature",
             channel_name="Pokemon Nature Docs",
@@ -32,6 +34,12 @@ class TestChannelConfigSchema:
             is_active=False,
             voice_id="voice123",
             storage_strategy="r2",
+            r2_config=R2Config(
+                account_id="acc123",
+                access_key_id="key123",
+                secret_access_key="secret123",
+                bucket_name="test-bucket",
+            ),
             max_concurrent=5,
             budget_daily_usd=Decimal("50.00"),
         )
@@ -43,6 +51,7 @@ class TestChannelConfigSchema:
         assert config.is_active is False
         assert config.voice_id == "voice123"
         assert config.storage_strategy == "r2"
+        assert config.r2_config is not None
         assert config.max_concurrent == 5
         assert config.budget_daily_usd == Decimal("50.00")
 
@@ -183,11 +192,19 @@ class TestChannelConfigSchema:
 
     def test_storage_strategy_normalized_lowercase(self):
         """Test that storage_strategy is normalized to lowercase."""
+        from app.schemas.channel_config import R2Config
+
         config = ChannelConfigSchema(
             channel_id="poke1",
             channel_name="Test Channel",
             notion_database_id="db-123",
             storage_strategy="R2",
+            r2_config=R2Config(
+                account_id="acc123",
+                access_key_id="key123",
+                secret_access_key="secret123",
+                bucket_name="test-bucket",
+            ),
         )
 
         assert config.storage_strategy == "r2"
