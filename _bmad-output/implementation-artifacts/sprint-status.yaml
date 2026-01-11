@@ -1,0 +1,135 @@
+# generated: 2026-01-10
+# project: ai-video-generator
+# project_key: ai-video-generator
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: 2026-01-10
+project: ai-video-generator
+project_key: ai-video-generator
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # Epic 1: Foundation & Channel Management
+  epic-1: in-progress
+  1-1-database-foundation-channel-model: done
+  1-2-channel-configuration-yaml-loader: done
+  1-3-per-channel-encrypted-credentials-storage: done
+  1-4-channel-voice-branding-configuration: done
+  1-5-channel-storage-strategy-configuration: done
+  1-6-channel-capacity-tracking: done
+  epic-1-retrospective: optional
+
+  # Epic 2: Notion Integration & Video Planning
+  epic-2: backlog
+  2-1-task-model-database-schema: backlog
+  2-2-notion-api-client-with-rate-limiting: backlog
+  2-3-video-entry-creation-in-notion: backlog
+  2-4-batch-video-queuing: backlog
+  2-5-webhook-endpoint-for-notion-events: backlog
+  2-6-task-enqueueing-with-duplicate-detection: backlog
+  epic-2-retrospective: optional
+
+  # Epic 3: Video Generation Pipeline
+  epic-3: backlog
+  3-1-cli-script-wrapper-async-execution: backlog
+  3-2-filesystem-organization-path-helpers: backlog
+  3-3-asset-generation-step-gemini: backlog
+  3-4-composite-creation-step: backlog
+  3-5-video-clip-generation-step-kling: backlog
+  3-6-narration-generation-step-elevenlabs: backlog
+  3-7-sound-effects-generation-step: backlog
+  3-8-video-assembly-step-ffmpeg: backlog
+  3-9-end-to-end-pipeline-orchestration: backlog
+  epic-3-retrospective: optional
+
+  # Epic 4: Worker Orchestration & Parallel Processing
+  epic-4: backlog
+  4-1-worker-process-foundation: backlog
+  4-2-task-claiming-with-pgqueuer: backlog
+  4-3-priority-queue-management: backlog
+  4-4-round-robin-channel-scheduling: backlog
+  4-5-rate-limit-aware-task-selection: backlog
+  4-6-parallel-task-execution: backlog
+  epic-4-retrospective: optional
+
+  # Epic 5: Review Gates & Quality Control
+  epic-5: backlog
+  5-1-26-status-workflow-state-machine: backlog
+  5-2-review-gate-enforcement: backlog
+  5-3-asset-review-interface: backlog
+  5-4-video-review-interface: backlog
+  5-5-audio-review-interface: backlog
+  5-6-real-time-status-updates-to-notion: backlog
+  5-7-progress-visibility-dashboard: backlog
+  5-8-bulk-approve-reject-operations: backlog
+  epic-5-retrospective: optional
+
+  # Epic 6: Error Handling & Auto-Recovery
+  epic-6: backlog
+  6-1-transient-failure-detection: backlog
+  6-2-exponential-backoff-retry-logic: backlog
+  6-3-resume-from-failure-point: backlog
+  6-4-granular-error-status-updates: backlog
+  6-5-detailed-error-logging: backlog
+  6-6-alert-system-for-terminal-failures: backlog
+  6-7-manual-retry-trigger: backlog
+  6-8-api-quota-monitoring: backlog
+  6-9-retry-state-visibility: backlog
+  6-10-auto-recovery-success-rate-tracking: backlog
+  epic-6-retrospective: optional
+
+  # Epic 7: YouTube Publishing & Compliance
+  epic-7: backlog
+  7-1-youtube-oauth-setup-cli: backlog
+  7-2-oauth-token-refresh-automation: backlog
+  7-3-video-metadata-generation: backlog
+  7-4-resumable-upload-implementation: backlog
+  7-5-youtube-url-retrieval-notion-update: backlog
+  7-6-upload-error-handling: backlog
+  7-7-youtube-compliance-enforcement: backlog
+  7-8-channel-privacy-configuration: backlog
+  7-9-human-review-audit-logging: backlog
+  epic-7-retrospective: optional
+
+  # Epic 8: Monitoring, Observability & Cost Tracking
+  epic-8: backlog
+  8-1-structured-logging-with-correlation-ids: backlog
+  8-2-per-video-cost-tracking: backlog
+  8-3-asset-url-population-in-notion: backlog
+  8-4-cloudflare-r2-storage-integration: backlog
+  8-5-temporary-file-cleanup: backlog
+  8-6-weekly-success-rate-calculation: backlog
+  8-7-health-check-endpoint: backlog
+  8-8-cost-dashboard-reporting: backlog
+  epic-8-retrospective: optional

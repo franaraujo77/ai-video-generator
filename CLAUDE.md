@@ -4,7 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is an AI-powered production pipeline for creating photorealistic Pokémon nature documentaries in the style of David Attenborough's *Planet Earth*. The pipeline transforms a Pokémon concept into a finished 90-second video clip through 8 automated steps.
+This repository contains two complementary systems:
+
+1. **Pokemon Pipeline** (`scripts/`, `prompts/`, `{pokemon}/`) - AI-powered production pipeline for creating photorealistic Pokémon nature documentaries in the style of David Attenborough's *Planet Earth*. Transforms a Pokémon concept into a finished 90-second video clip through 8 automated steps. Uses **filesystem as source of truth**.
+
+2. **Multi-Channel Orchestration Platform** (`app/`, `alembic/`) - PostgreSQL-backed orchestration layer for managing multiple YouTube channels, each with isolated credentials, branding, and capacity limits. Uses **database as source of truth**.
 
 ## Core Architecture: "Smart Agent + Dumb Scripts"
 
@@ -243,11 +247,18 @@ Script:
 
 ## Key Constraints
 
+### Pokemon Pipeline Constraints
 1. **One Static Image, One Micro-Movement:** AI video generators excel at "breathing photographs" - avoid complex action sequences
-2. **Filesystem as Source of Truth:** No databases, no state files - everything is markdown and generated assets
+2. **Filesystem as Source of Truth:** For the Pokemon Pipeline, everything is markdown and generated assets - no databases
 3. **Scripts Are Stateless:** Never add file reading or business logic to Python scripts - agents handle that
 4. **16:9 for Video:** Composite images MUST be 1920x1080 for YouTube-ready output
 5. **Sequential Pipeline:** Cannot skip SOPs - each step depends on previous outputs
+
+### Orchestration Platform Constraints
+1. **PostgreSQL as Source of Truth:** Channel configuration, credentials, and task state live in the database
+2. **Encrypted Credentials:** All API keys and OAuth tokens use Fernet symmetric encryption (FERNET_KEY env var)
+3. **Async-First:** All database operations use SQLAlchemy 2.0 async patterns
+4. **Channel Isolation:** Each channel has independent credentials, branding, and capacity limits
 
 ## Common Issues
 
@@ -274,3 +285,104 @@ Script:
 - Monitor API usage for cost tracking
 - Keep 10-minute timeout for Kling videos (2-5 min typical, up to 10 min possible)
 - Hard cuts between clips (no transitions) - matches nature documentary style
+
+---
+
+## Multi-Channel Orchestration Platform
+
+The orchestration layer (`app/`) manages multiple YouTube channels with isolated configuration, credentials, and task scheduling.
+
+### Orchestration Structure
+
+```
+app/
+├── models.py              # SQLAlchemy 2.0 ORM models (Channel, Task)
+├── database.py            # Async session factory, connection management
+├── schemas/               # Pydantic schemas for validation
+│   └── channel_config.py  # YAML config validation
+├── services/              # Business logic layer
+│   ├── credential_service.py      # Encrypt/decrypt credentials
+│   ├── channel_config_loader.py   # Load YAML configs
+│   ├── storage_strategy_service.py # R2/Notion storage
+│   └── channel_capacity_service.py # Capacity tracking
+└── utils/
+    └── encryption.py      # Fernet encryption singleton
+
+alembic/
+├── env.py                 # Migration environment (async)
+└── versions/              # Database migrations
+```
+
+### Development Commands (Orchestration)
+
+```bash
+# Run tests
+uv run pytest
+
+# Run tests with coverage
+uv run pytest --cov=app
+
+# Lint check
+uv run ruff check .
+
+# Type check
+uv run mypy app/
+
+# Create new migration
+uv run alembic revision --autogenerate -m "description"
+
+# Apply migrations
+uv run alembic upgrade head
+
+# Generate Fernet encryption key
+python scripts/generate_fernet_key.py
+```
+
+### Environment Variables (Orchestration)
+
+```bash
+# Database connection
+DATABASE_URL=postgresql+asyncpg://user:pass@host:5432/dbname
+
+# Encryption key for credentials (generate with scripts/generate_fernet_key.py)
+FERNET_KEY=your-44-char-base64-key
+
+# For local testing with SQLite
+DATABASE_URL=sqlite+aiosqlite:///./test.db
+```
+
+### Channel Configuration
+
+Channels are configured via YAML files in `config/channels/`:
+
+```yaml
+# config/channels/poke1.yaml
+channel_id: poke1
+channel_name: Pokemon Nature Documentary
+is_active: true
+voice_id: EXAVITQu4vr4xnSDxMaL  # ElevenLabs voice
+storage_strategy: r2  # or "notion"
+max_concurrent: 3     # Parallel task limit
+branding:
+  intro_path: channel_assets/intro.mp4
+  outro_path: channel_assets/outro.mp4
+  watermark_path: channel_assets/watermark.png
+```
+
+### Key Models
+
+- **Channel:** YouTube channel configuration (credentials, branding, capacity)
+- **Task:** Video generation job with status tracking (pending → processing → completed)
+
+### Testing Patterns
+
+Tests use async SQLite with factory functions:
+
+```python
+from tests.support.factories import create_channel, create_channel_with_credentials
+
+async def test_channel_creation(db_session):
+    channel = create_channel(channel_id="test1")
+    db_session.add(channel)
+    await db_session.commit()
+```

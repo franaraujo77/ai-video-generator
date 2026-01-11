@@ -9,7 +9,111 @@ dependencies = [
     "pillow>=10.0.0",
     "pyjwt>=2.8.0",
     "requests>=2.31.0",
+    # Orchestration layer dependencies (Story 1.1+)
+    "sqlalchemy[asyncio]>=2.0.0",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "aiosqlite>=0.19.0",  # For async SQLite tests
+    "pydantic>=2.8.0",  # Schema validation (Story 1.2+)
+    "pyyaml>=6.0",  # YAML config parsing (Story 1.2+)
+    "structlog>=23.2.0",  # Structured logging (Story 1.2+)
+    "cryptography>=41.0.0",  # Fernet symmetric encryption (Story 1.3+)
 ]
 
-[tool.uv]
-dev-dependencies = []
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pre-commit>=4.5.1",
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "ruff>=0.14.11",
+    "types-pyyaml>=6.0.12.20250915",
+    "types-requests>=2.32.4.20260107",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+asyncio_mode = "auto"
+addopts = "-v --strict-markers"
+markers = [
+    "slow: marks tests as slow",
+    "integration: marks tests requiring external services",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "alembic/versions",  # Auto-generated migrations
+]
+
+[tool.ruff.lint]
+select = [
+    # Current rules
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # Pyflakes
+    "I",      # isort
+    "N",      # pep8-naming
+    "UP",     # pyupgrade (Python 3.10+ syntax)
+    # Additional rules from architecture.md
+    "D",      # pydocstyle (docstrings)
+    "S",      # flake8-bandit (security)
+    "B",      # flake8-bugbear (common bugs)
+    "C4",     # flake8-comprehensions
+    "T20",    # flake8-print (no print statements)
+    "SIM",    # flake8-simplify
+    "ASYNC",  # flake8-async (async patterns)
+    "RUF",    # Ruff-specific rules
+]
+ignore = [
+    "D100",   # Missing docstring in public module
+    "D104",   # Missing docstring in public package
+    "D107",   # Missing docstring in __init__
+    "S101",   # assert used (needed for tests)
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+# Tests: allow assert, skip docstrings, allow hardcoded test passwords, unused imports/vars
+"tests/*" = ["S101", "S105", "S106", "S110", "D", "B008", "SIM117", "F401", "F841", "I001", "E501", "RUF022"]
+# Scripts: "dumb scripts" by design (CLAUDE.md) - minimal linting
+# Allow: print, subprocess, docstrings, f-strings, line length, imports
+"scripts/*" = ["T20", "S603", "S607", "S113", "D", "F541", "F401", "N806", "UP015", "UP022", "RUF005", "E501", "I001"]
+# Alembic: auto-generated migration environment
+"alembic/*" = ["D", "I001"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+disallow_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+show_error_codes = true
+plugins = [
+    "pydantic.mypy",
+]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[[tool.mypy.overrides]]
+module = [
+    "google.generativeai.*",
+    "jwt.*",
+    "structlog.*",
+]
+ignore_missing_imports = true

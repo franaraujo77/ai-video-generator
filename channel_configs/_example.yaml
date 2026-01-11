@@ -1,0 +1,85 @@
+# Example Channel Configuration
+# ==============================
+#
+# This is a template for creating new channel configurations.
+# To create a new channel, copy this file to {channel_id}.yaml and fill in the values.
+#
+# IMPORTANT: Files starting with underscore (_) are skipped during loading.
+# Remove the underscore prefix when creating actual channel configs.
+#
+# Example: Copy this file to "pokechannel1.yaml" for a Pokemon nature documentary channel.
+
+# ========================================
+# REQUIRED FIELDS (must be provided)
+# ========================================
+
+# channel_id: Business identifier for the channel
+# - Must be alphanumeric with underscores only (a-z, A-Z, 0-9, _)
+# - Maximum 50 characters
+# - Will be normalized to lowercase
+# - Example: "pokemon_nature", "poke1", "nature_docs_1"
+channel_id: example_channel
+
+# channel_name: Human-readable display name
+# - Maximum 100 characters
+# - Can include spaces and special characters
+# - Example: "Pokemon Nature Documentaries", "Wild Pokemon Shorts"
+channel_name: "Example Channel"
+
+# notion_database_id: Notion database ID for video entries
+# - Found in Notion database URL: notion.so/{workspace}/{database_id}?v=...
+# - Usually a 32-character hexadecimal string
+# - Example: "abc123def456789012345678901234ab"
+notion_database_id: "your-notion-database-id-here"
+
+# ========================================
+# OPTIONAL FIELDS (have sensible defaults)
+# ========================================
+
+# priority: Processing priority for the queue (default: "normal")
+# - "high": Processed before normal/low priority videos
+# - "normal": Standard processing order
+# - "low": Processed after high/normal priority videos
+priority: normal
+
+# is_active: Whether the channel is enabled for processing (default: true)
+# - true: Channel will process videos
+# - false: Channel is disabled (no new videos processed)
+is_active: true
+
+# voice_id: ElevenLabs voice ID for narration (default: null)
+# - Leave empty to use project default voice
+# - Get voice ID from ElevenLabs dashboard: https://elevenlabs.io/voice-library
+# - Example: "21m00Tcm4TlvDq8ikWAM" (Rachel)
+voice_id: null
+
+# storage_strategy: Where to store generated assets (default: "notion")
+# - "notion": Store URLs in Notion (assets hosted on external services)
+# - "r2": Store assets in Cloudflare R2 bucket (self-hosted)
+storage_strategy: notion
+
+# max_concurrent: Maximum parallel tasks per channel (default: 2)
+# - Range: 1-10
+# - Higher values = faster processing but more API usage
+# - Consider API rate limits when setting this value
+max_concurrent: 2
+
+# budget_daily_usd: Daily spending limit in USD (default: null = unlimited)
+# - Set to limit API costs per day
+# - When limit is reached, channel pauses until next day
+# - Example: 50.00 for $50/day limit
+budget_daily_usd: null
+
+# ========================================
+# FULL EXAMPLE WITH ALL FIELDS
+# ========================================
+#
+# channel_id: pokemon_nature_1
+# channel_name: "Pokemon Nature Documentaries"
+# notion_database_id: "abc123def456789012345678901234ab"
+# priority: high
+# is_active: true
+# voice_id: "21m00Tcm4TlvDq8ikWAM"
+# storage_strategy: notion
+# max_concurrent: 3
+# budget_daily_usd: 50.00
