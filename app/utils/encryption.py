@@ -26,17 +26,17 @@ from typing import ClassVar
 from cryptography.fernet import Fernet, InvalidToken
 
 
-class EncryptionKeyMissing(Exception):
+class EncryptionKeyMissingError(Exception):
     """Raised when FERNET_KEY environment variable is not set.
 
     This exception indicates that the application cannot perform encryption
     or decryption operations because the required encryption key is missing.
 
     Example:
-        >>> from app.utils.encryption import EncryptionService, EncryptionKeyMissing
+        >>> from app.utils.encryption import EncryptionService, EncryptionKeyMissingError
         >>> try:
         ...     service = EncryptionService()  # FERNET_KEY not set
-        ... except EncryptionKeyMissing as e:
+        ... except EncryptionKeyMissingError as e:
         ...     print(f"Setup required: {e}")
     """
 
@@ -96,7 +96,7 @@ class EncryptionService:
         >>> assert decrypted == "my-oauth-token"
 
     Raises:
-        EncryptionKeyMissing: If FERNET_KEY environment variable is not set.
+        EncryptionKeyMissingError: If FERNET_KEY environment variable is not set.
     """
 
     _instance: ClassVar["EncryptionService | None"] = None
@@ -109,7 +109,7 @@ class EncryptionService:
             The singleton EncryptionService instance.
 
         Raises:
-            EncryptionKeyMissing: If FERNET_KEY environment variable is not set.
+            EncryptionKeyMissingError: If FERNET_KEY environment variable is not set.
         """
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -120,19 +120,19 @@ class EncryptionService:
         """Initialize Fernet cipher with key from environment.
 
         Raises:
-            EncryptionKeyMissing: If FERNET_KEY environment variable is not set
+            EncryptionKeyMissingError: If FERNET_KEY environment variable is not set
                 or has an invalid format.
         """
         key = os.environ.get("FERNET_KEY")
         if not key:
-            raise EncryptionKeyMissing(
+            raise EncryptionKeyMissingError(
                 "FERNET_KEY environment variable is required. "
                 "Generate a key using: python scripts/generate_fernet_key.py"
             )
         try:
             self._cipher = Fernet(key.encode())
         except ValueError as e:
-            raise EncryptionKeyMissing(
+            raise EncryptionKeyMissingError(
                 "Invalid FERNET_KEY format: Fernet key must be 32 url-safe "
                 "base64-encoded bytes. Generate a valid key using: "
                 "python scripts/generate_fernet_key.py"
@@ -208,7 +208,7 @@ def get_encryption_service() -> EncryptionService:
         The singleton EncryptionService instance.
 
     Raises:
-        EncryptionKeyMissing: If FERNET_KEY environment variable is not set.
+        EncryptionKeyMissingError: If FERNET_KEY environment variable is not set.
 
     Example:
         >>> service = get_encryption_service()

@@ -23,7 +23,7 @@ import structlog
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Channel, IN_PROGRESS_STATUSES, PENDING_STATUSES, Task
+from app.models import IN_PROGRESS_STATUSES, PENDING_STATUSES, Channel, Task
 
 log = structlog.get_logger()
 

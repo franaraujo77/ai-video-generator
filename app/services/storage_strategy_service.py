@@ -179,7 +179,8 @@ class StorageStrategyService:
                 storage_strategy=channel.storage_strategy,
             )
             raise ConfigurationError(
-                f"Cannot get R2 config for channel with storage_strategy='{channel.storage_strategy}'. "
+                f"Cannot get R2 config for channel with "
+                f"storage_strategy='{channel.storage_strategy}'. "
                 f"Expected storage_strategy='r2'."
             )
 

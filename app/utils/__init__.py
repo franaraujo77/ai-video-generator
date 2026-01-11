@@ -10,14 +10,14 @@ Modules:
 
 from app.utils.encryption import (
     DecryptionError,
-    EncryptionKeyMissing,
+    EncryptionKeyMissingError,
     EncryptionService,
     get_encryption_service,
 )
 
 __all__ = [
     "DecryptionError",
-    "EncryptionKeyMissing",
+    "EncryptionKeyMissingError",
     "EncryptionService",
     "get_encryption_service",
 ]

@@ -34,9 +34,9 @@ class BrandingConfig(BaseModel):
     All paths must be relative to the channel workspace (no absolute paths).
 
     Attributes:
-        intro_video: Relative path to intro video file (e.g., "channel_assets/intro.mp4").
-        outro_video: Relative path to outro video file (e.g., "channel_assets/outro.mp4").
-        watermark_image: Optional relative path to watermark image (e.g., "channel_assets/watermark.png").
+        intro_video: Relative path to intro video file.
+        outro_video: Relative path to outro video file.
+        watermark_image: Optional relative path to watermark image.
 
     Example YAML:
         branding:
@@ -173,8 +173,11 @@ class R2Config(BaseModel):
             NEVER expose credentials in repr - security risk.
             Shows bucket_name and credential presence only.
         """
-        has_credentials = all([self.account_id, self.access_key_id, self.secret_access_key])
-        return f"R2Config(bucket_name={self.bucket_name!r}, credentials={'set' if has_credentials else 'incomplete'})"
+        has_credentials = all(
+            [self.account_id, self.access_key_id, self.secret_access_key]
+        )
+        creds = "set" if has_credentials else "incomplete"
+        return f"R2Config(bucket_name={self.bucket_name!r}, credentials={creds})"
 
 
 class ChannelConfigSchema(BaseModel):
