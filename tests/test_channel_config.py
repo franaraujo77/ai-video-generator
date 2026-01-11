@@ -5,18 +5,24 @@ This module tests:
 - YAML file loading
 - Config directory scanning
 - ConfigManager singleton with reload support
+- Database sync operations (sync_to_database for voice, branding, storage strategy, R2 credentials)
 """
 
 import pytest
+import pytest_asyncio
+from cryptography.fernet import Fernet
 from decimal import Decimal
 from pathlib import Path
 from pydantic import ValidationError
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.schemas.channel_config import ChannelConfigSchema
+from app.models import Channel
+from app.schemas.channel_config import ChannelConfigSchema, R2Config
 from app.services.channel_config_loader import (
     ChannelConfigLoader,
     ConfigManager,
 )
+from app.utils.encryption import EncryptionService, get_encryption_service
 
 
 class TestChannelConfigSchema:
@@ -619,3 +625,244 @@ notion_database_id: "db1"
         configs = manager.get_all_configs()
         assert len(configs) == 1
         assert "poke1" in configs
+
+
+class TestChannelConfigLoaderSyncToDatabase:
+    """Tests for sync_to_database method (Story 1.5 - FR12).
+
+    These tests verify that ChannelConfigLoader.sync_to_database() correctly
+    persists storage strategy and R2 credentials from YAML to the database.
+    """
+
+    @pytest.fixture
+    def valid_fernet_key(self) -> str:
+        """Generate a valid Fernet key for testing."""
+        return Fernet.generate_key().decode()
+
+    @pytest.fixture(autouse=True)
+    def reset_encryption_singleton(self):
+        """Reset the EncryptionService singleton before and after each test."""
+        EncryptionService.reset_instance()
+        yield
+        EncryptionService.reset_instance()
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_persists_notion_storage_strategy(
+        self,
+        async_session: AsyncSession,
+    ) -> None:
+        """Test that sync_to_database persists storage_strategy='notion' to database."""
+        config = ChannelConfigSchema(
+            channel_id="notion_test",
+            channel_name="Notion Test Channel",
+            notion_database_id="db123",
+            storage_strategy="notion",
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        assert channel.storage_strategy == "notion"
+        assert channel.r2_account_id_encrypted is None
+        assert channel.r2_bucket_name is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_persists_r2_storage_strategy(
+        self,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that sync_to_database persists storage_strategy='r2' to database."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        config = ChannelConfigSchema(
+            channel_id="r2_test",
+            channel_name="R2 Test Channel",
+            notion_database_id="db123",
+            storage_strategy="r2",
+            r2_config=R2Config(
+                account_id="test_account",
+                access_key_id="test_key",
+                secret_access_key="test_secret",
+                bucket_name="test-bucket",
+            ),
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        assert channel.storage_strategy == "r2"
+        assert channel.r2_bucket_name == "test-bucket"
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_encrypts_r2_credentials(
+        self,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that sync_to_database encrypts R2 credentials before persisting."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        config = ChannelConfigSchema(
+            channel_id="r2_encrypt_test",
+            channel_name="R2 Encrypt Test",
+            notion_database_id="db123",
+            storage_strategy="r2",
+            r2_config=R2Config(
+                account_id="my_account_id",
+                access_key_id="my_access_key",
+                secret_access_key="my_secret_key",
+                bucket_name="my-bucket",
+            ),
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        # Verify credentials are encrypted (not plaintext)
+        assert channel.r2_account_id_encrypted is not None
+        assert channel.r2_access_key_id_encrypted is not None
+        assert channel.r2_secret_access_key_encrypted is not None
+
+        # Verify we can decrypt back to original values
+        encryption_service = get_encryption_service()
+        decrypted_account = encryption_service.decrypt(channel.r2_account_id_encrypted)
+        decrypted_key = encryption_service.decrypt(channel.r2_access_key_id_encrypted)
+        decrypted_secret = encryption_service.decrypt(channel.r2_secret_access_key_encrypted)
+
+        assert decrypted_account == "my_account_id"
+        assert decrypted_key == "my_access_key"
+        assert decrypted_secret == "my_secret_key"
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_clears_r2_credentials_when_none(
+        self,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that sync_to_database clears R2 credentials when r2_config is None."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        # First, create a channel with R2 credentials
+        config_with_r2 = ChannelConfigSchema(
+            channel_id="clear_r2_test",
+            channel_name="Clear R2 Test",
+            notion_database_id="db123",
+            storage_strategy="r2",
+            r2_config=R2Config(
+                account_id="account",
+                access_key_id="key",
+                secret_access_key="secret",
+                bucket_name="bucket",
+            ),
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config_with_r2, async_session)
+
+        # Verify R2 credentials are set
+        assert channel.r2_account_id_encrypted is not None
+        assert channel.r2_bucket_name is not None
+
+        # Now update to notion storage (no R2 config)
+        config_notion = ChannelConfigSchema(
+            channel_id="clear_r2_test",
+            channel_name="Clear R2 Test Updated",
+            notion_database_id="db123",
+            storage_strategy="notion",
+            # No r2_config
+        )
+
+        channel = await loader.sync_to_database(config_notion, async_session)
+
+        # Verify R2 credentials are cleared
+        assert channel.storage_strategy == "notion"
+        assert channel.r2_account_id_encrypted is None
+        assert channel.r2_access_key_id_encrypted is None
+        assert channel.r2_secret_access_key_encrypted is None
+        assert channel.r2_bucket_name is None
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_updates_existing_channel(
+        self,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that sync_to_database updates existing channel rather than creating new."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        # Create initial channel with notion storage
+        config1 = ChannelConfigSchema(
+            channel_id="update_test",
+            channel_name="Update Test v1",
+            notion_database_id="db123",
+            storage_strategy="notion",
+        )
+
+        loader = ChannelConfigLoader()
+        channel1 = await loader.sync_to_database(config1, async_session)
+        original_id = channel1.id
+
+        # Update to R2 storage
+        config2 = ChannelConfigSchema(
+            channel_id="update_test",
+            channel_name="Update Test v2",
+            notion_database_id="db123",
+            storage_strategy="r2",
+            r2_config=R2Config(
+                account_id="new_account",
+                access_key_id="new_key",
+                secret_access_key="new_secret",
+                bucket_name="new-bucket",
+            ),
+        )
+
+        channel2 = await loader.sync_to_database(config2, async_session)
+
+        # Should be same channel (same UUID)
+        assert channel2.id == original_id
+        assert channel2.channel_name == "Update Test v2"
+        assert channel2.storage_strategy == "r2"
+        assert channel2.r2_bucket_name == "new-bucket"
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_persists_max_concurrent(
+        self,
+        async_session: AsyncSession,
+    ) -> None:
+        """Test that sync_to_database persists max_concurrent value."""
+        config = ChannelConfigSchema(
+            channel_id="concurrent_test",
+            channel_name="Concurrent Test",
+            notion_database_id="db123",
+            max_concurrent=5,
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        assert channel.max_concurrent == 5
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_creates_new_channel(
+        self,
+        async_session: AsyncSession,
+    ) -> None:
+        """Test that sync_to_database creates new channel if not exists."""
+        config = ChannelConfigSchema(
+            channel_id="new_channel_test",
+            channel_name="New Channel",
+            notion_database_id="db123",
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        assert channel.id is not None
+        assert channel.channel_id == "new_channel_test"
+        assert channel.channel_name == "New Channel"
+        assert channel.is_active is True
