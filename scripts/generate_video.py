@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 
 # Load environment variables from .env file in same directory as script
 script_dir = Path(__file__).parent
-load_dotenv(script_dir / '.env')
+load_dotenv(script_dir / ".env")
 
 # KIE.ai API Configuration
 KIE_API_BASE = "https://api.kie.ai/api/v1"
@@ -39,13 +39,9 @@ def upload_image_to_catbox(image_path):
 
     upload_url = "https://catbox.moe/user/api.php"
 
-    with open(image_path, 'rb') as f:
-        files = {
-            'fileToUpload': (image_path.name, f, 'image/png')
-        }
-        data = {
-            'reqtype': 'fileupload'
-        }
+    with open(image_path, "rb") as f:
+        files = {"fileToUpload": (image_path.name, f, "image/png")}
+        data = {"reqtype": "fileupload"}
 
         print(f"📤 Uploading {image_path.name} to catbox.moe...")
         response = requests.post(upload_url, files=files, data=data)
@@ -58,7 +54,7 @@ def upload_image_to_catbox(image_path):
         # catbox.moe returns the URL as plain text
         image_url = response.text.strip()
 
-        if not image_url or not image_url.startswith('http'):
+        if not image_url or not image_url.startswith("http"):
             print(f"❌ Invalid URL in response: {image_url}", file=sys.stderr)
             return None
 
@@ -89,14 +85,14 @@ def generate_video(image_path, prompt, output_path, api_key, environment_path=No
         # Note: If environment_path provided, we ignore it for now
         # Kling 2.5 API uses single image_url parameter
         if environment_path:
-            print("⚠️  Note: Environment image provided but Kling 2.5 uses single image input", file=sys.stderr)
+            print(
+                "⚠️  Note: Environment image provided but Kling 2.5 uses single image input",
+                file=sys.stderr,
+            )
             print("⚠️  Only character image will be used for generation", file=sys.stderr)
 
         # Prepare request for Kling 2.5
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
 
         payload = {
             "model": "kling/v2-5-turbo-image-to-video-pro",
@@ -106,8 +102,8 @@ def generate_video(image_path, prompt, output_path, api_key, environment_path=No
                 "image_url": main_image_url,
                 "duration": "10",  # 10 seconds
                 "negative_prompt": "blur, distort, and low quality",
-                "cfg_scale": 0.5
-            }
+                "cfg_scale": 0.5,
+            },
         }
 
         # Make API request
@@ -160,6 +156,7 @@ def generate_video(image_path, prompt, output_path, api_key, environment_path=No
     except Exception as e:
         print(f"❌ Error generating video: {e}", file=sys.stderr)
         import traceback
+
         traceback.print_exc()
         return False
 
@@ -176,10 +173,7 @@ def poll_task_status(task_id, api_key, max_wait=600):
     Returns:
         str: Video URL if successful, None otherwise
     """
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}"
-    }
+    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
     endpoint = f"{KIE_API_BASE}/jobs/recordInfo"
 
     start_time = time.time()
@@ -210,7 +204,10 @@ def poll_task_status(task_id, api_key, max_wait=600):
                             video_url = result_urls[0]
                             return video_url
                         else:
-                            print(f"❌ Video generation succeeded but no URL in resultUrls: {result_json}", file=sys.stderr)
+                            print(
+                                f"❌ Video generation succeeded but no URL in resultUrls: {result_json}",
+                                file=sys.stderr,
+                            )
                             return None
                     except Exception as e:
                         print(f"❌ Failed to parse resultJson: {e}", file=sys.stderr)
@@ -249,40 +246,34 @@ def download_video(url, output_path):
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, 'wb') as f:
+    with open(output_path, "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Generate 10-second video clips using KIE.ai Kling 2.5'
+        description="Generate 10-second video clips using KIE.ai Kling 2.5"
     )
     parser.add_argument(
-        '--image',
-        required=True,
-        help='Path to main seed image (character/subject)'
+        "--image", required=True, help="Path to main seed image (character/subject)"
     )
     parser.add_argument(
-        '--environment',
+        "--environment",
         default=None,
-        help='Optional path to environment reference image (currently not used by Kling 2.5)'
+        help="Optional path to environment reference image (currently not used by Kling 2.5)",
     )
     parser.add_argument(
-        '--prompt',
-        required=True,
-        help='Text describing the motion/animation to apply to the image'
+        "--prompt", required=True, help="Text describing the motion/animation to apply to the image"
     )
     parser.add_argument(
-        '--output',
-        required=True,
-        help='Output file path (e.g., pikachu/videos/clip_01.mp4)'
+        "--output", required=True, help="Output file path (e.g., pikachu/videos/clip_01.mp4)"
     )
 
     args = parser.parse_args()
 
     # Verify API key exists
-    api_key = os.getenv('KIE_API_KEY')
+    api_key = os.getenv("KIE_API_KEY")
 
     if not api_key:
         print("❌ Error: KIE_API_KEY not found in environment variables", file=sys.stderr)
@@ -300,30 +291,26 @@ def main():
         print(f"❌ Error: Environment image not found: {args.environment}", file=sys.stderr)
         sys.exit(1)
 
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"🎬 Pokémon Natural Geographic - Video Generator")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     print(f"🖼️  Character: {args.image}")
     if args.environment:
         print(f"🌄 Environment: {args.environment} (for reference only)")
     print(f"💾 Output: {args.output}")
     print(f"🎥 Model: Kling 2.5 Pro (10 seconds @ 1080p)")
-    print(f"{'='*60}\n")
+    print(f"{'=' * 60}\n")
 
     # Generate the video
     success = generate_video(
-        args.image,
-        args.prompt,
-        args.output,
-        api_key,
-        environment_path=args.environment
+        args.image, args.prompt, args.output, api_key, environment_path=args.environment
     )
 
-    print(f"\n{'='*60}\n")
+    print(f"\n{'=' * 60}\n")
 
     # Exit with appropriate code
     sys.exit(0 if success else 1)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
