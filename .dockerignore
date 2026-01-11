@@ -1,0 +1,96 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv
+venv/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Type checking
+.mypy_cache/
+
+# Documentation
+docs/_build/
+
+# Local development
+.env
+.env.local
+*.local
+
+# Generated assets (will be in workspace volume)
+*.mp4
+*.mp3
+*.wav
+*.png
+*.jpg
+*.jpeg
+
+# Pokemon workspaces (local development data)
+haunter/
+gengar/
+pikachu/
+bulbasaur/
+
+# BMAD output (planning artifacts)
+_bmad-output/
+_bmad/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Secrets (should never be in image)
+scripts/.env
+.env.production
+credentials.json
+
+# CI/CD (not needed in container)
+.github/
+
+# Claude/Gemini configs (not needed in container)
+.claude/
+.gemini/
+CLAUDE.md
+GEMINI.md
+
+# Generic prompts (development only)
+generic_prompts/
+
+# README variants
+README_GENERIC.md
