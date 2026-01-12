@@ -37,8 +37,8 @@ COPY pyproject.toml ./
 COPY uv.lock* ./
 
 # Install production dependencies only (no dev dependencies)
-# Using --system to install into system Python (not virtualenv)
-RUN uv sync --frozen --no-dev --no-editable --system
+# uv automatically detects system Python in Docker (no virtualenv needed)
+RUN uv sync --frozen --no-dev --no-editable
 
 # =============================================================================
 # Stage 3: Application
