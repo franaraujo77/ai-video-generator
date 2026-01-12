@@ -1,10 +1,7 @@
-# Multi-stage Dockerfile for Railway deployment
-# Optimized for Python 3.11 + FFmpeg + uv package manager
+# Simplified single-stage Dockerfile for Railway deployment
+# Python 3.11 + FFmpeg + dependencies
 
-# =============================================================================
-# Stage 1: Base image with system dependencies
-# =============================================================================
-FROM python:3.11-slim AS base
+FROM python:3.11-slim
 
 # Install system dependencies
 # - FFmpeg: Required for video processing (assemble_video.py)
@@ -24,32 +21,30 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app
 
-# =============================================================================
-# Stage 2: Dependencies installation with uv
-# =============================================================================
-FROM base AS dependencies
-
 # Install uv package manager (faster than pip)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Tell uv to use system Python (no virtualenv)
-ENV UV_SYSTEM_PYTHON=1
-
 # Copy dependency files first (for better layer caching)
 COPY pyproject.toml ./
-COPY uv.lock* ./
 
-# Install production dependencies only (no dev dependencies)
-RUN uv sync --frozen --no-dev --no-editable
-
-# =============================================================================
-# Stage 3: Application
-# =============================================================================
-FROM base AS application
-
-# Copy installed packages from dependencies stage
-COPY --from=dependencies /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=dependencies /usr/local/bin /usr/local/bin
+# Install production dependencies directly to system Python
+# Extract dependencies from pyproject.toml and install them
+RUN uv pip install --system --no-cache \
+    "google-generativeai>=0.8.0" \
+    "python-dotenv>=1.0.0" \
+    "pillow>=10.0.0" \
+    "pyjwt>=2.8.0" \
+    "requests>=2.31.0" \
+    "sqlalchemy[asyncio]>=2.0.0" \
+    "asyncpg>=0.29.0" \
+    "alembic>=1.13.0" \
+    "aiosqlite>=0.19.0" \
+    "pydantic>=2.8.0" \
+    "pyyaml>=6.0" \
+    "structlog>=23.2.0" \
+    "cryptography>=41.0.0" \
+    "fastapi>=0.115.0" \
+    "uvicorn[standard]>=0.32.0"
 
 # Copy application code
 COPY app/ ./app/
