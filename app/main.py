@@ -12,8 +12,7 @@ from fastapi.responses import JSONResponse
 app = FastAPI(
     title="AI Video Generator - Multi-Channel Orchestration",
     description=(
-        "Orchestration platform for managing multiple YouTube channels "
-        "with AI-generated content"
+        "Orchestration platform for managing multiple YouTube channels with AI-generated content"
     ),
     version="0.1.0",
 )
