@@ -55,11 +55,9 @@ COPY scripts/ ./scripts/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 
-# Copy channel configs if they exist (optional at build time)
-COPY config/ ./config/ 2>/dev/null || true
-
-# Create workspace directory for video assets
-RUN mkdir -p /app/workspace
+# Create workspace and config directories for runtime
+# Channel configs will be provided via environment or mounted at runtime
+RUN mkdir -p /app/workspace /app/config
 
 # Expose port for web service (Railway provides $PORT)
 EXPOSE 8000
