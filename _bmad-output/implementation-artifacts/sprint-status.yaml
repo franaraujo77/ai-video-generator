@@ -41,14 +41,14 @@ story_location: _bmad-output/implementation-artifacts
 
 development_status:
   # Epic 1: Foundation & Channel Management
-  epic-1: in-progress
+  epic-1: done
   1-1-database-foundation-channel-model: done
   1-2-channel-configuration-yaml-loader: done
   1-3-per-channel-encrypted-credentials-storage: done
   1-4-channel-voice-branding-configuration: done
   1-5-channel-storage-strategy-configuration: done
   1-6-channel-capacity-tracking: done
-  epic-1-retrospective: optional
+  epic-1-retrospective: done
 
   # Epic 2: Notion Integration & Video Planning
   epic-2: backlog
