@@ -32,12 +32,14 @@ FROM base AS dependencies
 # Install uv package manager (faster than pip)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# Tell uv to use system Python (no virtualenv)
+ENV UV_SYSTEM_PYTHON=1
+
 # Copy dependency files first (for better layer caching)
 COPY pyproject.toml ./
 COPY uv.lock* ./
 
 # Install production dependencies only (no dev dependencies)
-# uv automatically detects system Python in Docker (no virtualenv needed)
 RUN uv sync --frozen --no-dev --no-editable
 
 # =============================================================================
