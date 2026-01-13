@@ -101,6 +101,37 @@ Status: done
 - ✅ All ruff linting checks passing
 - ✅ Full test suite execution time: 29.44s
 
+### Code Review Round 2 - Final Cleanup (2026-01-13)
+
+**Second Adversarial Code Review Results:** 4 issues identified and fixed (3 Medium, 1 Low severity)
+
+**Issues Fixed:**
+
+1. **[MEDIUM] Unused Import in main.py** (app/main.py:18)
+   - Removed unused import: `from app.database import task_queue`
+   - Clean import section, no unused dependencies
+
+2. **[MEDIUM] Test Mocking Issue - RuntimeWarning** (tests/test_services/test_webhook_handler.py)
+   - Fixed 3 tests generating `RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited`
+   - Root cause: `session.add()` is synchronous but AsyncMock made it async
+   - Solution: Explicitly set `mock_session.add = Mock(return_value=None)` in all affected tests
+   - All 35 tests now pass cleanly with zero warnings
+
+3. **[MEDIUM] Import Sorting in models.py** (app/models.py:20-22)
+   - Fixed unsorted import block using `ruff check --fix`
+   - Code style compliance achieved
+
+4. **[LOW] Unsorted __all__ in schemas/__init__.py**
+   - Fixed unsorted __all__ list using `ruff check --fix`
+   - Additional cleanup for codebase consistency
+
+**Final Verification Results:**
+- ✅ All 536 tests passing (35 story-specific tests with ZERO warnings)
+- ✅ All mypy type checks passing (25 source files)
+- ✅ All ruff linting checks passing (zero violations)
+- ✅ Full test suite execution time: 29.54s
+- ✅ Story status confirmed: DONE
+
 ---
 
 ## Story
@@ -1474,18 +1505,22 @@ N/A - Story context file created, implementation pending
 - ✅ All type checking passing (mypy on 25 source files)
 - ✅ All linting passing (ruff)
 - ✅ Story status updated to "done"
+- ✅ Code review round 2 completed: 4 additional issues fixed
+- ✅ Final verification: 536 tests passing with ZERO warnings
+- ✅ Sprint status synced: 2-5-webhook-endpoint-for-notion-events → done
 
 ### File List
 
 **Implementation Files:**
 1. `app/schemas/webhook.py` - Pydantic validation schemas for webhook payloads
-2. `app/models.py` - Added NotionWebhookEvent model for idempotency tracking
+2. `app/models.py` - Added NotionWebhookEvent model for idempotency tracking (imports sorted in round 2)
 3. `app/services/webhook_handler.py` - Signature verification and event processing
 4. `app/routes/webhooks.py` - POST /api/v1/webhooks/notion endpoint
-5. `app/main.py` - Registered webhook router
-6. `alembic/versions/20260113_1703_f1f1300884be_add_notion_webhook_events_table.py` - Database migration
+5. `app/main.py` - Registered webhook router (unused import removed in round 2)
+6. `app/schemas/__init__.py` - Updated __all__ list (sorted in round 2)
+7. `alembic/versions/20260113_1703_f1f1300884be_add_notion_webhook_events_table.py` - Database migration
 
 **Test Files:**
-7. `tests/test_schemas/test_webhook.py` - 12 validation tests
-8. `tests/test_services/test_webhook_handler.py` - 12 service tests
-9. `tests/test_routes/test_webhooks.py` - 11 endpoint tests
+8. `tests/test_schemas/test_webhook.py` - 12 validation tests
+9. `tests/test_services/test_webhook_handler.py` - 12 service tests (mocking fixed in round 2)
+10. `tests/test_routes/test_webhooks.py` - 11 endpoint tests
