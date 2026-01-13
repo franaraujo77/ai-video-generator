@@ -26,7 +26,8 @@
       "Bash(uv run python3:*)",
       "Bash(ls:*)",
       "Bash(git checkout:*)",
-      "Bash(uv run:*)"
+      "Bash(uv run:*)",
+      "Bash(DATABASE_URL=\"postgresql://user:pass@localhost/db\" uv run alembic:*)"
     ],
     "deny": [],
     "ask": []
