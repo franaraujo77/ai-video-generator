@@ -124,5 +124,10 @@ module = [
     "google.generativeai.*",
     "jwt.*",
     "structlog.*",
+    "cryptography.*",
+    "httpx.*",
+    "aiolimiter.*",
+    "fastapi.*",
+    "uvicorn.*",
 ]
 ignore_missing_imports = true
