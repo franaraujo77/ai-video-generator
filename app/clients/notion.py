@@ -90,7 +90,7 @@ class NotionClient:
             # Retry server errors and rate limits
             return exception.response.status_code in [429, 500, 502, 503, 504]
         # Retry network errors
-        return isinstance(exception, (httpx.TimeoutException, httpx.ConnectError))
+        return isinstance(exception, httpx.TimeoutException | httpx.ConnectError)
 
     async def update_task_status(self, page_id: str, status: str) -> dict[str, Any]:
         """Update task status in Notion database (rate limited, auto-retry).
