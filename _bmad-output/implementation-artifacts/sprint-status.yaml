@@ -54,7 +54,7 @@ development_status:
   epic-2: in-progress
   2-1-task-model-database-schema: done
   2-2-notion-api-client-with-rate-limiting: done
-  2-3-video-entry-creation-in-notion: review
+  2-3-video-entry-creation-in-notion: done
   2-4-batch-video-queuing: backlog
   2-5-webhook-endpoint-for-notion-events: backlog
   2-6-task-enqueueing-with-duplicate-detection: backlog
