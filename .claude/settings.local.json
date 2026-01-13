@@ -20,7 +20,8 @@
       "Bash(if [ -f .gitignore ])",
       "Bash(then grep -q \"test.db\" .gitignore)",
       "Bash(else echo \"test.db\")",
-      "Bash(fi)"
+      "Bash(fi)",
+      "Bash(python -m pytest:*)"
     ],
     "deny": [],
     "ask": []
