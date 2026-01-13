@@ -21,7 +21,10 @@
       "Bash(then grep -q \"test.db\" .gitignore)",
       "Bash(else echo \"test.db\")",
       "Bash(fi)",
-      "Bash(python -m pytest:*)"
+      "Bash(python -m pytest:*)",
+      "Bash(python3:*)",
+      "Bash(uv run python3:*)",
+      "Bash(ls:*)"
     ],
     "deny": [],
     "ask": []

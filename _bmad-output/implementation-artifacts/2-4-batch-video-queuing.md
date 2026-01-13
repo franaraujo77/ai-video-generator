@@ -1,6 +1,6 @@
 # Story 2.4: Batch Video Queuing
 
-Status: review
+Status: done
 
 ## Story
 

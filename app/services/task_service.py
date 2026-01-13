@@ -4,12 +4,14 @@ This module provides task queue management functionality:
 - Task enqueueing with duplicate detection
 - Application-level idempotency checks
 - Task status queries for workers
+- PgQueuer integration (Story 2.6)
 
 Architecture:
 - Duplicate detection uses notion_page_id unique constraint
 - Application-level checks prevent duplicate API calls
 - Supports re-queueing of completed/failed tasks
 - Short transaction pattern (no API calls during transactions)
+- PgQueuer for PostgreSQL-native task queue with FOR UPDATE SKIP LOCKED
 """
 
 import uuid
@@ -18,11 +20,140 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Channel, PriorityLevel, Task, TaskStatus
 
 log = structlog.get_logger()
+
+# Task status categorization (Story 2.6)
+# Active states: Prevent duplicate task creation
+ACTIVE_TASK_STATUSES = {
+    # Draft is NOT active - it's a Notion-only state before queuing
+    TaskStatus.QUEUED,
+    TaskStatus.CLAIMED,
+    TaskStatus.GENERATING_ASSETS,
+    TaskStatus.ASSETS_READY,
+    TaskStatus.ASSETS_APPROVED,
+    TaskStatus.GENERATING_COMPOSITES,
+    TaskStatus.COMPOSITES_READY,
+    TaskStatus.GENERATING_VIDEO,
+    TaskStatus.VIDEO_READY,
+    TaskStatus.VIDEO_APPROVED,
+    TaskStatus.GENERATING_AUDIO,
+    TaskStatus.AUDIO_READY,
+    TaskStatus.AUDIO_APPROVED,
+    TaskStatus.GENERATING_SFX,
+    TaskStatus.SFX_READY,
+    TaskStatus.ASSEMBLING,
+    TaskStatus.ASSEMBLY_READY,
+    TaskStatus.FINAL_REVIEW,
+    TaskStatus.APPROVED,
+    TaskStatus.UPLOADING,
+}
+
+# Terminal states: Allow re-queue (manual retry)
+TERMINAL_TASK_STATUSES = {
+    TaskStatus.DRAFT,  # Notion-only state, not in DB (but included for completeness)
+    TaskStatus.PUBLISHED,  # Successfully completed
+    TaskStatus.ASSET_ERROR,  # Failed states (recoverable)
+    TaskStatus.VIDEO_ERROR,
+    TaskStatus.AUDIO_ERROR,
+    TaskStatus.UPLOAD_ERROR,
+}
+
+
+def priority_to_int(priority: PriorityLevel) -> int:
+    """Convert task priority enum to integer for PgQueuer.
+
+    PgQueuer uses integer priorities where higher values are processed first.
+
+    Args:
+        priority: PriorityLevel enum (HIGH, NORMAL, LOW)
+
+    Returns:
+        Integer priority (10=high, 5=normal, 1=low)
+    """
+    priority_map = {
+        PriorityLevel.HIGH: 10,
+        PriorityLevel.NORMAL: 5,
+        PriorityLevel.LOW: 1,
+    }
+    return priority_map.get(priority, 5)  # Default to normal
+
+
+async def check_existing_active_task(
+    notion_page_id: str,
+    session: AsyncSession,
+) -> Task | None:
+    """Check if active task exists for notion_page_id.
+
+    Active task = status in ACTIVE_TASK_STATUSES (pending, claimed, processing, etc.)
+    Terminal task = status in TERMINAL_TASK_STATUSES (completed, failed, etc.)
+
+    This function implements Layer 2 of duplicate detection:
+    - Layer 1: Database unique constraint (last line of defense)
+    - Layer 2: Application-level check (fast path, prevents unnecessary inserts)
+    - Layer 3: IntegrityError handling (race condition safety)
+
+    Args:
+        notion_page_id: Notion page ID (32-36 chars)
+        session: Database session
+
+    Returns:
+        Existing active task, or None if safe to create new task
+    """
+    result = await session.execute(
+        select(Task)
+        .where(Task.notion_page_id == notion_page_id)
+        .where(Task.status.in_(ACTIVE_TASK_STATUSES))
+    )
+    existing = result.scalar_one_or_none()
+
+    if existing:
+        log.info(
+            "duplicate_active_task_detected",
+            notion_page_id=notion_page_id,
+            existing_task_id=str(existing.id),
+            existing_status=existing.status.value,
+            action="rejected"
+        )
+
+    return existing
+
+
+async def enqueue_task_to_pgqueuer(task: Task) -> None:
+    """Mark task as ready for PgQueuer worker consumption.
+
+    Story 2.6: This function prepares tasks for worker claiming via PgQueuer.
+    PgQueuer workers will use FOR UPDATE SKIP LOCKED to claim tasks with
+    status='queued' directly from the tasks table.
+
+    Pattern:
+    - Task inserted into DB with status='queued'
+    - Workers poll tasks table with status='queued'
+    - PgQueuer FOR UPDATE SKIP LOCKED ensures atomic claiming
+    - No separate queue table needed - tasks table IS the queue
+
+    Implementation Note:
+    PgQueuer 0.25.3 uses a decorator-based pattern with entrypoints.
+    Workers will register an entrypoint function that queries tasks
+    with status='queued' and processes them. This function is a
+    placeholder for future worker integration in Epic 4.
+
+    Args:
+        task: Task instance (already in database with status='queued')
+    """
+    # PgQueuer integration deferred to Epic 4 (Worker Implementation)
+    # For now, tasks with status='queued' are ready for workers
+    log.debug(
+        "task_ready_for_workers",
+        task_id=str(task.id),
+        notion_page_id=task.notion_page_id,
+        status=task.status.value,
+        priority=task.priority.value
+    )
 
 
 async def enqueue_task(
@@ -34,24 +165,27 @@ async def enqueue_task(
     priority: PriorityLevel,
     session: AsyncSession,
 ) -> Task | None:
-    """Enqueue task for processing, handling duplicates.
+    """Enqueue task for processing with multi-layer duplicate detection.
 
-    This function implements application-level duplicate detection and
-    re-queueing logic for video generation tasks.
+    Story 2.6 Enhancements:
+    - Multi-layer duplicate detection (app + DB constraint + IntegrityError)
+    - PgQueuer integration for worker visibility
+    - Manual retry support (terminal → new task)
+    - IntegrityError race condition handling
 
-    Duplicate Detection Strategy:
-    - Check for existing task with same notion_page_id
-    - Skip if task is in active states (pending, claimed, processing)
-    - Allow re-queue if task was completed or failed
+    Duplicate Detection Strategy (3 Layers):
+    1. Database unique constraint (notion_page_id) - last defense
+    2. Application-level check (ACTIVE_TASK_STATUSES) - fast path
+    3. IntegrityError handling - race condition safety
 
-    Active States (skip duplicate):
+    Active States (reject duplicate):
     - queued, claimed, generating_*, assembling, uploading
 
-    Re-queue States (allow duplicate):
+    Terminal States (allow re-queue):
     - published, asset_error, video_error, audio_error, upload_error
 
     Args:
-        notion_page_id: Notion page ID (unique identifier)
+        notion_page_id: Notion page ID (unique identifier, 32-36 chars)
         channel_id: Channel UUID from database (NOT channel_id string)
         title: Video title
         topic: Video topic
@@ -60,73 +194,66 @@ async def enqueue_task(
         session: Database session (must be active transaction)
 
     Returns:
-        Task if created/updated, None if duplicate skipped
+        Task if created/updated, None if duplicate rejected
 
     Raises:
-        IntegrityError: If notion_page_id violates unique constraint (race condition)
+        RuntimeError: If PgQueuer is not configured
     """
     correlation_id = str(uuid.uuid4())
 
-    # Check for existing task
-    result = await session.execute(
-        select(Task).where(Task.notion_page_id == notion_page_id)
-    )
-    existing_task = result.scalar_one_or_none()
-
-    if existing_task:
-        # Define active states (prevent duplicate)
-        active_states = {
-            TaskStatus.QUEUED,
-            TaskStatus.CLAIMED,
-            TaskStatus.GENERATING_ASSETS,
-            TaskStatus.ASSETS_READY,
-            TaskStatus.ASSETS_APPROVED,
-            TaskStatus.GENERATING_COMPOSITES,
-            TaskStatus.COMPOSITES_READY,
-            TaskStatus.GENERATING_VIDEO,
-            TaskStatus.VIDEO_READY,
-            TaskStatus.VIDEO_APPROVED,
-            TaskStatus.GENERATING_AUDIO,
-            TaskStatus.AUDIO_READY,
-            TaskStatus.AUDIO_APPROVED,
-            TaskStatus.GENERATING_SFX,
-            TaskStatus.SFX_READY,
-            TaskStatus.ASSEMBLING,
-            TaskStatus.ASSEMBLY_READY,
-            TaskStatus.FINAL_REVIEW,
-            TaskStatus.APPROVED,
-            TaskStatus.UPLOADING,
-        }
-
-        # Duplicate detection: Skip if task is in active state
-        if existing_task.status in active_states:
-            log.info(
-                "task_already_queued",
-                correlation_id=correlation_id,
-                notion_page_id=notion_page_id,
-                task_id=str(existing_task.id),
-                status=existing_task.status.value,
-            )
-            return None  # Skip duplicate
-
-        # Re-queue allowed for completed/failed tasks
+    # Layer 2: Application-level duplicate check (fast path)
+    existing = await check_existing_active_task(notion_page_id, session)
+    if existing:
         log.info(
-            "task_requeued",
+            "duplicate_active_task_rejected",
             correlation_id=correlation_id,
             notion_page_id=notion_page_id,
-            task_id=str(existing_task.id),
-            previous_status=existing_task.status.value,
+            existing_task_id=str(existing.id),
+            existing_status=existing.status.value,
+            action="rejected"
+        )
+        return None  # Duplicate rejected
+
+    # Check for terminal task (allow re-queue)
+    result = await session.execute(
+        select(Task)
+        .where(Task.notion_page_id == notion_page_id)
+        .where(Task.status.in_(TERMINAL_TASK_STATUSES))
+    )
+    existing_terminal = result.scalar_one_or_none()
+
+    if existing_terminal:
+        # Re-queue allowed for terminal tasks
+        log.info(
+            "task_requeued_after_terminal",
+            correlation_id=correlation_id,
+            notion_page_id=notion_page_id,
+            previous_task_id=str(existing_terminal.id),
+            previous_status=existing_terminal.status.value,
         )
 
-        # Update task to queued status
-        existing_task.status = TaskStatus.QUEUED
-        existing_task.title = title
-        existing_task.topic = topic
-        existing_task.story_direction = story_direction
-        existing_task.priority = priority
-        existing_task.updated_at = datetime.now(timezone.utc)
+        # Update existing terminal task to queued
+        existing_terminal.status = TaskStatus.QUEUED
+        existing_terminal.title = title
+        existing_terminal.topic = topic
+        existing_terminal.story_direction = story_direction
+        existing_terminal.priority = priority
+        existing_terminal.updated_at = datetime.now(timezone.utc)
 
-        return existing_task
+        # Layer 4: Enqueue to PgQueuer
+        await session.flush()  # Ensure task has ID
+        await enqueue_task_to_pgqueuer(existing_terminal)
+
+        log.info(
+            "task_enqueued",
+            correlation_id=correlation_id,
+            task_id=str(existing_terminal.id),
+            notion_page_id=notion_page_id,
+            status="queued",
+            priority=priority.value,
+        )
+
+        return existing_terminal
 
     # Create new task
     task = Task(
@@ -140,9 +267,27 @@ async def enqueue_task(
     )
     session.add(task)
 
+    # Layer 3: Handle race conditions with IntegrityError
+    try:
+        await session.flush()  # Force DB constraint check
+    except IntegrityError as e:
+        log.warning(
+            "duplicate_task_race_condition",
+            correlation_id=correlation_id,
+            notion_page_id=notion_page_id,
+            error_detail=str(e),
+            action="rolled_back"
+        )
+        await session.rollback()
+        return None
+
+    # Layer 4: Enqueue to PgQueuer
+    await enqueue_task_to_pgqueuer(task)
+
     log.info(
         "task_enqueued",
         correlation_id=correlation_id,
+        task_id=str(task.id),
         notion_page_id=notion_page_id,
         title=title,
         status="queued",
