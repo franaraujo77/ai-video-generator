@@ -111,3 +111,20 @@ def get_workspace_root() -> str:
         Directory path string.
     """
     return os.getenv("WORKSPACE_ROOT", "/app/workspace")
+
+
+def get_notion_api_token() -> str | None:
+    """Get Notion API token from environment.
+
+    Environment Variable:
+        NOTION_API_TOKEN: Notion Internal Integration token
+
+    Returns:
+        Notion API token string, or None if not set.
+
+    Note:
+        Returns None when NOTION_API_TOKEN is not set, allowing the app
+        to start without Notion integration. The sync service will skip
+        initialization if token is None.
+    """
+    return os.getenv("NOTION_API_TOKEN")
