@@ -96,7 +96,7 @@ class NotionClient:
         """Update task status in Notion database (rate limited, auto-retry).
 
         Args:
-            page_id: Notion page ID (32 chars, no dashes)
+            page_id: Notion page ID (32-36 chars, with or without dashes)
             status: New status value (must match database schema)
 
         Returns:
@@ -220,7 +220,7 @@ class NotionClient:
         """Update multiple page properties (rate limited, auto-retry).
 
         Args:
-            page_id: Notion page ID (32 chars, no dashes)
+            page_id: Notion page ID (32-36 chars, with or without dashes)
             properties: Dictionary of properties to update
 
         Returns:
@@ -281,7 +281,7 @@ class NotionClient:
         """Retrieve single page details (rate limited, auto-retry).
 
         Args:
-            page_id: Notion page ID (32 chars, no dashes)
+            page_id: Notion page ID (32-36 chars, with or without dashes)
 
         Returns:
             Page object from Notion API

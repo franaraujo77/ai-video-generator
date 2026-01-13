@@ -392,7 +392,7 @@ class Task(Base):
 
     # Notion integration (unique constraint for bidirectional sync)
     notion_page_id: Mapped[str] = mapped_column(
-        String(32),
+        String(36),  # Supports UUID with or without dashes (32-36 chars)
         unique=True,
         nullable=False,
         index=True,
