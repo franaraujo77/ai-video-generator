@@ -174,6 +174,9 @@ async def test_process_webhook_event_queued_status(
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
     mock_session.begin = Mock(return_value=mock_transaction)
 
+    # Mock session.add() as synchronous (not async) to avoid RuntimeWarning
+    mock_session.add = Mock(return_value=None)
+
     # Mock is_duplicate_webhook to return False (not a duplicate)
     from unittest.mock import Mock as SyncMock
     mock_result = SyncMock()
@@ -244,6 +247,9 @@ async def test_process_webhook_event_ignores_non_queued_status(
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
     mock_session.begin = Mock(return_value=mock_transaction)
 
+    # Mock session.add() as synchronous (not async) to avoid RuntimeWarning
+    mock_session.add = Mock(return_value=None)
+
     # Mock is_duplicate_webhook to return False (not a duplicate)
     from unittest.mock import Mock as SyncMock
     mock_result = SyncMock()
@@ -299,6 +305,9 @@ async def test_process_webhook_event_duplicate_skipped(mock_session_factory):
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
     mock_session.begin = Mock(return_value=mock_transaction)
 
+    # Mock session.add() as synchronous (not async) to avoid RuntimeWarning
+    mock_session.add = Mock(return_value=None)
+
     # Mock is_duplicate_webhook to return True (duplicate)
     existing_event = NotionWebhookEvent(
         event_id="evt_duplicate",
@@ -347,6 +356,9 @@ async def test_process_webhook_event_notion_api_error(
     mock_transaction.__aenter__ = AsyncMock(return_value=mock_transaction)
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
     mock_session.begin = Mock(return_value=mock_transaction)
+
+    # Mock session.add() as synchronous (not async) to avoid RuntimeWarning
+    mock_session.add = Mock(return_value=None)
 
     # Mock is_duplicate_webhook to return False (not a duplicate)
     from unittest.mock import Mock as SyncMock

@@ -8,7 +8,7 @@ __all__ = [
     "ChannelConfigSchema",
     "R2Config",
     "TaskCreate",
-    "TaskUpdate",
-    "TaskResponse",
     "TaskInDB",
+    "TaskResponse",
+    "TaskUpdate",
 ]

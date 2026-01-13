@@ -6,8 +6,8 @@ Epic 2+: Adds Notion sync background task, webhook endpoints, task management, e
 """
 
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
 
 import structlog
 from fastapi import FastAPI, status
@@ -28,12 +28,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     Startup:
     - Initialize NotionClient if NOTION_API_TOKEN is set
     - Start sync_database_to_notion_loop background task
+    - PgQueuer initialization deferred to Epic 4 (Worker Orchestration)
 
     Shutdown:
     - Cancel sync task gracefully
     - Close NotionClient HTTP connections
     """
-    # Startup
+    # Startup: Initialize Notion sync
     notion_client = None
     sync_task = None
 
@@ -52,9 +53,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             message="NOTION_API_TOKEN not set, Notion sync will not run"
         )
 
+    # Story 2.6: PgQueuer infrastructure ready for Epic 4
+    log.info(
+        "task_queue_ready",
+        message="Task enqueueing with duplicate detection active. "
+                "PgQueuer worker integration in Epic 4."
+    )
+
     yield  # Application runs here
 
-    # Shutdown
+    # Shutdown: Notion sync
     if sync_task:
         log.info("shutting_down_notion_sync")
         sync_task.cancel()
