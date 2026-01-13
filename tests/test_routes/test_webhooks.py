@@ -141,9 +141,7 @@ def test_webhook_response_time_under_500ms(
 
 @patch("app.routes.webhooks.NOTION_WEBHOOK_SECRET", "test_webhook_secret_abc123")
 @patch("app.routes.webhooks.process_notion_webhook_event")
-def test_webhook_page_created_event(
-    mock_process, client, webhook_secret
-):
+def test_webhook_page_created_event(mock_process, client, webhook_secret):
     """page.created event type is accepted."""
     payload = {
         "event_id": "evt_created_test",
@@ -167,9 +165,7 @@ def test_webhook_page_created_event(
 
 @patch("app.routes.webhooks.NOTION_WEBHOOK_SECRET", "test_webhook_secret_abc123")
 @patch("app.routes.webhooks.process_notion_webhook_event")
-def test_webhook_page_archived_event(
-    mock_process, client, webhook_secret
-):
+def test_webhook_page_archived_event(mock_process, client, webhook_secret):
     """page.archived event type is accepted."""
     payload = {
         "event_id": "evt_archived_test",
@@ -193,9 +189,7 @@ def test_webhook_page_archived_event(
 
 @patch("app.routes.webhooks.NOTION_WEBHOOK_SECRET", "test_webhook_secret_abc123")
 @patch("app.routes.webhooks.process_notion_webhook_event")
-def test_webhook_without_properties(
-    mock_process, client, webhook_secret
-):
+def test_webhook_without_properties(mock_process, client, webhook_secret):
     """Webhook without properties field is accepted."""
     payload = {
         "event_id": "evt_no_props_test",
@@ -242,7 +236,7 @@ def test_webhook_background_task_queued(
 @patch("app.routes.webhooks.NOTION_WEBHOOK_SECRET", "test_webhook_secret_abc123")
 def test_webhook_malformed_json_returns_400(client, webhook_secret):
     """Malformed JSON payload rejected with 400."""
-    invalid_body = b'{this is not valid json}'
+    invalid_body = b"{this is not valid json}"
     signature = compute_webhook_signature(invalid_body, webhook_secret)
 
     response = client.post(
@@ -257,7 +251,7 @@ def test_webhook_malformed_json_returns_400(client, webhook_secret):
 @patch("app.routes.webhooks.NOTION_WEBHOOK_SECRET", "test_webhook_secret_abc123")
 def test_webhook_empty_body_returns_400(client, webhook_secret):
     """Empty body rejected with 400."""
-    empty_body = b''
+    empty_body = b""
     signature = compute_webhook_signature(empty_body, webhook_secret)
 
     response = client.post(

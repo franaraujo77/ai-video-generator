@@ -201,20 +201,14 @@ class TestE2ECredentialManagement:
         await credential_service.store_notion_token(
             channel.channel_id, "secret_notion123", async_session
         )
-        await credential_service.store_gemini_key(
-            channel.channel_id, "AIzaSyABC123", async_session
-        )
+        await credential_service.store_gemini_key(channel.channel_id, "AIzaSyABC123", async_session)
 
         # Then: Retrieve and decrypt successfully
         youtube_token = await credential_service.get_youtube_token(
             channel.channel_id, async_session
         )
-        notion_token = await credential_service.get_notion_token(
-            channel.channel_id, async_session
-        )
-        gemini_key = await credential_service.get_gemini_key(
-            channel.channel_id, async_session
-        )
+        notion_token = await credential_service.get_notion_token(channel.channel_id, async_session)
+        gemini_key = await credential_service.get_gemini_key(channel.channel_id, async_session)
 
         assert youtube_token == "ya29.a0AfH6SMBxx"
         assert notion_token == "secret_notion123"
@@ -261,9 +255,7 @@ class TestE2EChannelCapacity:
         await config_loader.sync_to_database(config, async_session)
 
         # When: Get channel capacity stats
-        stats = await capacity_service.get_channel_capacity(
-            "e2e_capacity_test", async_session
-        )
+        stats = await capacity_service.get_channel_capacity("e2e_capacity_test", async_session)
 
         # Then: Capacity stats reflect YAML configuration
         assert stats is not None
@@ -299,9 +291,7 @@ class TestE2EStorageStrategy:
         await config_loader.sync_to_database(config, async_session)
 
         # When: Get storage strategy
-        strategy = await storage_service.get_storage_strategy(
-            "e2e_storage_notion", async_session
-        )
+        strategy = await storage_service.get_storage_strategy("e2e_storage_notion", async_session)
 
         # Then: Returns Notion strategy
         assert strategy == "notion"
@@ -339,9 +329,7 @@ class TestE2EStorageStrategy:
         await config_loader.sync_to_database(config, async_session)
 
         # When: Get storage strategy
-        strategy = await storage_service.get_storage_strategy(
-            "e2e_storage_r2", async_session
-        )
+        strategy = await storage_service.get_storage_strategy("e2e_storage_r2", async_session)
 
         # Then: Returns R2 strategy
         assert strategy == "r2"
@@ -478,9 +466,7 @@ class TestE2EMultiChannelIsolation:
 
         # Verify all channels exist independently
         result = await async_session.execute(
-            select(Channel).where(
-                Channel.channel_id.in_(["multi1", "multi2", "multi3"])
-            )
+            select(Channel).where(Channel.channel_id.in_(["multi1", "multi2", "multi3"]))
         )
         channels = result.scalars().all()
         assert len(channels) == 3

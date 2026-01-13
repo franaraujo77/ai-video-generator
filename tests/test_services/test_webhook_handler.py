@@ -169,6 +169,7 @@ async def test_process_webhook_event_queued_status(
 
     # Mock session.begin() async context manager
     from unittest.mock import Mock
+
     mock_transaction = Mock()
     mock_transaction.__aenter__ = AsyncMock(return_value=mock_transaction)
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
@@ -179,6 +180,7 @@ async def test_process_webhook_event_queued_status(
 
     # Mock is_duplicate_webhook to return False (not a duplicate)
     from unittest.mock import Mock as SyncMock
+
     mock_result = SyncMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_session.execute.return_value = mock_result
@@ -242,6 +244,7 @@ async def test_process_webhook_event_ignores_non_queued_status(
 
     # Mock session.begin() async context manager
     from unittest.mock import Mock
+
     mock_transaction = Mock()
     mock_transaction.__aenter__ = AsyncMock(return_value=mock_transaction)
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
@@ -252,6 +255,7 @@ async def test_process_webhook_event_ignores_non_queued_status(
 
     # Mock is_duplicate_webhook to return False (not a duplicate)
     from unittest.mock import Mock as SyncMock
+
     mock_result = SyncMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_session.execute.return_value = mock_result
@@ -300,6 +304,7 @@ async def test_process_webhook_event_duplicate_skipped(mock_session_factory):
 
     # Mock session.begin() async context manager
     from unittest.mock import Mock
+
     mock_transaction = Mock()
     mock_transaction.__aenter__ = AsyncMock(return_value=mock_transaction)
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
@@ -317,6 +322,7 @@ async def test_process_webhook_event_duplicate_skipped(mock_session_factory):
         processed_at=datetime.now(timezone.utc),
     )
     from unittest.mock import Mock as SyncMock
+
     mock_result = SyncMock()
     mock_result.scalar_one_or_none.return_value = existing_event
     mock_session.execute.return_value = mock_result
@@ -352,6 +358,7 @@ async def test_process_webhook_event_notion_api_error(
 
     # Mock session.begin() async context manager
     from unittest.mock import Mock
+
     mock_transaction = Mock()
     mock_transaction.__aenter__ = AsyncMock(return_value=mock_transaction)
     mock_transaction.__aexit__ = AsyncMock(return_value=None)
@@ -362,6 +369,7 @@ async def test_process_webhook_event_notion_api_error(
 
     # Mock is_duplicate_webhook to return False (not a duplicate)
     from unittest.mock import Mock as SyncMock
+
     mock_result = SyncMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_session.execute.return_value = mock_result

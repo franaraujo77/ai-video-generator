@@ -190,9 +190,7 @@ def test_extract_select_empty_property():
 
 def test_extract_date_with_value():
     """Test extracting date property with ISO 8601 datetime."""
-    prop = {
-        "date": {"start": "2026-01-13T10:30:00.000Z", "end": None, "time_zone": None}
-    }
+    prop = {"date": {"start": "2026-01-13T10:30:00.000Z", "end": None, "time_zone": None}}
     result = extract_date(prop)
     assert result is not None
     assert result.year == 2026
@@ -219,9 +217,7 @@ def test_extract_date_empty_property():
 def test_validate_entry_valid():
     """Test validating entry with all required fields."""
     page = create_mock_notion_page(
-        title="Valid Video",
-        channel="poke1",
-        topic="Pokemon Documentary"
+        title="Valid Video", channel="poke1", topic="Pokemon Documentary"
     )
     is_valid, error = validate_notion_entry(page)
     assert is_valid is True
@@ -452,9 +448,7 @@ async def test_push_task_to_notion_api_error_raised():
     mock_response = MagicMock()
     mock_response.status_code = 404
     mock_response.text = "Page not found"
-    mock_client.update_page_properties.side_effect = NotionAPIError(
-        "Page not found", mock_response
-    )
+    mock_client.update_page_properties.side_effect = NotionAPIError("Page not found", mock_response)
 
     # Should raise NotionAPIError
     with pytest.raises(NotionAPIError):
@@ -789,9 +783,7 @@ async def test_sync_notion_queued_respects_rate_limit(
         call_timestamps.append(time.time())
         # Return 10 pages
         return [
-            create_mock_notion_page(
-                page_id=f"page_{i}", status="Queued", channel="test_channel"
-            )
+            create_mock_notion_page(page_id=f"page_{i}", status="Queued", channel="test_channel")
             for i in range(10)
         ]
 

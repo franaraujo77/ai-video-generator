@@ -117,7 +117,7 @@ async def check_existing_active_task(
             notion_page_id=notion_page_id,
             existing_task_id=str(existing.id),
             existing_status=existing.status.value,
-            action="rejected"
+            action="rejected",
         )
 
     return existing
@@ -152,7 +152,7 @@ async def enqueue_task_to_pgqueuer(task: Task) -> None:
         task_id=str(task.id),
         notion_page_id=task.notion_page_id,
         status=task.status.value,
-        priority=task.priority.value
+        priority=task.priority.value,
     )
 
 
@@ -210,7 +210,7 @@ async def enqueue_task(
             notion_page_id=notion_page_id,
             existing_task_id=str(existing.id),
             existing_status=existing.status.value,
-            action="rejected"
+            action="rejected",
         )
         return None  # Duplicate rejected
 
@@ -276,7 +276,7 @@ async def enqueue_task(
             correlation_id=correlation_id,
             notion_page_id=notion_page_id,
             error_detail=str(e),
-            action="rolled_back"
+            action="rolled_back",
         )
         await session.rollback()
         return None
@@ -398,9 +398,7 @@ async def enqueue_task_from_notion_page(
     priority = map_notion_priority_to_internal(notion_priority)
 
     # Look up channel by channel_id string
-    result = await session.execute(
-        select(Channel).where(Channel.channel_id == channel_name)
-    )
+    result = await session.execute(select(Channel).where(Channel.channel_id == channel_name))
     channel = result.scalar_one_or_none()
 
     if not channel:

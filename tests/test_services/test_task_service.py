@@ -52,9 +52,7 @@ def create_mock_notion_page(
         "properties": {
             "Title": {"title": [{"text": {"content": title}, "plain_text": title}]},
             "Channel": {"select": {"name": channel}},
-            "Topic": {
-                "rich_text": [{"text": {"content": topic}, "plain_text": topic}]
-            },
+            "Topic": {"rich_text": [{"text": {"content": topic}, "plain_text": topic}]},
             "Status": {"select": {"name": status}},
             "Priority": {"select": {"name": priority}},
             "Story Direction": {
@@ -123,18 +121,14 @@ async def test_enqueue_task_skips_duplicate_queued(async_session, test_channel):
     assert task2 is None  # Duplicate skipped
 
     # Verify original task unchanged
-    result = await async_session.execute(
-        select(Task).where(Task.id == task1_id)
-    )
+    result = await async_session.execute(select(Task).where(Task.id == task1_id))
     task = result.scalar_one()
     assert task.title == "Test Video"  # Not updated
     assert task.priority == PriorityLevel.NORMAL  # Not updated
 
 
 @pytest.mark.asyncio
-async def test_enqueue_task_skips_duplicate_in_active_states(
-    async_session, test_channel
-):
+async def test_enqueue_task_skips_duplicate_in_active_states(async_session, test_channel):
     """Task in active states (claimed, generating_*) prevents re-queue."""
     active_states = [
         TaskStatus.CLAIMED,
@@ -175,9 +169,7 @@ async def test_enqueue_task_skips_duplicate_in_active_states(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_task_allows_requeue_after_completion(
-    async_session, test_channel
-):
+async def test_enqueue_task_allows_requeue_after_completion(async_session, test_channel):
     """Completed/failed tasks can be re-queued."""
     terminal_states = [
         TaskStatus.PUBLISHED,
@@ -243,9 +235,7 @@ async def test_enqueue_task_with_different_priorities(async_session, test_channe
 
 
 @pytest.mark.asyncio
-async def test_get_tasks_by_status_returns_matching_tasks(
-    async_session, test_channel
-):
+async def test_get_tasks_by_status_returns_matching_tasks(async_session, test_channel):
     """Query returns only tasks matching the specified status."""
     # Create tasks with different statuses
     statuses = [TaskStatus.QUEUED, TaskStatus.CLAIMED, TaskStatus.GENERATING_ASSETS]
@@ -421,9 +411,7 @@ async def test_enqueue_from_notion_page_validates_channel(async_session, test_ch
         "id": "page_123",
         "properties": {
             "Title": {"title": [{"text": {"content": "Test"}, "plain_text": "Test"}]},
-            "Topic": {
-                "rich_text": [{"text": {"content": "Topic"}, "plain_text": "Topic"}]
-            },
+            "Topic": {"rich_text": [{"text": {"content": "Topic"}, "plain_text": "Topic"}]},
             "Channel": {"select": None},  # Missing channel
             "Priority": {"select": {"name": "Normal"}},
             "Status": {"select": {"name": "Queued"}},
@@ -470,9 +458,7 @@ async def test_enqueue_from_notion_page_maps_priority(async_session, test_channe
 
 
 @pytest.mark.asyncio
-async def test_enqueue_from_notion_page_handles_duplicate(
-    async_session, test_channel
-):
+async def test_enqueue_from_notion_page_handles_duplicate(async_session, test_channel):
     """Duplicate Notion page is handled by enqueue_task logic."""
     page = create_mock_notion_page(notion_page_id="page_123")
 
@@ -488,9 +474,7 @@ async def test_enqueue_from_notion_page_handles_duplicate(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_from_notion_page_with_story_direction(
-    async_session, test_channel
-):
+async def test_enqueue_from_notion_page_with_story_direction(async_session, test_channel):
     """Story direction is extracted and stored."""
     page = create_mock_notion_page(
         story_direction="A dramatic journey through the forest",
@@ -503,9 +487,7 @@ async def test_enqueue_from_notion_page_with_story_direction(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_from_notion_page_empty_story_direction(
-    async_session, test_channel
-):
+async def test_enqueue_from_notion_page_empty_story_direction(async_session, test_channel):
     """Empty story direction defaults to empty string."""
     page = create_mock_notion_page(story_direction="")
 
@@ -553,9 +535,7 @@ async def test_check_existing_active_task_finds_pending(async_session, test_chan
 
 
 @pytest.mark.asyncio
-async def test_check_existing_active_task_ignores_terminal(
-    async_session, test_channel
-):
+async def test_check_existing_active_task_ignores_terminal(async_session, test_channel):
     """check_existing_active_task ignores completed/failed tasks."""
     notion_page_id = "9afc2f9c-05b3-486b-b2e7-a4b2e3c5e5e8"
 
@@ -591,6 +571,4 @@ async def test_all_task_statuses_categorized():
 
         # Status must be in exactly one category (not both, not neither)
         assert is_active or is_terminal, f"Status {status.value} not categorized"
-        assert not (
-            is_active and is_terminal
-        ), f"Status {status.value} in both categories"
+        assert not (is_active and is_terminal), f"Status {status.value} in both categories"

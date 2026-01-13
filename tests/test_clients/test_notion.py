@@ -46,9 +46,7 @@ async def test_update_status_success():
         "properties": {"Status": {"status": {"name": "In Progress"}}},
     }
 
-    with patch.object(
-        client.client, "patch", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "patch", new_callable=AsyncMock, return_value=mock_response):
         result = await client.update_task_status("page123", "In Progress")
 
         assert result["id"] == "page123"
@@ -66,9 +64,7 @@ async def test_rate_limiting_enforces_3_req_sec():
     mock_response.status_code = 200
     mock_response.json.return_value = {"id": "page123"}
 
-    with patch.object(
-        client.client, "get", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
         start = time.time()
 
         # Make 10 calls (should take ~3.3 seconds for 10 calls at 3 req/sec)
@@ -95,9 +91,7 @@ async def test_concurrent_calls_queue_properly():
     mock_response.status_code = 200
     mock_response.json.return_value = {"id": "page123"}
 
-    with patch.object(
-        client.client, "get", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
         # Fire 10 concurrent requests
         tasks = [client.get_page(f"page{i}") for i in range(10)]
         results = await asyncio.gather(*tasks)
@@ -145,9 +139,7 @@ async def test_429_response_triggers_retry():
         ),
     ]
 
-    with patch.object(
-        client.client, "patch", new_callable=AsyncMock, side_effect=mock_responses
-    ):
+    with patch.object(client.client, "patch", new_callable=AsyncMock, side_effect=mock_responses):
         result = await client.update_task_status("page123", "In Progress")
 
         assert result["success"] is True
@@ -182,9 +174,7 @@ async def test_500_error_triggers_retry():
         ),
     ]
 
-    with patch.object(
-        client.client, "get", new_callable=AsyncMock, side_effect=mock_responses
-    ):
+    with patch.object(client.client, "get", new_callable=AsyncMock, side_effect=mock_responses):
         result = await client.get_page("page123")
 
         assert result["success"] is True
@@ -234,9 +224,7 @@ async def test_exhausted_retries_raises_notion_rate_limit_error():
         ),
     )
 
-    with patch.object(
-        client.client, "patch", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "patch", new_callable=AsyncMock, return_value=mock_response):
         with pytest.raises(NotionRateLimitError) as exc_info:
             await client.update_task_status("page123", "In Progress")
 
@@ -264,9 +252,7 @@ async def test_get_database_pages_success():
         ]
     }
 
-    with patch.object(
-        client.client, "post", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "post", new_callable=AsyncMock, return_value=mock_response):
         results = await client.get_database_pages("db123")
 
         assert len(results) == 2
@@ -296,9 +282,7 @@ async def test_update_page_properties_success():
         "Priority": {"number": 5},
     }
 
-    with patch.object(
-        client.client, "patch", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "patch", new_callable=AsyncMock, return_value=mock_response):
         result = await client.update_page_properties("page123", properties)
 
         assert result["id"] == "page123"
@@ -320,9 +304,7 @@ async def test_get_page_success():
         "properties": {"Title": {"title": [{"text": {"content": "Test Page"}}]}},
     }
 
-    with patch.object(
-        client.client, "get", new_callable=AsyncMock, return_value=mock_response
-    ):
+    with patch.object(client.client, "get", new_callable=AsyncMock, return_value=mock_response):
         result = await client.get_page("page123")
 
         assert result["id"] == "page123"
@@ -431,9 +413,7 @@ async def test_retry_after_header_handling():
         ),
     ]
 
-    with patch.object(
-        client.client, "get", new_callable=AsyncMock, side_effect=mock_responses
-    ):
+    with patch.object(client.client, "get", new_callable=AsyncMock, side_effect=mock_responses):
         result = await client.get_page("page123")
 
         assert result["success"] is True

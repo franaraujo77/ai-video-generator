@@ -23,7 +23,9 @@ from app.services.channel_capacity_service import ChannelCapacityService
 from app.services.channel_config_loader import ChannelConfigLoader
 
 
-def create_test_task(channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs) -> Task:
+def create_test_task(
+    channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs
+) -> Task:
     """Helper to create a Task with all required fields for testing."""
     defaults = {
         "notion_page_id": uuid.uuid4().hex,
@@ -106,9 +108,7 @@ class TestDatabasePerformance:
         assert duration < 5.0, f"Bulk insert took {duration:.2f}s (target: <5s)"
 
         # Verify all tasks persisted
-        result = await async_session.execute(
-            select(Task).where(Task.channel_id == perf_channel.id)
-        )
+        result = await async_session.execute(select(Task).where(Task.channel_id == perf_channel.id))
         inserted_tasks = result.scalars().all()
         assert len(inserted_tasks) == task_count
 
@@ -156,9 +156,7 @@ class TestDatabasePerformance:
 
         # When: Query channel capacity
         start_time = time.time()
-        stats = await capacity_service.get_channel_capacity(
-            "perf_test_channel", async_session
-        )
+        stats = await capacity_service.get_channel_capacity("perf_test_channel", async_session)
         end_time = time.time()
 
         query_duration = (end_time - start_time) * 1000  # Convert to ms
@@ -200,9 +198,7 @@ class TestDatabasePerformance:
         await async_session.commit()
 
         # Reload tasks with IDs
-        result = await async_session.execute(
-            select(Task).where(Task.channel_id == perf_channel.id)
-        )
+        result = await async_session.execute(select(Task).where(Task.channel_id == perf_channel.id))
         tasks = result.scalars().all()
 
         # When: Update all tasks to new status
@@ -273,9 +269,7 @@ class TestConcurrentOperations:
         async def query_channel_capacity(channel_id: str):
             return await capacity_service.get_channel_capacity(channel_id, async_session)
 
-        tasks = [
-            query_channel_capacity(f"concurrent_ch{i:02d}") for i in range(channel_count)
-        ]
+        tasks = [query_channel_capacity(f"concurrent_ch{i:02d}") for i in range(channel_count)]
         results = await asyncio.gather(*tasks)
 
         end_time = time.time()
@@ -331,9 +325,7 @@ class TestConcurrentOperations:
                 tasks.append(task)
             async_session.add_all(tasks)
 
-        await asyncio.gather(*[
-            create_tasks_for_channel(ch, i) for i, ch in enumerate(channels)
-        ])
+        await asyncio.gather(*[create_tasks_for_channel(ch, i) for i, ch in enumerate(channels)])
         await async_session.commit()
 
         end_time = time.time()
@@ -344,9 +336,7 @@ class TestConcurrentOperations:
 
         # Verify task isolation per channel
         for i, channel in enumerate(channels):
-            result = await async_session.execute(
-                select(Task).where(Task.channel_id == channel.id)
-            )
+            result = await async_session.execute(select(Task).where(Task.channel_id == channel.id))
             channel_tasks = result.scalars().all()
             assert len(channel_tasks) == tasks_per_channel
 
@@ -462,9 +452,7 @@ class TestMultiChannelScalability:
 
         # When: Get channels with capacity
         start_time = time.time()
-        channels_with_capacity = await capacity_service.get_channels_with_capacity(
-            async_session
-        )
+        channels_with_capacity = await capacity_service.get_channels_with_capacity(async_session)
         end_time = time.time()
 
         duration = (end_time - start_time) * 1000  # ms
@@ -576,9 +564,7 @@ class TestMemoryAndResourceUsage:
         await async_session.commit()
 
         # When: Query and iterate through large result set
-        result = await async_session.execute(
-            select(Task).where(Task.channel_id == perf_channel.id)
-        )
+        result = await async_session.execute(select(Task).where(Task.channel_id == perf_channel.id))
         loaded_tasks = result.scalars().all()
 
         # Then: All tasks loaded successfully

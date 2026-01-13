@@ -42,9 +42,7 @@ def test_notion_webhook_payload_with_properties():
         "page_id": "9afc2f9c05b3486bb2e7a4b2e3c5e5e8",
         "workspace_id": "ws_xyz789",
         "timestamp": "2026-01-13T12:34:56.789Z",
-        "properties": {
-            "Status": {"type": "select", "select": {"name": "Queued"}}
-        },
+        "properties": {"Status": {"type": "select", "select": {"name": "Queued"}}},
     }
 
     payload = NotionWebhookPayload(**data)

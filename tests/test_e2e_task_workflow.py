@@ -20,7 +20,9 @@ from app.services.channel_capacity_service import ChannelCapacityService
 from app.services.channel_config_loader import ChannelConfigLoader
 
 
-def create_test_task(channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs) -> Task:
+def create_test_task(
+    channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs
+) -> Task:
     """Helper to create a Task with all required fields for testing."""
     defaults = {
         "notion_page_id": uuid.uuid4().hex,
@@ -250,9 +252,7 @@ class TestE2ETaskCapacityIntegration:
         await async_session.commit()
 
         # When: Get capacity stats
-        stats = await capacity_service.get_channel_capacity(
-            "e2e_task_channel", async_session
-        )
+        stats = await capacity_service.get_channel_capacity("e2e_task_channel", async_session)
 
         # Then: Pending count accurate, has capacity
         assert stats is not None
@@ -291,9 +291,7 @@ class TestE2ETaskCapacityIntegration:
         await async_session.commit()
 
         # When: Get capacity stats
-        stats = await capacity_service.get_channel_capacity(
-            "e2e_task_channel", async_session
-        )
+        stats = await capacity_service.get_channel_capacity("e2e_task_channel", async_session)
 
         # Then: Has capacity (2 < 3)
         assert stats.in_progress_count == 2
@@ -310,9 +308,7 @@ class TestE2ETaskCapacityIntegration:
         await async_session.commit()
 
         # When: Get updated stats
-        stats = await capacity_service.get_channel_capacity(
-            "e2e_task_channel", async_session
-        )
+        stats = await capacity_service.get_channel_capacity("e2e_task_channel", async_session)
 
         # Then: At capacity (3 >= 3)
         assert stats.in_progress_count == 3
@@ -351,9 +347,7 @@ class TestE2ETaskCapacityIntegration:
         await async_session.commit()
 
         # When: Get capacity stats
-        stats = await capacity_service.get_channel_capacity(
-            "e2e_task_channel", async_session
-        )
+        stats = await capacity_service.get_channel_capacity("e2e_task_channel", async_session)
 
         # Then: Only active tasks counted (2 in-progress)
         assert stats.in_progress_count == 2
@@ -424,12 +418,8 @@ class TestE2EMultiChannelTaskIsolation:
         assert stats2.has_capacity is True  # Under capacity (3 < 5)
 
         # Verify task counts per channel
-        result1 = await async_session.execute(
-            select(Task).where(Task.channel_id == channel1.id)
-        )
-        result2 = await async_session.execute(
-            select(Task).where(Task.channel_id == channel2.id)
-        )
+        result1 = await async_session.execute(select(Task).where(Task.channel_id == channel1.id))
+        result2 = await async_session.execute(select(Task).where(Task.channel_id == channel2.id))
 
         assert len(result1.scalars().all()) == 2
         assert len(result2.scalars().all()) == 3
@@ -475,9 +465,7 @@ class TestE2ETaskPriorityManagement:
 
         # When: Reload from database
         result = await async_session.execute(
-            select(Task)
-            .where(Task.channel_id == test_channel.id)
-            .order_by(Task.priority)
+            select(Task).where(Task.channel_id == test_channel.id).order_by(Task.priority)
         )
         tasks = result.scalars().all()
 
