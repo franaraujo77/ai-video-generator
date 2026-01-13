@@ -24,7 +24,8 @@
       "Bash(python -m pytest:*)",
       "Bash(python3:*)",
       "Bash(uv run python3:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git checkout:*)"
     ],
     "deny": [],
     "ask": []
