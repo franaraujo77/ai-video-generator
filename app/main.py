@@ -44,20 +44,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         notion_client = NotionClient(auth_token=notion_api_token)
 
         # Start sync loop as background task
-        sync_task = asyncio.create_task(
-            sync_database_to_notion_loop(notion_client)
-        )
+        sync_task = asyncio.create_task(sync_database_to_notion_loop(notion_client))
     else:
         log.warning(
-            "notion_sync_disabled",
-            message="NOTION_API_TOKEN not set, Notion sync will not run"
+            "notion_sync_disabled", message="NOTION_API_TOKEN not set, Notion sync will not run"
         )
 
     # Story 2.6: PgQueuer infrastructure ready for Epic 4
     log.info(
         "task_queue_ready",
         message="Task enqueueing with duplicate detection active. "
-                "PgQueuer worker integration in Epic 4."
+        "PgQueuer worker integration in Epic 4.",
     )
 
     yield  # Application runs here

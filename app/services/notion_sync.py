@@ -299,9 +299,7 @@ async def sync_notion_page_to_task(
     priority_enum = map_notion_priority_to_internal(notion_priority)
 
     # Query for existing task by notion_page_id
-    result = await session.execute(
-        select(Task).where(Task.notion_page_id == notion_page_id)
-    )
+    result = await session.execute(select(Task).where(Task.notion_page_id == notion_page_id))
     existing_task = result.scalar_one_or_none()
 
     if existing_task:
@@ -335,9 +333,7 @@ async def sync_notion_page_to_task(
         )
 
 
-async def push_task_to_notion(
-    task: Task | TaskSyncData, notion_client: NotionClient
-) -> None:
+async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionClient) -> None:
     """Push Task status/priority updates back to Notion.
 
     This function implements the Database → Notion sync direction.
@@ -447,9 +443,7 @@ async def sync_notion_queued_to_database(
 
         # Filter for Queued status
         queued_pages = [
-            p
-            for p in pages
-            if extract_select(p.get("properties", {}).get("Status")) == "Queued"
+            p for p in pages if extract_select(p.get("properties", {}).get("Status")) == "Queued"
         ]
 
         if not queued_pages:
@@ -535,9 +529,7 @@ async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
         raise RuntimeError("Database not configured")
     async with async_session_factory() as session:
         # Query all tasks with notion_page_id set
-        result = await session.execute(
-            select(Task).where(Task.notion_page_id.isnot(None))
-        )
+        result = await session.execute(select(Task).where(Task.notion_page_id.isnot(None)))
         tasks = result.scalars().all()
 
         # Extract minimal data needed for sync using dataclass

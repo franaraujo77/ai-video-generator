@@ -149,15 +149,14 @@ async def process_notion_webhook_event(payload: NotionWebhookPayload) -> None:
         return
 
     try:
-        async with async_session_factory() as session:
-            async with session.begin():
-                is_duplicate = await is_duplicate_webhook(
-                    event_id=payload.event_id,
-                    event_type=payload.event_type,
-                    page_id=payload.page_id,
-                    payload_dict=payload.model_dump(),
-                    session=session,
-                )
+        async with async_session_factory() as session, session.begin():
+            is_duplicate = await is_duplicate_webhook(
+                event_id=payload.event_id,
+                event_type=payload.event_type,
+                page_id=payload.page_id,
+                payload_dict=payload.model_dump(),
+                session=session,
+            )
     except IntegrityError:
         # Duplicate event_id - race condition between concurrent webhooks
         log.info(
@@ -219,9 +218,8 @@ async def process_notion_webhook_event(payload: NotionWebhookPayload) -> None:
         )
         return
 
-    async with async_session_factory() as session:
-        async with session.begin():
-            task = await enqueue_task_from_notion_page(page, session)
+    async with async_session_factory() as session, session.begin():
+        task = await enqueue_task_from_notion_page(page, session)
 
     if task:
         log.info(

@@ -14,7 +14,9 @@ from app.models import Channel, Task, TaskStatus
 from app.services.channel_capacity_service import ChannelCapacityService, ChannelQueueStats
 
 
-def create_test_task(channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs) -> Task:
+def create_test_task(
+    channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs
+) -> Task:
     """Helper to create a Task with all required fields for testing."""
     defaults = {
         "notion_page_id": uuid.uuid4().hex,  # Generate unique 32-char hex

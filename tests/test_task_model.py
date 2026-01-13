@@ -15,9 +15,12 @@ from sqlalchemy.orm import selectinload
 from app.models import Channel, Task, TaskStatus, IN_PROGRESS_STATUSES, PENDING_STATUSES
 
 
-def create_test_task(channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs) -> Task:
+def create_test_task(
+    channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs
+) -> Task:
     """Helper to create a Task with all required fields for testing."""
     import uuid
+
     defaults = {
         "notion_page_id": uuid.uuid4().hex,  # Generate unique 32-char hex
         "title": "Test Video",

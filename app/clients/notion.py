@@ -36,9 +36,7 @@ class NotionRateLimitError(Exception):
         self.message = message
         self.retry_count = retry_count
         self.last_error = last_error
-        super().__init__(
-            f"{message} (retries: {retry_count}, last error: {last_error})"
-        )
+        super().__init__(f"{message} (retries: {retry_count}, last error: {last_error})")
 
 
 class NotionClient:
@@ -94,9 +92,7 @@ class NotionClient:
         # Retry network errors
         return isinstance(exception, (httpx.TimeoutException, httpx.ConnectError))
 
-    async def update_task_status(
-        self, page_id: str, status: str
-    ) -> dict[str, Any]:
+    async def update_task_status(self, page_id: str, status: str) -> dict[str, Any]:
         """Update task status in Notion database (rate limited, auto-retry).
 
         Args:
@@ -120,11 +116,7 @@ class NotionClient:
                     response = await self.client.patch(
                         f"{self.base_url}/pages/{page_id}",
                         headers=self._get_headers(),
-                        json={
-                            "properties": {
-                                "Status": {"status": {"name": status}}
-                            }
-                        },
+                        json={"properties": {"Status": {"status": {"name": status}}}},
                     )
 
                     # Check for Retry-After header on 429
@@ -147,12 +139,12 @@ class NotionClient:
                     raise
                 # Wait with exponential backoff before retry
                 if attempt < 2:  # Don't wait after last attempt
-                    wait_time = 2 ** attempt  # 2s, 4s
+                    wait_time = 2**attempt  # 2s, 4s
                     await asyncio.sleep(wait_time)
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
                 if attempt < 2:  # Don't wait after last attempt
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
 
         # All retries exhausted
@@ -207,12 +199,12 @@ class NotionClient:
                 if not self._is_retriable_error(e):
                     raise
                 if attempt < 2:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
                 if attempt < 2:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
 
         # All retries exhausted
@@ -270,12 +262,12 @@ class NotionClient:
                 if not self._is_retriable_error(e):
                     raise
                 if attempt < 2:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
                 if attempt < 2:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
 
         # All retries exhausted
@@ -329,12 +321,12 @@ class NotionClient:
                 if not self._is_retriable_error(e):
                     raise
                 if attempt < 2:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 last_error = e
                 if attempt < 2:
-                    wait_time = 2 ** attempt
+                    wait_time = 2**attempt
                     await asyncio.sleep(wait_time)
 
         # All retries exhausted

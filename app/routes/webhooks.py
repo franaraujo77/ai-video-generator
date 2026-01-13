@@ -54,9 +54,7 @@ async def handle_notion_webhook(
     body = await request.body()
 
     if not verify_notion_webhook_signature(body, signature, NOTION_WEBHOOK_SECRET):
-        log.warning(
-            "webhook_unauthorized", signature=signature[:8] + "..." if signature else None
-        )
+        log.warning("webhook_unauthorized", signature=signature[:8] + "..." if signature else None)
         raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     # Step 2: Parse and validate payload
