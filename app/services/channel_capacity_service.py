@@ -88,7 +88,7 @@ class ChannelCapacityService:
                     "in_progress_count"
                 ),
             )
-            .outerjoin(Task, Channel.channel_id == Task.channel_id)
+            .outerjoin(Task, Channel.id == Task.channel_id)
             .where(Channel.is_active == True)  # noqa: E712 - SQLAlchemy needs ==
             .group_by(Channel.channel_id, Channel.channel_name, Channel.max_concurrent)
         )
@@ -140,7 +140,7 @@ class ChannelCapacityService:
                     "in_progress_count"
                 ),
             )
-            .outerjoin(Task, Channel.channel_id == Task.channel_id)
+            .outerjoin(Task, Channel.id == Task.channel_id)
             .where(Channel.channel_id == channel_id)
             .where(Channel.is_active == True)  # noqa: E712
             .group_by(Channel.channel_id, Channel.channel_name, Channel.max_concurrent)
