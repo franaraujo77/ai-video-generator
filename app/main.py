@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
+from app.routes import webhooks
 from app.services.notion_sync import sync_database_to_notion_loop
 
 log = structlog.get_logger()
@@ -75,6 +76,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Register webhook routes (Story 2.5)
+app.include_router(webhooks.router)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)

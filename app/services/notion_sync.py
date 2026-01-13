@@ -545,7 +545,7 @@ async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
         task_data = [
             TaskSyncData(
                 id=task.id,
-                notion_page_id=task.notion_page_id,  # type: ignore[arg-type]
+                notion_page_id=task.notion_page_id,
                 status=task.status,
                 priority=task.priority,
                 title=task.title,

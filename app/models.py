@@ -20,6 +20,7 @@ Example:
 import enum
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -28,6 +29,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     LargeBinary,
     String,
     Text,
@@ -473,4 +475,75 @@ class Task(Base):
         return (
             f"<Task(id={self.id!s:.8}, title={self.title!r}, "
             f"status={self.status.value!r}, priority={self.priority.value!r})>"
+        )
+
+
+class NotionWebhookEvent(Base):
+    """Notion webhook event tracking for idempotency.
+
+    Notion may send duplicate webhooks for the same event (network retries, etc.).
+    This table tracks processed webhook events to prevent duplicate processing.
+
+    Each webhook event has a unique event_id that serves as the deduplication key.
+    The payload is stored for debugging and audit purposes.
+
+    Attributes:
+        id: Internal UUID primary key.
+        event_id: Notion webhook event ID (unique constraint for idempotency).
+        event_type: Type of webhook event (page.created, page.updated, page.archived).
+        page_id: Notion page UUID that the event is about (32 chars, no dashes).
+        processed_at: Timestamp when event was first processed (UTC).
+        payload: Full webhook payload as JSON (for debugging and audit).
+
+    Indexes:
+        - Unique constraint on event_id for idempotency checks
+        - Index on page_id for looking up events by page
+
+    Note:
+        This table grows monotonically. Consider implementing cleanup for
+        events older than 30 days in production.
+    """
+
+    __tablename__ = "notion_webhook_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    event_id: Mapped[str] = mapped_column(
+        String(100),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    event_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    page_id: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True,
+    )
+
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<NotionWebhookEvent(event_id={self.event_id!r}, "
+            f"event_type={self.event_type!r}, page_id={self.page_id!r})>"
         )
