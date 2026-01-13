@@ -16,7 +16,11 @@
       "Bash(uv sync:*)",
       "Bash(test:*)",
       "Bash(uv add:*)",
-      "Bash(uv pip:*)"
+      "Bash(uv pip:*)",
+      "Bash(if [ -f .gitignore ])",
+      "Bash(then grep -q \"test.db\" .gitignore)",
+      "Bash(else echo \"test.db\")",
+      "Bash(fi)"
     ],
     "deny": [],
     "ask": []
