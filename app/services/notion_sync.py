@@ -15,14 +15,16 @@ Architecture Compliance:
 
 import asyncio
 import uuid
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, AsyncIterator
+from typing import Any
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.notion import NotionAPIError, NotionClient
+from app.config import get_notion_database_ids, get_notion_sync_interval
 from app.constants import (
     INTERNAL_TO_NOTION_STATUS,
     NOTION_PRIORITY_OPTIONS,
@@ -33,8 +35,28 @@ from app.models import PriorityLevel, Task, TaskStatus
 
 log = structlog.get_logger()
 
-# Sync configuration
-SYNC_INTERVAL_SECONDS = 60  # Poll every 60 seconds for task updates
+
+@dataclass
+class TaskSyncData:
+    """Minimal task data for syncing to Notion.
+
+    This dataclass is used to extract task data from the database,
+    close the connection, then sync to Notion API without holding
+    the database connection during API calls.
+
+    Attributes:
+        id: Task UUID
+        notion_page_id: Notion page UUID
+        status: Current task status
+        priority: Task priority level
+        title: Video title (for logging)
+    """
+
+    id: uuid.UUID
+    notion_page_id: str
+    status: TaskStatus
+    priority: PriorityLevel
+    title: str
 
 
 # Property extraction helpers
@@ -223,11 +245,16 @@ async def sync_notion_page_to_task(
         session: Active async database session
 
     Returns:
-        Created or updated Task instance
+        Created or updated Task instance (for existing tasks only).
 
     Raises:
         ValueError: If required fields are missing or invalid
         IntegrityError: If notion_page_id already exists (idempotent)
+        NotImplementedError: If creating new task (channel lookup not implemented)
+
+    Note:
+        Story 2.3 focuses on property mapping and validation.
+        Full task creation requires channel lookup implementation (future story).
     """
     correlation_id = str(uuid.uuid4())
     notion_page_id = notion_page["id"]
@@ -308,7 +335,9 @@ async def sync_notion_page_to_task(
         )
 
 
-async def push_task_to_notion(task: Task, notion_client: NotionClient) -> None:
+async def push_task_to_notion(
+    task: Task | TaskSyncData, notion_client: NotionClient
+) -> None:
     """Push Task status/priority updates back to Notion.
 
     This function implements the Database → Notion sync direction.
@@ -316,11 +345,11 @@ async def push_task_to_notion(task: Task, notion_client: NotionClient) -> None:
 
     Transaction Pattern:
     - This function does NOT hold database session
-    - Caller should extract task.notion_page_id before calling
+    - Caller should extract task data before closing DB connection
     - Only makes Notion API call (no DB operations)
 
     Args:
-        task: Task instance to sync to Notion
+        task: Task instance or TaskSyncData to sync to Notion
         notion_client: NotionClient with rate limiting
 
     Raises:
@@ -389,11 +418,166 @@ async def push_task_to_notion(task: Task, notion_client: NotionClient) -> None:
         raise
 
 
+async def sync_notion_queued_to_database(
+    notion_client: NotionClient,
+    notion_database_id: str,
+) -> None:
+    """Poll Notion database for videos with Status = 'Queued' and enqueue tasks.
+
+    This implements the Notion → Database sync direction for batch queuing.
+    It queries all pages from a Notion database, filters for "Queued" status,
+    and enqueues each as a task.
+
+    Architecture:
+    - Short transactions per page (query → close → API call → reopen)
+    - Graceful error handling (skip invalid pages, continue processing)
+    - Duplicate detection via enqueue_task_from_notion_page
+
+    Args:
+        notion_client: NotionClient with rate limiting
+        notion_database_id: Notion database ID to poll
+    """
+    from app.services.task_service import enqueue_task_from_notion_page
+
+    correlation_id = str(uuid.uuid4())
+
+    try:
+        # Get all pages from database (rate limited automatically)
+        pages = await notion_client.get_database_pages(notion_database_id)
+
+        # Filter for Queued status
+        queued_pages = [
+            p
+            for p in pages
+            if extract_select(p.get("properties", {}).get("Status")) == "Queued"
+        ]
+
+        if not queued_pages:
+            return
+
+        log.info(
+            "batch_enqueue_started",
+            correlation_id=correlation_id,
+            database_id=notion_database_id,
+            queued_count=len(queued_pages),
+        )
+
+        # Process each queued page
+        enqueued_count = 0
+        skipped_count = 0
+
+        for page in queued_pages:
+            try:
+                # Short transaction per page
+                if async_session_factory is None:
+                    raise RuntimeError("Database not configured")
+                async with async_session_factory() as session, session.begin():
+                    task = await enqueue_task_from_notion_page(page, session)
+
+                    if task:
+                        enqueued_count += 1
+                        log.info(
+                            "task_enqueued_from_notion",
+                            correlation_id=correlation_id,
+                            notion_page_id=page["id"],
+                            task_id=str(task.id),
+                            title=task.title,
+                        )
+                    else:
+                        skipped_count += 1
+
+            except (ValueError, KeyError, AttributeError) as e:
+                # Log validation/data errors but continue processing
+                log.warning(
+                    "notion_page_enqueue_failed",
+                    correlation_id=correlation_id,
+                    notion_page_id=page.get("id"),
+                    error=str(e),
+                    exc_info=True,
+                )
+                skipped_count += 1
+
+        log.info(
+            "batch_enqueue_completed",
+            correlation_id=correlation_id,
+            database_id=notion_database_id,
+            enqueued=enqueued_count,
+            skipped=skipped_count,
+            total=len(queued_pages),
+        )
+
+    except NotionAPIError as e:
+        log.error(
+            "notion_database_query_failed",
+            correlation_id=correlation_id,
+            database_id=notion_database_id,
+            error=str(e),
+            status_code=e.status_code,
+        )
+
+
+async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
+    """Push task status updates back to Notion (Database → Notion direction).
+
+    This implements the existing Database → Notion sync direction.
+    Queries all tasks with notion_page_id and pushes status/priority updates.
+
+    Architecture:
+    - Short transaction to query tasks
+    - No DB connection held during Notion API calls
+    - Graceful error handling per task
+
+    Args:
+        notion_client: NotionClient with rate limiting
+    """
+    # Step 1: Query tasks to sync (short transaction)
+    if async_session_factory is None:
+        raise RuntimeError("Database not configured")
+    async with async_session_factory() as session:
+        # Query all tasks with notion_page_id set
+        result = await session.execute(
+            select(Task).where(Task.notion_page_id.isnot(None))
+        )
+        tasks = result.scalars().all()
+
+        # Extract minimal data needed for sync using dataclass
+        # This allows us to close DB connection before API calls
+        task_data = [
+            TaskSyncData(
+                id=task.id,
+                notion_page_id=task.notion_page_id,  # type: ignore[arg-type]
+                status=task.status,
+                priority=task.priority,
+                title=task.title,
+            )
+            for task in tasks
+        ]
+
+    # Step 2: Sync to Notion (NO DB connection held)
+    for task_sync in task_data:
+        try:
+            await push_task_to_notion(task_sync, notion_client)
+
+        except (NotionAPIError, ValueError, KeyError, AttributeError) as e:
+            # Log error but continue with other tasks
+            # Only catch expected errors (API, data validation, missing attributes)
+            log.error(
+                "task_sync_failed",
+                correlation_id=str(uuid.uuid4()),
+                task_id=str(task_sync.id),
+                notion_page_id=task_sync.notion_page_id,
+                error=str(e),
+                exc_info=True,
+            )
+
+
 async def sync_database_to_notion_loop(notion_client: NotionClient) -> None:
-    """Background task: Poll every 60s and push Task updates to Notion.
+    """Background task: Bidirectional sync between Notion and PostgreSQL.
 
     This is the main sync loop that runs continuously as a background task.
-    It queries all tasks with notion_page_id and pushes status updates.
+    It implements two sync directions:
+    1. Notion → Database: Poll Notion for "Queued" status, enqueue tasks
+    2. Database → Notion: Push task status updates back to Notion
 
     Architecture:
     - Runs as FastAPI lifespan background task
@@ -408,65 +592,50 @@ async def sync_database_to_notion_loop(notion_client: NotionClient) -> None:
         This function runs indefinitely until cancelled by FastAPI shutdown.
         Errors are logged but do not stop the loop.
     """
-    log.info("notion_sync_loop_started", interval_seconds=SYNC_INTERVAL_SECONDS)
+    # Load configuration from environment
+    sync_interval = get_notion_sync_interval()
+    notion_database_ids = get_notion_database_ids()
+
+    log.info(
+        "notion_sync_loop_started",
+        interval_seconds=sync_interval,
+        database_count=len(notion_database_ids),
+        database_ids=notion_database_ids if notion_database_ids else None,
+    )
+
+    if not notion_database_ids:
+        log.warning(
+            "notion_sync_no_databases_configured",
+            message="NOTION_DATABASE_IDS not set - sync loop will run but skip Notion → DB sync",
+        )
 
     while True:
         try:
-            # Step 1: Query tasks to sync (short transaction)
-            async with async_session_factory() as session:
-                # Query all tasks with notion_page_id set
-                result = await session.execute(
-                    select(Task).where(Task.notion_page_id.isnot(None))
-                )
-                tasks = result.scalars().all()
+            # Direction 1: Notion → Database (detect "Queued" status changes)
+            for database_id in notion_database_ids:
+                await sync_notion_queued_to_database(notion_client, database_id)
 
-                # Extract minimal data needed for sync
-                # This allows us to close DB connection before API calls
-                task_data = [
-                    {
-                        "task_id": task.id,
-                        "notion_page_id": task.notion_page_id,
-                        "status": task.status,
-                        "priority": task.priority,
-                        "title": task.title,
-                    }
-                    for task in tasks
-                ]
+            # Direction 2: Database → Notion (push task status updates)
+            await sync_database_status_to_notion(notion_client)
 
-            # Step 2: Sync to Notion (NO DB connection held)
-            for data in task_data:
-                try:
-                    # Reconstruct minimal Task object for push_task_to_notion
-                    # This is safe because push_task_to_notion only reads fields
-                    # Type ignore is needed because we're manually setting attributes
-                    task_obj = Task()  # Create empty task
-                    task_obj.id = data["task_id"]  # type: ignore[assignment]
-                    task_obj.notion_page_id = data["notion_page_id"]  # type: ignore[assignment]
-                    task_obj.status = data["status"]  # type: ignore[assignment]
-                    task_obj.priority = data["priority"]  # type: ignore[assignment]
-                    task_obj.title = data["title"]  # type: ignore[assignment]
-
-                    await push_task_to_notion(task_obj, notion_client)
-
-                except (NotionAPIError, ValueError, KeyError, AttributeError) as e:
-                    # Log error but continue with other tasks
-                    # Only catch expected errors (API, data validation, missing attributes)
-                    log.error(
-                        "task_sync_failed",
-                        correlation_id=str(uuid.uuid4()),
-                        task_id=str(data["task_id"]),
-                        notion_page_id=data["notion_page_id"],
-                        error=str(e),
-                        exc_info=True,
-                    )
-
-            # Step 3: Wait before next sync cycle
-            await asyncio.sleep(SYNC_INTERVAL_SECONDS)
+            # Wait before next sync cycle
+            await asyncio.sleep(sync_interval)
 
         except asyncio.CancelledError:
             # Graceful shutdown
             log.info("notion_sync_loop_cancelled")
             break
+        except NotionAPIError as e:
+            # Log Notion API errors but keep loop running
+            log.error(
+                "notion_sync_api_error",
+                correlation_id=str(uuid.uuid4()),
+                error=str(e),
+                status_code=e.status_code,
+                exc_info=True,
+            )
+            # Wait before retry to avoid tight error loop
+            await asyncio.sleep(10)
         except (RuntimeError, OSError, TimeoutError) as e:
             # Log database/network errors but keep loop running
             # Does NOT catch system exceptions (KeyboardInterrupt, SystemExit)

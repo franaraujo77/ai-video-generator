@@ -128,3 +128,50 @@ def get_notion_api_token() -> str | None:
         initialization if token is None.
     """
     return os.getenv("NOTION_API_TOKEN")
+
+
+def get_notion_database_ids() -> list[str]:
+    """Get Notion database IDs from environment.
+
+    Environment Variable:
+        NOTION_DATABASE_IDS: Comma-separated list of Notion database IDs to sync
+        Example: "abc123,def456,ghi789"
+
+    Returns:
+        List of database ID strings, empty list if not configured.
+
+    Note:
+        Returns empty list when NOTION_DATABASE_IDS is not set, allowing the app
+        to run without active Notion sync. The sync service will skip polling
+        if the list is empty.
+    """
+    ids_str = os.getenv("NOTION_DATABASE_IDS", "")
+    if not ids_str:
+        return []
+    return [db_id.strip() for db_id in ids_str.split(",") if db_id.strip()]
+
+
+def get_notion_sync_interval() -> int:
+    """Get Notion sync interval in seconds from environment.
+
+    Environment Variable:
+        NOTION_SYNC_INTERVAL_SECONDS: Polling interval (default: 60)
+
+    Returns:
+        Sync interval in seconds (minimum 10, maximum 600).
+
+    Note:
+        Clamps value between 10 seconds (minimum practical polling)
+        and 600 seconds (10 minutes maximum delay).
+    """
+    try:
+        interval = int(os.getenv("NOTION_SYNC_INTERVAL_SECONDS", "60"))
+        # Clamp between 10s and 600s
+        return max(10, min(600, interval))
+    except ValueError:
+        log.warning(
+            "invalid_sync_interval",
+            value=os.getenv("NOTION_SYNC_INTERVAL_SECONDS"),
+            using_default=60,
+        )
+        return 60

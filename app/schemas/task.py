@@ -45,9 +45,9 @@ class TaskCreate(BaseModel):
     notion_page_id: str = Field(
         ...,
         min_length=32,
-        max_length=32,
-        description="Notion page UUID without dashes (32 chars). Unique constraint.",
-        examples=["9afc2f9c05b3486bb2e7a4b2e3c5e5e8"],
+        max_length=36,
+        description="Notion page UUID (32-36 chars, with or without dashes). Unique constraint.",
+        examples=["9afc2f9c-05b3-486b-b2e7-a4b2e3c5e5e8", "9afc2f9c05b3486bb2e7a4b2e3c5e5e8"],
     )
     title: str = Field(
         ...,
@@ -86,11 +86,11 @@ class TaskUpdate(BaseModel):
         - Changing priority (e.g., low → high for urgent content)
 
     Note:
-        Use exclude_none=True to omit null values from JSON serialization.
-        This prevents accidentally clearing fields with null values.
+        Only fields with non-None values will be updated.
+        Omitted or None fields are not modified in the database.
     """
 
-    model_config = ConfigDict(from_attributes=True, exclude_none=True)
+    model_config = ConfigDict(from_attributes=True)
 
     status: TaskStatus | None = Field(
         default=None,
@@ -136,7 +136,7 @@ class TaskResponse(BaseModel):
     )
     notion_page_id: str = Field(
         ...,
-        description="Notion page UUID (32 chars, unique)",
+        description="Notion page UUID (32-36 chars, with or without dashes, unique)",
     )
     title: str = Field(
         ...,
