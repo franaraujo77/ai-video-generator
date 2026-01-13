@@ -7,10 +7,14 @@ from sqlalchemy import select
 
 from app.models import Channel, PriorityLevel, Task, TaskStatus
 from app.services.task_service import (
+    ACTIVE_TASK_STATUSES,
+    TERMINAL_TASK_STATUSES,
+    check_existing_active_task,
     enqueue_task,
     enqueue_task_from_notion_page,
     get_pending_tasks,
     get_tasks_by_status,
+    priority_to_int,
 )
 
 
@@ -509,3 +513,84 @@ async def test_enqueue_from_notion_page_empty_story_direction(
     await async_session.commit()
 
     assert task.story_direction == ""
+
+
+# Story 2.6 Tests: PgQueuer Integration and Enhanced Duplicate Detection
+
+
+@pytest.mark.asyncio
+async def test_priority_to_int_mapping():
+    """Test priority enum to integer conversion for PgQueuer."""
+    assert priority_to_int(PriorityLevel.HIGH) == 10
+    assert priority_to_int(PriorityLevel.NORMAL) == 5
+    assert priority_to_int(PriorityLevel.LOW) == 1
+
+
+@pytest.mark.asyncio
+async def test_check_existing_active_task_finds_pending(async_session, test_channel):
+    """check_existing_active_task finds pending task."""
+    notion_page_id = "9afc2f9c-05b3-486b-b2e7-a4b2e3c5e5e8"
+
+    # Create pending task
+    task = Task(
+        notion_page_id=notion_page_id,
+        channel_id=test_channel.id,
+        title="Active Task",
+        topic="Test Topic",
+        story_direction="",
+        status=TaskStatus.QUEUED,
+        priority=PriorityLevel.NORMAL,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Check should find it
+    existing = await check_existing_active_task(notion_page_id, async_session)
+
+    assert existing is not None
+    assert existing.id == task.id
+    assert existing.status == TaskStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_check_existing_active_task_ignores_terminal(
+    async_session, test_channel
+):
+    """check_existing_active_task ignores completed/failed tasks."""
+    notion_page_id = "9afc2f9c-05b3-486b-b2e7-a4b2e3c5e5e8"
+
+    # Create completed task (terminal)
+    task = Task(
+        notion_page_id=notion_page_id,
+        channel_id=test_channel.id,
+        title="Completed Task",
+        topic="Test Topic",
+        story_direction="",
+        status=TaskStatus.PUBLISHED,
+        priority=PriorityLevel.NORMAL,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Check should not find it (only finds active)
+    existing = await check_existing_active_task(notion_page_id, async_session)
+
+    assert existing is None  # Terminal task ignored
+
+
+@pytest.mark.asyncio
+async def test_all_task_statuses_categorized():
+    """All task statuses are categorized as active or terminal."""
+    # Get all statuses from TaskStatus enum
+    all_statuses = list(TaskStatus)
+
+    # Verify every status is in either ACTIVE or TERMINAL set
+    for status in all_statuses:
+        is_active = status in ACTIVE_TASK_STATUSES
+        is_terminal = status in TERMINAL_TASK_STATUSES
+
+        # Status must be in exactly one category (not both, not neither)
+        assert is_active or is_terminal, f"Status {status.value} not categorized"
+        assert not (
+            is_active and is_terminal
+        ), f"Status {status.value} in both categories"

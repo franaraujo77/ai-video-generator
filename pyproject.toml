@@ -24,6 +24,7 @@ dependencies = [
     "aiolimiter>=1.2.1",
     "httpx>=0.28.1",
     "tenacity>=9.1.2",
+    "pgqueuer>=0.10.0",
 ]
 
 [dependency-groups]
