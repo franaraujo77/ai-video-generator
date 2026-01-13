@@ -1,0 +1,12 @@
+{
+  "repository_type": "monolith",
+  "parts": [
+    {
+      "id": "root",
+      "path": ".",
+      "type": "cli",
+      "tech": "Python"
+    }
+  ],
+  "integration_points": []
+}
