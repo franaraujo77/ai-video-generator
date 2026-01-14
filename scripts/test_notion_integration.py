@@ -100,7 +100,7 @@ async def test_notion_integration():
                     # Extract status
                     status_prop = props.get("Status", {})
                     status = "N/A"
-                    if "select" in status_prop and status_prop["select"]:
+                    if status_prop.get("select"):
                         status = status_prop["select"]["name"]
 
                     print(f"      - {title} (Status: {status})")
@@ -108,8 +108,8 @@ async def test_notion_integration():
                 if len(pages) > 3:
                     print(f"      ... and {len(pages) - 3} more page(s)")
             else:
-                print("   ℹ️  Database is empty (no pages found)")
-                print("   💡 Create a test entry in Notion to verify sync works")
+                print("   Database is empty (no pages found)")
+                print("   Create a test entry in Notion to verify sync works")
 
         except Exception as e:
             error_str = str(e)
@@ -179,6 +179,7 @@ def main():
     except Exception as e:
         print(f"\n\n❌ Unexpected error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
