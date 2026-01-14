@@ -51,14 +51,14 @@ development_status:
   epic-1-retrospective: done
 
   # Epic 2: Notion Integration & Video Planning
-  epic-2: in-progress
+  epic-2: done
   2-1-task-model-database-schema: done
   2-2-notion-api-client-with-rate-limiting: done
   2-3-video-entry-creation-in-notion: done
   2-4-batch-video-queuing: done
   2-5-webhook-endpoint-for-notion-events: done
   2-6-task-enqueueing-with-duplicate-detection: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # Epic 3: Video Generation Pipeline
   epic-3: backlog
