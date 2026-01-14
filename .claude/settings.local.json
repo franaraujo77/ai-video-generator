@@ -27,7 +27,10 @@
       "Bash(ls:*)",
       "Bash(git checkout:*)",
       "Bash(uv run:*)",
-      "Bash(DATABASE_URL=\"postgresql://user:pass@localhost/db\" uv run alembic:*)"
+      "Bash(DATABASE_URL=\"postgresql://user:pass@localhost/db\" uv run alembic:*)",
+      "mcp__notion__notion-update-database",
+      "mcp__notion__notion-fetch",
+      "Bash(railway logs:*)"
     ],
     "deny": [],
     "ask": []
