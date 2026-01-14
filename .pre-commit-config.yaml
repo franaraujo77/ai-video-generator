@@ -55,6 +55,17 @@ repos:
       - id: check-case-conflict
         name: check filename case conflicts
 
+  # Deployment validation (custom hook)
+  - repo: local
+    hooks:
+      - id: validate-deployment
+        name: validate deployment configuration
+        entry: scripts/validate_deployment.sh
+        language: system
+        pass_filenames: false
+        files: ^(Dockerfile|pyproject\.toml|uv\.lock)$
+        description: Validates that Dockerfile dependencies match pyproject.toml
+
 # Configure hook to run on pre-push (not pre-commit for speed)
 default_install_hook_types: [pre-push]
 
