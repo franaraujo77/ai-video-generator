@@ -25,26 +25,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # Copy dependency files first (for better layer caching)
-COPY pyproject.toml ./
+COPY pyproject.toml uv.lock ./
 
 # Install production dependencies directly to system Python
-# Extract dependencies from pyproject.toml and install them
-RUN uv pip install --system --no-cache \
-    "google-generativeai>=0.8.0" \
-    "python-dotenv>=1.0.0" \
-    "pillow>=10.0.0" \
-    "pyjwt>=2.8.0" \
-    "requests>=2.31.0" \
-    "sqlalchemy[asyncio]>=2.0.0" \
-    "asyncpg>=0.29.0" \
-    "alembic>=1.13.0" \
-    "aiosqlite>=0.19.0" \
-    "pydantic>=2.8.0" \
-    "pyyaml>=6.0" \
-    "structlog>=23.2.0" \
-    "cryptography>=41.0.0" \
-    "fastapi>=0.115.0" \
-    "uvicorn[standard]>=0.32.0"
+# Use uv export to generate requirements.txt from pyproject.toml
+# This ensures Dockerfile automatically stays in sync with pyproject.toml
+# --no-dev: Exclude dev dependencies
+# --no-hashes: Simpler requirements.txt format
+RUN uv export --no-dev --no-hashes --frozen > requirements.txt && \
+    uv pip install --system --no-cache -r requirements.txt
 
 # Copy application code
 COPY app/ ./app/
