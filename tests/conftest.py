@@ -2,7 +2,10 @@
 
 This module provides reusable fixtures for testing SQLAlchemy models
 and database operations using an in-memory SQLite database.
+Story 2.6 adds PgQueuer mock fixture.
 """
+
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -84,3 +87,25 @@ async def async_session(async_engine):
 
     async with async_session_factory() as session:
         yield session
+
+
+@pytest.fixture(autouse=True)
+def mock_task_queue(monkeypatch):
+    """Mock PgQueuer task queue for tests.
+
+    Story 2.6: Automatically mocks task_queue.enqueue() for all tests
+    to prevent RuntimeError when PgQueuer is not configured.
+
+    This fixture is autouse=True so it applies to all tests by default.
+    Tests can access the mock via this fixture to verify calls.
+
+    Returns:
+        AsyncMock: Mocked task_queue with enqueue method.
+    """
+    mock_queue = AsyncMock()
+    mock_queue.enqueue = AsyncMock(return_value=None)
+
+    # Patch task_queue in app.database where it's defined
+    monkeypatch.setattr("app.database.task_queue", mock_queue)
+
+    return mock_queue

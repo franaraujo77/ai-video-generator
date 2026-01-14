@@ -1,0 +1,30 @@
+{
+"workflow_version": "1.2.0",
+"timestamps": {"started": "2026-01-04T12:00:00Z", "last_updated": "2026-01-04T12:22:00Z", "completed": "2026-01-04T12:22:00Z"},
+"mode": "initial_scan",
+"scan_level": "quick",
+"project_root": ".",
+"output_folder": "_bmad-output",
+"completed_steps": [
+  {"step": "step_1", "status": "completed", "timestamp": "2026-01-04T12:05:00Z", "summary": "Classified as monolith with 1 part (CLI)"},
+  {"step": "step_2", "status": "completed", "timestamp": "2026-01-04T12:08:00Z", "summary": "Found existing docs: README.md, GEMINI.md, scripts/README.md"},
+  {"step": "step_3", "status": "completed", "timestamp": "2026-01-04T12:10:00Z", "summary": "Tech stack: Python, Gemini, Pillow, uv"},
+  {"step": "step_4", "status": "completed", "timestamp": "2026-01-04T12:12:00Z", "summary": "Conditional analysis skipped (CLI/Quick scan)"},
+  {"step": "step_5", "status": "completed", "timestamp": "2026-01-04T12:14:00Z", "summary": "Source tree documented"},
+  {"step": "step_8", "status": "completed", "timestamp": "2026-01-04T12:16:00Z", "summary": "Architecture docs written"},
+  {"step": "step_9", "status": "completed", "timestamp": "2026-01-04T12:18:00Z", "summary": "Supporting docs written"},
+  {"step": "step_10", "status": "completed", "timestamp": "2026-01-04T12:20:00Z", "summary": "Master index generated"},
+  {"step": "step_11", "status": "completed", "timestamp": "2026-01-04T12:21:00Z", "summary": "Validation and review complete"},
+  {"step": "step_12", "status": "completed", "timestamp": "2026-01-04T12:22:00Z", "summary": "Workflow complete"}
+],
+"current_step": "completed",
+"findings": {
+  "project_classification": "Monolith (CLI)",
+  "project_parts": [{"part_id": "root", "path": ".", "type": "cli"}],
+  "technology_stack": {"root": "Python 3.10+, uv, Gemini API"},
+  "architecture_pattern": "Pipeline / Scripting"
+},
+"project_types": [{"part_id": "root", "project_type_id": "cli", "display_name": "CLI Tooling"}],
+"outputs_generated": ["project-scan-report.json", "source-tree-analysis.md", "architecture.md", "project-overview.md", "development-guide.md", "project-parts.json", "index.md"],
+"resume_instructions": "Workflow completed"
+}
