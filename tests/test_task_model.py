@@ -1,7 +1,10 @@
 """Tests for Task model and Channel-Task relationship.
 
 Tests Task model creation, status values, and relationship to Channel.
+Uses 26-status workflow (Story 2-1).
 """
+
+import uuid
 
 import pytest
 import pytest_asyncio
@@ -9,7 +12,23 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Channel, Task, IN_PROGRESS_STATUSES, PENDING_STATUSES
+from app.models import Channel, Task, TaskStatus, IN_PROGRESS_STATUSES, PENDING_STATUSES
+
+
+def create_test_task(
+    channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs
+) -> Task:
+    """Helper to create a Task with all required fields for testing."""
+    import uuid
+
+    defaults = {
+        "notion_page_id": uuid.uuid4().hex,  # Generate unique 32-char hex
+        "title": "Test Video",
+        "topic": "Test Topic",
+        "story_direction": "Test story direction",
+    }
+    defaults.update(kwargs)
+    return Task(channel_id=channel_id, status=status, **defaults)
 
 
 @pytest_asyncio.fixture
@@ -36,15 +55,15 @@ class TestTaskModel:
         async_session: AsyncSession,
         test_channel: Channel,
     ) -> None:
-        """Test Task creation with default values."""
-        task = Task(channel_id="testchan")
+        """Test Task creation with default status (DRAFT)."""
+        task = create_test_task(test_channel.id)  # Uses default status=DRAFT
         async_session.add(task)
         await async_session.commit()
         await async_session.refresh(task)
 
         assert task.id is not None
-        assert task.channel_id == "testchan"
-        assert task.status == "pending"
+        assert task.channel_id == test_channel.id
+        assert task.status == TaskStatus.DRAFT
         assert task.created_at is not None
         assert task.updated_at is not None
 
@@ -55,12 +74,12 @@ class TestTaskModel:
         test_channel: Channel,
     ) -> None:
         """Test Task creation with custom status."""
-        task = Task(channel_id="testchan", status="processing")
+        task = create_test_task(test_channel.id, status=TaskStatus.GENERATING_ASSETS)
         async_session.add(task)
         await async_session.commit()
         await async_session.refresh(task)
 
-        assert task.status == "processing"
+        assert task.status == TaskStatus.GENERATING_ASSETS
 
     @pytest.mark.asyncio
     async def test_task_valid_status_values(
@@ -68,28 +87,45 @@ class TestTaskModel:
         async_session: AsyncSession,
         test_channel: Channel,
     ) -> None:
-        """Test Task with all valid status values."""
+        """Test Task with all valid 26-status workflow values."""
         valid_statuses = [
-            "pending",
-            "claimed",
-            "processing",
-            "awaiting_review",
-            "approved",
-            "rejected",
-            "completed",
-            "failed",
-            "retry",
+            TaskStatus.DRAFT,
+            TaskStatus.QUEUED,
+            TaskStatus.CLAIMED,
+            TaskStatus.GENERATING_ASSETS,
+            TaskStatus.ASSETS_READY,
+            TaskStatus.ASSETS_APPROVED,
+            TaskStatus.GENERATING_COMPOSITES,
+            TaskStatus.COMPOSITES_READY,
+            TaskStatus.GENERATING_VIDEO,
+            TaskStatus.VIDEO_READY,
+            TaskStatus.VIDEO_APPROVED,
+            TaskStatus.GENERATING_AUDIO,
+            TaskStatus.AUDIO_READY,
+            TaskStatus.AUDIO_APPROVED,
+            TaskStatus.GENERATING_SFX,
+            TaskStatus.SFX_READY,
+            TaskStatus.ASSEMBLING,
+            TaskStatus.ASSEMBLY_READY,
+            TaskStatus.FINAL_REVIEW,
+            TaskStatus.APPROVED,
+            TaskStatus.UPLOADING,
+            TaskStatus.PUBLISHED,
+            TaskStatus.ASSET_ERROR,
+            TaskStatus.VIDEO_ERROR,
+            TaskStatus.AUDIO_ERROR,
+            TaskStatus.UPLOAD_ERROR,
         ]
 
         for status in valid_statuses:
-            task = Task(channel_id="testchan", status=status)
+            task = create_test_task(test_channel.id, status=status)
             async_session.add(task)
         await async_session.commit()
 
-        # Verify all were created
-        result = await async_session.execute(select(Task).where(Task.channel_id == "testchan"))
+        # Verify all 26 statuses were created
+        result = await async_session.execute(select(Task).where(Task.channel_id == test_channel.id))
         tasks = result.scalars().all()
-        assert len(tasks) == len(valid_statuses)
+        assert len(tasks) == 26
 
     @pytest.mark.asyncio
     async def test_task_channel_relationship(
@@ -98,7 +134,7 @@ class TestTaskModel:
         test_channel: Channel,
     ) -> None:
         """Test Task-Channel relationship works correctly."""
-        task = Task(channel_id="testchan")
+        task = create_test_task(test_channel.id)
         async_session.add(task)
         await async_session.commit()
 
@@ -110,8 +146,9 @@ class TestTaskModel:
 
         # Access relationship
         assert loaded_task.channel is not None
-        assert loaded_task.channel.channel_id == "testchan"
+        assert loaded_task.channel.channel_id == "testchan"  # Business ID
         assert loaded_task.channel.channel_name == "Test Channel"
+        assert loaded_task.channel_id == test_channel.id  # Database ID (UUID)
 
     @pytest.mark.asyncio
     async def test_channel_tasks_relationship(
@@ -122,7 +159,7 @@ class TestTaskModel:
         """Test Channel.tasks relationship returns all related tasks."""
         # Add multiple tasks
         for _ in range(3):
-            task = Task(channel_id="testchan")
+            task = create_test_task(test_channel.id)
             async_session.add(task)
         await async_session.commit()
 
@@ -130,11 +167,12 @@ class TestTaskModel:
         result = await async_session.execute(
             select(Channel)
             .options(selectinload(Channel.tasks))
-            .where(Channel.channel_id == "testchan")
+            .where(Channel.id == test_channel.id)
         )
         loaded_channel = result.scalar_one()
 
         assert len(loaded_channel.tasks) == 3
+        assert loaded_channel.channel_id == "testchan"  # Verify business ID
 
     @pytest.mark.asyncio
     async def test_task_repr(
@@ -143,30 +181,36 @@ class TestTaskModel:
         test_channel: Channel,
     ) -> None:
         """Test Task __repr__ method."""
-        task = Task(channel_id="testchan", status="processing")
+        task = create_test_task(test_channel.id, status=TaskStatus.GENERATING_ASSETS)
         async_session.add(task)
         await async_session.commit()
         await async_session.refresh(task)
 
         repr_str = repr(task)
         assert "Task" in repr_str
-        assert "testchan" in repr_str
-        assert "processing" in repr_str
+        assert "Test Video" in repr_str
+        assert "generating_assets" in repr_str
 
 
 class TestTaskStatusConstants:
-    """Tests for task status constants."""
+    """Tests for task status constants (26-status workflow)."""
 
     def test_pending_statuses(self) -> None:
-        """Test PENDING_STATUSES constant."""
-        assert PENDING_STATUSES == ("pending",)
+        """Test PENDING_STATUSES constant contains queued status."""
+        assert TaskStatus.QUEUED in PENDING_STATUSES
+        assert len(PENDING_STATUSES) == 1
 
     def test_in_progress_statuses(self) -> None:
-        """Test IN_PROGRESS_STATUSES constant."""
-        assert "claimed" in IN_PROGRESS_STATUSES
-        assert "processing" in IN_PROGRESS_STATUSES
-        assert "awaiting_review" in IN_PROGRESS_STATUSES
-        assert len(IN_PROGRESS_STATUSES) == 3
+        """Test IN_PROGRESS_STATUSES constant contains pipeline statuses."""
+        # Verify key pipeline statuses are included
+        assert TaskStatus.CLAIMED in IN_PROGRESS_STATUSES
+        assert TaskStatus.GENERATING_ASSETS in IN_PROGRESS_STATUSES
+        assert TaskStatus.GENERATING_VIDEO in IN_PROGRESS_STATUSES
+        assert TaskStatus.GENERATING_AUDIO in IN_PROGRESS_STATUSES
+        assert TaskStatus.ASSEMBLING in IN_PROGRESS_STATUSES
+        assert TaskStatus.FINAL_REVIEW in IN_PROGRESS_STATUSES
+        # Verify correct count (14 in-progress statuses)
+        assert len(IN_PROGRESS_STATUSES) == 14
 
 
 class TestMaxConcurrentSync:

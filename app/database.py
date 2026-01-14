@@ -2,18 +2,26 @@
 
 This module provides the async SQLAlchemy 2.0 engine configuration,
 session factory, and FastAPI dependency injection for database sessions.
+Story 2.6 adds PgQueuer integration for task queue management.
 
 Usage:
-    from app.database import get_session
+    from app.database import get_session, task_queue
 
     async def my_route(db: AsyncSession = Depends(get_session)):
         result = await db.execute(select(Channel))
         ...
+
+    # Enqueue task to PgQueuer
+    from pgqueuer.models import Job
+    await task_queue.enqueue(Job(queue_name="video_tasks", payload={"task_id": "..."}))
 """
 
 import os
 from collections.abc import AsyncGenerator
 
+# PgQueuer will be fully integrated in Epic 4 (Worker Orchestration)
+# from pgqueuer.db import AsyncpgDriver, Driver
+# from pgqueuer.qm import QueueManager
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -121,3 +129,9 @@ def create_test_engine(
         expire_on_commit=False,
     )
     return test_engine, test_session_factory
+
+
+# PgQueuer queue manager setup (Story 2.6)
+# Full integration deferred to Epic 4 (Worker Orchestration)
+# For now, tasks with status='queued' are ready for workers
+task_queue = None  # Will be initialized in Epic 4

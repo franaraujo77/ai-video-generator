@@ -1,6 +1,7 @@
 """Tests for ChannelCapacityService.
 
 Tests queue statistics, capacity calculations, and channel filtering.
+Uses 26-status workflow (Story 2-1).
 """
 
 import uuid
@@ -9,8 +10,22 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Channel, Task
+from app.models import Channel, Task, TaskStatus
 from app.services.channel_capacity_service import ChannelCapacityService, ChannelQueueStats
+
+
+def create_test_task(
+    channel_id: uuid.UUID, status: TaskStatus = TaskStatus.DRAFT, **kwargs
+) -> Task:
+    """Helper to create a Task with all required fields for testing."""
+    defaults = {
+        "notion_page_id": uuid.uuid4().hex,  # Generate unique 32-char hex
+        "title": "Test Video",
+        "topic": "Test Topic",
+        "story_direction": "Test story direction",
+    }
+    defaults.update(kwargs)
+    return Task(channel_id=channel_id, status=status, **defaults)
 
 
 @pytest_asyncio.fixture
@@ -105,7 +120,7 @@ class TestChannelCapacityService:
         """Test get_queue_stats correctly counts pending tasks."""
         # Add 3 pending tasks
         for _ in range(3):
-            task = Task(channel_id="poke1", status="pending")
+            task = create_test_task(channel_poke1.id, status=TaskStatus.QUEUED)
             async_session.add(task)
         await async_session.commit()
 
@@ -125,9 +140,9 @@ class TestChannelCapacityService:
     ) -> None:
         """Test get_queue_stats correctly counts in-progress tasks."""
         # Add tasks in different in-progress statuses
-        statuses = ["claimed", "processing", "awaiting_review"]
+        statuses = [TaskStatus.CLAIMED, TaskStatus.GENERATING_ASSETS, TaskStatus.FINAL_REVIEW]
         for status in statuses:
-            task = Task(channel_id="poke1", status=status)
+            task = create_test_task(channel_poke1.id, status=status)
             async_session.add(task)
         await async_session.commit()
 
@@ -148,11 +163,11 @@ class TestChannelCapacityService:
     ) -> None:
         """Test get_queue_stats with mix of statuses."""
         # 2 pending, 1 processing, 1 completed (should not count)
-        async_session.add(Task(channel_id="poke1", status="pending"))
-        async_session.add(Task(channel_id="poke1", status="pending"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="completed"))
-        async_session.add(Task(channel_id="poke1", status="failed"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.QUEUED))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.QUEUED))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.PUBLISHED))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.ASSET_ERROR))
         await async_session.commit()
 
         stats = await capacity_service.get_queue_stats(async_session)
@@ -173,14 +188,14 @@ class TestChannelCapacityService:
     ) -> None:
         """Test get_queue_stats returns stats for multiple channels."""
         # poke1: 1 pending, 2 processing (at capacity, max=2)
-        async_session.add(Task(channel_id="poke1", status="pending"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.QUEUED))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
 
         # poke2: 2 pending, 1 processing (has capacity, max=3)
-        async_session.add(Task(channel_id="poke2", status="pending"))
-        async_session.add(Task(channel_id="poke2", status="pending"))
-        async_session.add(Task(channel_id="poke2", status="processing"))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.QUEUED))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.QUEUED))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.GENERATING_ASSETS))
         await async_session.commit()
 
         stats = await capacity_service.get_queue_stats(async_session)
@@ -223,8 +238,8 @@ class TestChannelCapacityService:
         channel_poke1: Channel,
     ) -> None:
         """Test get_channel_capacity returns stats for existing channel."""
-        async_session.add(Task(channel_id="poke1", status="pending"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.QUEUED))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
         await async_session.commit()
 
         stats = await capacity_service.get_channel_capacity("poke1", async_session)
@@ -265,7 +280,7 @@ class TestChannelCapacityService:
     ) -> None:
         """Test has_capacity returns True when in_progress < max_concurrent."""
         # max_concurrent=2, add 1 processing task
-        async_session.add(Task(channel_id="poke1", status="processing"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
         await async_session.commit()
 
         result = await capacity_service.has_capacity("poke1", async_session)
@@ -280,8 +295,8 @@ class TestChannelCapacityService:
     ) -> None:
         """Test has_capacity returns False when in_progress >= max_concurrent."""
         # max_concurrent=2, add 2 processing tasks
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="claimed"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.CLAIMED))
         await async_session.commit()
 
         result = await capacity_service.has_capacity("poke1", async_session)
@@ -296,9 +311,9 @@ class TestChannelCapacityService:
     ) -> None:
         """Test has_capacity returns False when in_progress > max_concurrent."""
         # max_concurrent=2, add 3 processing tasks
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="claimed"))
-        async_session.add(Task(channel_id="poke1", status="awaiting_review"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.CLAIMED))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.FINAL_REVIEW))
         await async_session.commit()
 
         result = await capacity_service.has_capacity("poke1", async_session)
@@ -324,11 +339,11 @@ class TestChannelCapacityService:
     ) -> None:
         """Test get_channels_with_capacity returns only channels with capacity."""
         # poke1: 2 processing (at capacity, max=2)
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
 
         # poke2: 1 processing (has capacity, max=3)
-        async_session.add(Task(channel_id="poke2", status="processing"))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.GENERATING_ASSETS))
         await async_session.commit()
 
         channels = await capacity_service.get_channels_with_capacity(async_session)
@@ -363,13 +378,13 @@ class TestChannelCapacityService:
     ) -> None:
         """Test get_channels_with_capacity returns empty when all at capacity."""
         # poke1: 2 processing (at capacity, max=2)
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
 
         # poke2: 3 processing (at capacity, max=3)
-        async_session.add(Task(channel_id="poke2", status="processing"))
-        async_session.add(Task(channel_id="poke2", status="claimed"))
-        async_session.add(Task(channel_id="poke2", status="awaiting_review"))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.CLAIMED))
+        async_session.add(create_test_task(channel_poke2.id, status=TaskStatus.FINAL_REVIEW))
         await async_session.commit()
 
         channels = await capacity_service.get_channels_with_capacity(async_session)
@@ -385,8 +400,8 @@ class TestChannelCapacityService:
     ) -> None:
         """Test that one channel at max capacity doesn't affect other channels."""
         # poke1: at capacity (max=2)
-        async_session.add(Task(channel_id="poke1", status="processing"))
-        async_session.add(Task(channel_id="poke1", status="processing"))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
+        async_session.add(create_test_task(channel_poke1.id, status=TaskStatus.GENERATING_ASSETS))
         await async_session.commit()
 
         # poke2 should still have capacity

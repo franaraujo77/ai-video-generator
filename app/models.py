@@ -17,10 +17,23 @@ Example:
     NEVER expose encrypted fields in __repr__ or log statements.
 """
 
+import enum
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, LargeBinary, String
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -28,6 +41,110 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 def utcnow() -> datetime:
     """Get current UTC datetime (timezone-aware)."""
     return datetime.now(timezone.utc)
+
+
+class TaskStatus(str, enum.Enum):
+    """26-status workflow state machine for video generation pipeline.
+
+    Status values follow the video generation pipeline order from draft to published.
+    Each status represents a specific stage in the 8-step production pipeline.
+
+    Pipeline Flow:
+        draft → queued → claimed → generating_assets → assets_ready → assets_approved
+        → generating_composites → composites_ready → generating_video → video_ready
+        → video_approved → generating_audio → audio_ready → audio_approved
+        → generating_sfx → sfx_ready → assembling → assembly_ready → final_review
+        → approved → uploading → published
+
+    Error States (recoverable via retry):
+        asset_error, video_error, audio_error, upload_error
+
+    See UX Design document for full state machine transitions.
+    """
+
+    # Initial states
+    DRAFT = "draft"
+    QUEUED = "queued"
+    CLAIMED = "claimed"
+
+    # Asset generation phase (Step 1)
+    GENERATING_ASSETS = "generating_assets"
+    ASSETS_READY = "assets_ready"
+    ASSETS_APPROVED = "assets_approved"
+
+    # Composite creation phase (Step 2)
+    GENERATING_COMPOSITES = "generating_composites"
+    COMPOSITES_READY = "composites_ready"
+
+    # Video generation phase (Step 3)
+    GENERATING_VIDEO = "generating_video"
+    VIDEO_READY = "video_ready"
+    VIDEO_APPROVED = "video_approved"
+
+    # Audio generation phase (Step 4)
+    GENERATING_AUDIO = "generating_audio"
+    AUDIO_READY = "audio_ready"
+    AUDIO_APPROVED = "audio_approved"
+
+    # Sound effects phase (Step 5)
+    GENERATING_SFX = "generating_sfx"
+    SFX_READY = "sfx_ready"
+
+    # Assembly phase (Step 6)
+    ASSEMBLING = "assembling"
+    ASSEMBLY_READY = "assembly_ready"
+
+    # Review and approval phase (Step 7)
+    FINAL_REVIEW = "final_review"
+    APPROVED = "approved"
+
+    # YouTube upload phase (Step 8)
+    UPLOADING = "uploading"
+    PUBLISHED = "published"
+
+    # Error states
+    ASSET_ERROR = "asset_error"
+    VIDEO_ERROR = "video_error"
+    AUDIO_ERROR = "audio_error"
+    UPLOAD_ERROR = "upload_error"
+
+
+# Status groupings for capacity tracking (FR13, FR16)
+PENDING_STATUSES = [TaskStatus.QUEUED]
+
+IN_PROGRESS_STATUSES = [
+    TaskStatus.CLAIMED,
+    TaskStatus.GENERATING_ASSETS,
+    TaskStatus.ASSETS_READY,
+    TaskStatus.GENERATING_COMPOSITES,
+    TaskStatus.COMPOSITES_READY,
+    TaskStatus.GENERATING_VIDEO,
+    TaskStatus.VIDEO_READY,
+    TaskStatus.GENERATING_AUDIO,
+    TaskStatus.AUDIO_READY,
+    TaskStatus.GENERATING_SFX,
+    TaskStatus.SFX_READY,
+    TaskStatus.ASSEMBLING,
+    TaskStatus.ASSEMBLY_READY,
+    TaskStatus.FINAL_REVIEW,
+]
+
+
+class PriorityLevel(str, enum.Enum):
+    """Task priority levels for queue management.
+
+    Priority determines task execution order within the queue.
+    Workers select tasks using: Priority (high > normal > low) → FIFO (created_at).
+
+    Levels:
+        high: Urgent content, processed first (e.g., trending topics, time-sensitive)
+        normal: Standard priority (default for most videos)
+        low: Background tasks, processed when no high/normal tasks available
+    """
+
+    HIGH = "high"
+    NORMAL = "normal"
+    LOW = "low"
 
 
 class Base(DeclarativeBase):
@@ -207,75 +324,130 @@ class Channel(Base):
         )
 
 
-# Task status constants for capacity calculations
-PENDING_STATUSES = ("pending",)
-IN_PROGRESS_STATUSES = ("claimed", "processing", "awaiting_review")
-
-
 class Task(Base):
-    """Video generation task in the pipeline.
+    """Video generation task with 26-status workflow state machine.
 
-    Tasks represent a video generation job that moves through the 8-step
-    pipeline. Status tracks progress and enables capacity calculations.
+    Tasks represent video generation jobs that move through the 8-step production
+    pipeline from draft to published. Each task belongs to a channel and tracks
+    video metadata, Notion integration, and pipeline status.
 
-    Status values and their meanings:
-        - pending: Task created, awaiting worker pickup
-        - claimed: Worker claimed task (transitional state)
-        - processing: Worker actively executing task
-        - awaiting_review: Hit human review gate
-        - approved: Human approved, continue processing
-        - rejected: Human rejected, needs intervention
-        - completed: Successfully finished
-        - failed: Permanent failure (non-retriable)
-        - retry: Temporary failure, will retry
+    26-Status Workflow:
+        The status field follows the TaskStatus enum (26 states) which maps to
+        the 8-step pipeline: asset generation → composites → video → audio → sfx
+        → assembly → review → upload. See TaskStatus enum for full flow.
 
-    Capacity calculation uses:
-        - pending_count: status == "pending"
-        - in_progress_count: status IN ("claimed", "processing", "awaiting_review")
+    Notion Integration:
+        Tasks are bidirectionally synced with Notion database entries via the
+        notion_page_id field (unique constraint). Workers poll Notion for new
+        entries and push status updates back to Notion.
+
+    Capacity Calculation:
+        Channel.max_concurrent enforces parallel task limits per channel. Workers
+        query tasks WHERE status IN (claimed, generating_*, assembling, uploading)
+        to calculate in-progress count before claiming new tasks.
 
     Attributes:
         id: Internal UUID primary key.
-        channel_id: Foreign key to channel this task belongs to.
-        status: Current task status (see status values above).
-        created_at: Timestamp when task was created.
-        updated_at: Timestamp of last status change.
-        channel: Relationship to the Channel model.
+        channel_id: Foreign key to channels.id (NOT channel_id string).
+        notion_page_id: Notion page UUID (32 chars, no dashes). Unique constraint.
+        title: Video title (255 chars max, from Notion).
+        topic: Video topic/category (500 chars max, from Notion).
+        story_direction: Rich text story direction from Notion (unlimited).
+        status: Pipeline status (26-value enum, indexed).
+        priority: Queue priority (high/normal/low, default: normal).
+        error_log: Append-only error history (nullable, text field).
+        youtube_url: Published YouTube URL (nullable, populated after upload).
+        created_at: Task creation timestamp (UTC).
+        updated_at: Last status change timestamp (UTC, auto-updated).
+        channel: Relationship to Channel model.
 
-    Note:
-        Composite index on (channel_id, status) optimizes queue queries.
-        Partial index on status='pending' speeds up pending task lookups.
+    Indexes:
+        - ix_tasks_status: Status filtering (queue queries)
+        - ix_tasks_channel_id: Per-channel queries
+        - ix_tasks_created_at: FIFO ordering within priority
+        - ix_tasks_channel_id_status: Composite for capacity calculations
+        - Partial index on status='queued' for fast worker claims
+
+    Foreign Key:
+        channel_id references channels.id with ondelete='RESTRICT' (preserve
+        task history even if channel is deactivated).
     """
 
     __tablename__ = "tasks"
 
+    # Primary key
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         primary_key=True,
         default=uuid.uuid4,
     )
-    channel_id: Mapped[str] = mapped_column(
-        String(50),
-        ForeignKey("channels.channel_id"),
+
+    # Foreign key to channels table
+    # CRITICAL: References channels.id (UUID), NOT channels.channel_id (string)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+
+    # Notion integration (unique constraint for bidirectional sync)
+    notion_page_id: Mapped[str] = mapped_column(
+        String(36),  # Supports UUID with or without dashes (32-36 chars)
+        unique=True,
         nullable=False,
         index=True,
     )
-    # Status column stores task lifecycle state.
-    # Valid values: pending, claimed, processing, awaiting_review, approved,
-    # rejected, completed, failed, retry (see TASK_STATUSES in architecture.md)
-    # Note: Database-level CHECK constraint deferred to Epic 4 (Worker Orchestration)
-    # which implements the full state machine with transitions.
-    status: Mapped[str] = mapped_column(
-        String(20),
+
+    # Content metadata (from Notion database)
+    title: Mapped[str] = mapped_column(
+        String(255),
         nullable=False,
-        default="pending",
+    )
+    topic: Mapped[str] = mapped_column(
+        String(500),
+        nullable=False,
+    )
+    story_direction: Mapped[str] = mapped_column(
+        Text,
+        nullable=False,
+    )
+
+    # Workflow state (26-status enum)
+    status: Mapped[TaskStatus] = mapped_column(
+        Enum(TaskStatus, native_enum=True, name="taskstatus"),
+        nullable=False,
+        default=TaskStatus.DRAFT,
         index=True,
     )
+
+    # Priority queue management
+    priority: Mapped[PriorityLevel] = mapped_column(
+        Enum(PriorityLevel, native_enum=True, name="prioritylevel"),
+        nullable=False,
+        default=PriorityLevel.NORMAL,
+    )
+
+    # Error tracking (append-only log)
+    error_log: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    # YouTube output
+    youtube_url: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    # Timestamps (UTC timezone-aware)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         default=utcnow,
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
+        nullable=False,
         default=utcnow,
         onupdate=utcnow,
     )
@@ -284,14 +456,94 @@ class Task(Base):
     channel: Mapped["Channel"] = relationship("Channel", back_populates="tasks")
 
     # Indexes for efficient queue queries
-    # Note: Migration is source of truth for indexes. Model defines composite
-    # index for SQLAlchemy awareness. Additional indexes in migration:
-    # - idx_tasks_pending: Partial index WHERE status='pending' for fast lookups
+    # Note: Migration is source of truth for indexes. Model defines indexes
+    # for SQLAlchemy awareness. Additional indexes in migration:
+    # - ix_tasks_status: Status filtering
+    # - ix_tasks_channel_id: Per-channel queries
+    # - ix_tasks_created_at: FIFO ordering
+    # - Partial index WHERE status='queued' for fast worker claims
     __table_args__ = (
         # Composite index for channel + status filtering (capacity queries)
         Index("ix_tasks_channel_id_status", "channel_id", "status"),
     )
 
     def __repr__(self) -> str:
+        """Return string representation for debugging.
+
+        Shows task ID (truncated), title, status, and priority for quick identification.
+        """
+        return (
+            f"<Task(id={self.id!s:.8}, title={self.title!r}, "
+            f"status={self.status.value!r}, priority={self.priority.value!r})>"
+        )
+
+
+class NotionWebhookEvent(Base):
+    """Notion webhook event tracking for idempotency.
+
+    Notion may send duplicate webhooks for the same event (network retries, etc.).
+    This table tracks processed webhook events to prevent duplicate processing.
+
+    Each webhook event has a unique event_id that serves as the deduplication key.
+    The payload is stored for debugging and audit purposes.
+
+    Attributes:
+        id: Internal UUID primary key.
+        event_id: Notion webhook event ID (unique constraint for idempotency).
+        event_type: Type of webhook event (page.created, page.updated, page.archived).
+        page_id: Notion page UUID that the event is about (32 chars, no dashes).
+        processed_at: Timestamp when event was first processed (UTC).
+        payload: Full webhook payload as JSON (for debugging and audit).
+
+    Indexes:
+        - Unique constraint on event_id for idempotency checks
+        - Index on page_id for looking up events by page
+
+    Note:
+        This table grows monotonically. Consider implementing cleanup for
+        events older than 30 days in production.
+    """
+
+    __tablename__ = "notion_webhook_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    event_id: Mapped[str] = mapped_column(
+        String(100),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    event_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+
+    page_id: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        index=True,
+    )
+
+    processed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    payload: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
         """Return string representation for debugging."""
-        return f"<Task(id={self.id!s:.8}, channel_id={self.channel_id!r}, status={self.status!r})>"
+        return (
+            f"<NotionWebhookEvent(event_id={self.event_id!r}, "
+            f"event_type={self.event_type!r}, page_id={self.page_id!r})>"
+        )

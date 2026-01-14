@@ -1,7 +1,33 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh run view:*)",
+      "Bash(uv run ruff:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(uv run mypy:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(uv run alembic:*)",
+      "Bash(DATABASE_URL=\"sqlite+aiosqlite:///./test.db\" uv run alembic:*)",
+      "Bash(wc:*)",
+      "Bash(uv sync:*)",
+      "Bash(test:*)",
+      "Bash(uv add:*)",
+      "Bash(uv pip:*)",
+      "Bash(if [ -f .gitignore ])",
+      "Bash(then grep -q \"test.db\" .gitignore)",
+      "Bash(else echo \"test.db\")",
+      "Bash(fi)",
+      "Bash(python -m pytest:*)",
+      "Bash(python3:*)",
+      "Bash(uv run python3:*)",
+      "Bash(ls:*)",
+      "Bash(git checkout:*)",
+      "Bash(uv run:*)",
+      "Bash(DATABASE_URL=\"postgresql://user:pass@localhost/db\" uv run alembic:*)"
     ],
     "deny": [],
     "ask": []
