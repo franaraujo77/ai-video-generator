@@ -1,0 +1,60 @@
+# Railway CLI upload ignore patterns
+# This prevents large local files from being uploaded when using `railway up`
+# Railway should primarily deploy from GitHub, not local uploads
+
+# Pokemon workspaces (large asset directories - ~140MB)
+haunter/
+charizard/
+gengar/
+pikachu/
+bulbasaur/
+
+# BMAD planning artifacts
+_bmad-output/
+_bmad/
+
+# Large binary assets
+*.mp4
+*.mp3
+*.wav
+*.png
+*.jpg
+*.jpeg
+*.mov
+*.avi
+
+# Development files
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# Git
+.git/
+.gitignore
+
+# Environment
+.env
+.env.local
+.env.production
+
+# Test databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/

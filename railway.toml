@@ -2,9 +2,13 @@
 # See: https://docs.railway.app/reference/config-as-code
 
 [build]
-# Use Dockerfile for building
-builder = "dockerfile"
+# Use Dockerfile for building (explicit DOCKERFILE to prevent RAILPACK auto-detection)
+builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+
+# Disable watch patterns to prevent problematic auto-redeploys
+[build.watchPatterns]
+include = []
 
 [deploy]
 # Number of deployment instances (scale in Railway dashboard for more)

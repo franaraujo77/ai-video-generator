@@ -53,6 +53,7 @@ docs/_build/
 
 # Pokemon workspaces (local development data)
 haunter/
+charizard/
 gengar/
 pikachu/
 bulbasaur/
