@@ -7,8 +7,7 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 # Disable watch patterns to prevent problematic auto-redeploys
-[build.watchPatterns]
-include = []
+watchPatterns = []
 
 [deploy]
 # Number of deployment instances (scale in Railway dashboard for more)
