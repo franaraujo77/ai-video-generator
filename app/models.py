@@ -451,6 +451,15 @@ class Task(Base):
         nullable=True,
     )
 
+    # Cost tracking (Epic 8 - Story 3.3 requirement)
+    # Running total of all API costs for this task (Gemini, Kling, ElevenLabs)
+    # Updated incrementally as each pipeline step completes
+    total_cost_usd: Mapped[float] = mapped_column(
+        nullable=False,
+        default=0.0,
+        server_default="0.0",
+    )
+
     # Timestamps (UTC timezone-aware)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
