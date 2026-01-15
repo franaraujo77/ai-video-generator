@@ -63,7 +63,7 @@ class NotionClient:
         # CRITICAL: 3 requests per 1 second (Notion API hard limit)
         self.rate_limiter = AsyncLimiter(max_rate=3, time_period=1)
         self.base_url = "https://api.notion.com/v1"
-        self.notion_version = "2025-09-03"
+        self.notion_version = "2022-06-28"
 
     def _get_headers(self) -> dict[str, str]:
         """Get standard Notion API headers.
@@ -91,6 +91,44 @@ class NotionClient:
             return exception.response.status_code in [429, 500, 502, 503, 504]
         # Retry network errors
         return isinstance(exception, httpx.TimeoutException | httpx.ConnectError)
+
+    def _normalize_database_id(self, database_id: str) -> str:
+        """Normalize database ID to UUID format (with dashes).
+
+        Notion API accepts both formats:
+        - With dashes: 6b870ef4-1343-4616-8f14-367291bc89e6 (36 chars)
+        - Without dashes: 6b870ef4134346168f14367291bc89e6 (32 chars)
+
+        This method normalizes to the dashed UUID format for consistency.
+
+        Args:
+            database_id: Database ID with or without dashes (32 or 36 chars)
+
+        Returns:
+            UUID-formatted database ID (36 chars with dashes)
+
+        Raises:
+            ValueError: If database_id length is invalid
+
+        Example:
+            6b870ef4134346168f14367291bc89e6
+            -> 6b870ef4-1343-4616-8f14-367291bc89e6
+        """
+        # Remove any existing dashes
+        clean_id = database_id.replace("-", "")
+
+        # Validate length (should be exactly 32 hex characters)
+        if len(clean_id) != 32:
+            raise ValueError(
+                f"Invalid database ID length: {len(clean_id)} chars (expected 32). "
+                f"Database ID should be a 32-character hex string (with or without dashes)"
+            )
+
+        # Format as UUID: 8-4-4-4-12
+        return (
+            f"{clean_id[:8]}-{clean_id[8:12]}-{clean_id[12:16]}-"
+            f"{clean_id[16:20]}-{clean_id[20:]}"
+        )
 
     async def update_task_status(self, page_id: str, status: str) -> dict[str, Any]:
         """Update task status in Notion database (rate limited, auto-retry).
@@ -158,7 +196,7 @@ class NotionClient:
         """Get all pages from Notion database (rate limited, auto-retry).
 
         Args:
-            database_id: Notion database ID (32 chars, no dashes)
+            database_id: Notion database ID (32 or 36 chars, with/without dashes)
 
         Returns:
             List of page objects from Notion database
@@ -166,7 +204,11 @@ class NotionClient:
         Raises:
             NotionRateLimitError: After 3 failed retry attempts
             NotionAPIError: On non-retriable errors (401, 403, 400)
+            ValueError: If database_id format is invalid
         """
+        # Normalize database ID to UUID format (with dashes)
+        normalized_id = self._normalize_database_id(database_id)
+
         attempt_count = 0
         last_error: Exception | None = None
 
@@ -175,7 +217,7 @@ class NotionClient:
             try:
                 async with self.rate_limiter:  # Enforce 3 req/sec limit
                     response = await self.client.post(
-                        f"{self.base_url}/databases/{database_id}/query",
+                        f"{self.base_url}/databases/{normalized_id}/query",
                         headers=self._get_headers(),
                         json={},
                     )
@@ -186,9 +228,16 @@ class NotionClient:
 
                     # Classify error type for retry logic
                     if response.status_code in [401, 403, 400]:
-                        # Non-retriable: Fail fast
+                        # Non-retriable: Fail fast with detailed error
+                        try:
+                            error_body = response.json()
+                            error_message = error_body.get("message", response.text)
+                        except Exception:
+                            error_message = response.text
+
                         raise NotionAPIError(
-                            f"Non-retriable error: {response.status_code}", response
+                            f"Non-retriable error: {response.status_code} - {error_message}",
+                            response,
                         )
 
                     response.raise_for_status()
