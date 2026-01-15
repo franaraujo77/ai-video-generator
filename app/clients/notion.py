@@ -63,7 +63,7 @@ class NotionClient:
         # CRITICAL: 3 requests per 1 second (Notion API hard limit)
         self.rate_limiter = AsyncLimiter(max_rate=3, time_period=1)
         self.base_url = "https://api.notion.com/v1"
-        self.notion_version = "2025-09-03"
+        self.notion_version = "2022-06-28"
 
     def _get_headers(self) -> dict[str, str]:
         """Get standard Notion API headers.
