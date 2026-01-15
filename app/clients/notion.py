@@ -126,8 +126,7 @@ class NotionClient:
 
         # Format as UUID: 8-4-4-4-12
         return (
-            f"{clean_id[:8]}-{clean_id[8:12]}-{clean_id[12:16]}-"
-            f"{clean_id[16:20]}-{clean_id[20:]}"
+            f"{clean_id[:8]}-{clean_id[8:12]}-{clean_id[12:16]}-{clean_id[16:20]}-{clean_id[20:]}"
         )
 
     async def update_task_status(self, page_id: str, status: str) -> dict[str, Any]:

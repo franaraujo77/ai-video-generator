@@ -253,7 +253,7 @@ async def test_get_database_pages_success():
     }
 
     with patch.object(client.client, "post", new_callable=AsyncMock, return_value=mock_response):
-        results = await client.get_database_pages("db123")
+        results = await client.get_database_pages("6b870ef4134346168f14367291bc89e6")
 
         assert len(results) == 2
         assert results[0]["id"] == "page1"
@@ -321,7 +321,7 @@ async def test_headers_include_auth_and_version():
     headers = client._get_headers()
 
     assert headers["Authorization"] == "Bearer test_token_abc123"
-    assert headers["Notion-Version"] == "2025-09-03"
+    assert headers["Notion-Version"] == "2022-06-28"
     assert headers["Content-Type"] == "application/json"
 
     await client.close()
