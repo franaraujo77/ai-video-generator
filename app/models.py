@@ -43,7 +43,7 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-class TaskStatus(str, enum.Enum):
+class TaskStatus(enum.Enum):
     """26-status workflow state machine for video generation pipeline.
 
     Status values follow the video generation pipeline order from draft to published.
@@ -130,7 +130,7 @@ IN_PROGRESS_STATUSES = [
 ]
 
 
-class PriorityLevel(str, enum.Enum):
+class PriorityLevel(enum.Enum):
     """Task priority levels for queue management.
 
     Priority determines task execution order within the queue.
@@ -413,8 +413,15 @@ class Task(Base):
     )
 
     # Workflow state (26-status enum)
+    # Uses PostgreSQL native enum type with lowercase values matching Python enum .value
+    # values_callable tells SQLAlchemy to use enum.value (lowercase) not enum.name (UPPERCASE)
     status: Mapped[TaskStatus] = mapped_column(
-        Enum(TaskStatus, native_enum=True, name="taskstatus"),
+        Enum(
+            TaskStatus,
+            native_enum=True,
+            name="taskstatus",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=TaskStatus.DRAFT,
         index=True,
@@ -422,7 +429,12 @@ class Task(Base):
 
     # Priority queue management
     priority: Mapped[PriorityLevel] = mapped_column(
-        Enum(PriorityLevel, native_enum=True, name="prioritylevel"),
+        Enum(
+            PriorityLevel,
+            native_enum=True,
+            name="prioritylevel",
+            values_callable=lambda x: [e.value for e in x],
+        ),
         nullable=False,
         default=PriorityLevel.NORMAL,
     )

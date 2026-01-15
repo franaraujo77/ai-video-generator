@@ -104,6 +104,7 @@ async def check_existing_active_task(
     Returns:
         Existing active task, or None if safe to create new task
     """
+    # Check for tasks with active status (using enum members, SQLAlchemy handles conversion)
     result = await session.execute(
         select(Task)
         .where(Task.notion_page_id == notion_page_id)
@@ -256,14 +257,15 @@ async def enqueue_task(
         return existing_terminal
 
     # Create new task
+    # Use enum members directly - SQLAlchemy will convert to database enum values
     task = Task(
         notion_page_id=notion_page_id,
         channel_id=channel_id,
         title=title,
         topic=topic,
         story_direction=story_direction,
-        status=TaskStatus.QUEUED,
-        priority=priority,
+        status=TaskStatus.QUEUED,  # Use enum member, SQLAlchemy converts to lowercase value
+        priority=priority,  # Use enum member directly
     )
     session.add(task)
 
