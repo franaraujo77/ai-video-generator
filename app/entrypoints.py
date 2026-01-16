@@ -133,8 +133,17 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                     )
 
             elif required_api == "gemini":
-                # Check Gemini quota flag (worker-local) with auto-reset
-                if not worker_state.check_gemini_quota_available():
+                # Check asset generation concurrency limit first (Story 4.6 - cheaper check)
+                if not worker_state.can_claim_asset_task():
+                    rate_limit_hit = True
+                    log.warning(
+                        "asset_concurrency_limit_releasing_task",
+                        task_id=task_id,
+                        active_tasks=worker_state.active_asset_tasks,
+                        max_concurrent=worker_state.max_concurrent_asset_gen
+                    )
+                # Then check Gemini quota flag (worker-local) with auto-reset (Story 4.5)
+                elif not worker_state.check_gemini_quota_available():
                     rate_limit_hit = True
                     log.warning(
                         "gemini_quota_exhausted_releasing_task",
@@ -154,6 +163,17 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         max_concurrent=worker_state.max_concurrent_video
                     )
 
+            elif required_api == "elevenlabs":
+                # Check audio generation concurrency limit (Story 4.6)
+                if not worker_state.can_claim_audio_task():
+                    rate_limit_hit = True
+                    log.warning(
+                        "audio_concurrency_limit_releasing_task",
+                        task_id=task_id,
+                        active_tasks=worker_state.active_audio_tasks,
+                        max_concurrent=worker_state.max_concurrent_audio_gen
+                    )
+
             # If rate limit hit, release task back to queue
             if rate_limit_hit:
                 # Do NOT update task status - leave it in current state
@@ -167,9 +187,13 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 # Return early - don't process this task
                 return
 
-            # Increment video task counter if claiming video task
+            # Increment task counters for tracked API types (Story 4.5: video, Story 4.6: asset/audio)
             if required_api == "kling":
                 worker_state.increment_video_tasks()
+            elif required_api == "gemini":
+                worker_state.increment_asset_tasks()
+            elif required_api == "elevenlabs":
+                worker_state.increment_audio_tasks()
 
             # Transition: claimed → processing (with dynamic status based on task type)
             task.status = TaskStatus.CLAIMED
@@ -177,7 +201,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
 
             # Determine next processing status based on current status
             status_transitions = {
-                TaskStatus.PENDING: TaskStatus.GENERATING_ASSETS,
+                TaskStatus.QUEUED: TaskStatus.GENERATING_ASSETS,
                 TaskStatus.COMPOSITES_READY: TaskStatus.GENERATING_VIDEO,
                 TaskStatus.VIDEO_APPROVED: TaskStatus.GENERATING_AUDIO,
                 TaskStatus.FINAL_REVIEW: TaskStatus.UPLOADING,
@@ -219,9 +243,13 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                     )
             raise
         finally:
-            # Decrement video task counter if this was a video task (Story 4.5)
+            # Decrement task counters for tracked API types (Story 4.5: video, Story 4.6: asset/audio)
             if required_api == "kling":
                 worker_state.decrement_video_tasks()
+            elif required_api == "gemini":
+                worker_state.decrement_asset_tasks()
+            elif required_api == "elevenlabs":
+                worker_state.decrement_audio_tasks()
 
         # Step 3b: Update status to completed (short transaction)
         async with AsyncSessionLocal() as db:  # type: ignore[misc]

@@ -18,6 +18,9 @@ from app.config import (
     get_database_url,
     get_default_voice_id,
     get_fernet_key,
+    get_max_concurrent_asset_gen,
+    get_max_concurrent_audio_gen,
+    get_max_concurrent_video_gen,
     get_workspace_root,
 )
 
@@ -275,3 +278,90 @@ class TestConfigIntegration:
         assert voice_id == "voice123"
         assert configs_dir == "/configs"
         assert workspace == "/workspace"
+
+
+class TestParallelismConfiguration:
+    """Tests for parallelism configuration (Story 4.6)."""
+
+    def test_asset_gen_default_value(self, monkeypatch: pytest.MonkeyPatch):
+        """Test get_max_concurrent_asset_gen returns default of 12."""
+        # GIVEN: MAX_CONCURRENT_ASSET_GEN not set
+        monkeypatch.delenv("MAX_CONCURRENT_ASSET_GEN", raising=False)
+
+        # WHEN: Calling get_max_concurrent_asset_gen
+        result = get_max_concurrent_asset_gen()
+
+        # THEN: Returns default value
+        assert result == 12
+
+    def test_asset_gen_respects_env_var(self, monkeypatch: pytest.MonkeyPatch):
+        """Test get_max_concurrent_asset_gen respects environment variable."""
+        # GIVEN: MAX_CONCURRENT_ASSET_GEN is set
+        monkeypatch.setenv("MAX_CONCURRENT_ASSET_GEN", "8")
+
+        # WHEN: Calling get_max_concurrent_asset_gen
+        result = get_max_concurrent_asset_gen()
+
+        # THEN: Returns configured value
+        assert result == 8
+
+    def test_video_gen_default_value(self, monkeypatch: pytest.MonkeyPatch):
+        """Test get_max_concurrent_video_gen returns default of 3."""
+        # GIVEN: MAX_CONCURRENT_VIDEO_GEN not set
+        monkeypatch.delenv("MAX_CONCURRENT_VIDEO_GEN", raising=False)
+
+        # WHEN: Calling get_max_concurrent_video_gen
+        result = get_max_concurrent_video_gen()
+
+        # THEN: Returns default value (conservative for Kling limit)
+        assert result == 3
+
+    def test_video_gen_respects_env_var(self, monkeypatch: pytest.MonkeyPatch):
+        """Test get_max_concurrent_video_gen respects environment variable."""
+        # GIVEN: MAX_CONCURRENT_VIDEO_GEN is set
+        monkeypatch.setenv("MAX_CONCURRENT_VIDEO_GEN", "5")
+
+        # WHEN: Calling get_max_concurrent_video_gen
+        result = get_max_concurrent_video_gen()
+
+        # THEN: Returns configured value
+        assert result == 5
+
+    def test_audio_gen_default_value(self, monkeypatch: pytest.MonkeyPatch):
+        """Test get_max_concurrent_audio_gen returns default of 6."""
+        # GIVEN: MAX_CONCURRENT_AUDIO_GEN not set
+        monkeypatch.delenv("MAX_CONCURRENT_AUDIO_GEN", raising=False)
+
+        # WHEN: Calling get_max_concurrent_audio_gen
+        result = get_max_concurrent_audio_gen()
+
+        # THEN: Returns default value
+        assert result == 6
+
+    def test_audio_gen_respects_env_var(self, monkeypatch: pytest.MonkeyPatch):
+        """Test get_max_concurrent_audio_gen respects environment variable."""
+        # GIVEN: MAX_CONCURRENT_AUDIO_GEN is set
+        monkeypatch.setenv("MAX_CONCURRENT_AUDIO_GEN", "10")
+
+        # WHEN: Calling get_max_concurrent_audio_gen
+        result = get_max_concurrent_audio_gen()
+
+        # THEN: Returns configured value
+        assert result == 10
+
+    def test_all_parallelism_configs_together(self, monkeypatch: pytest.MonkeyPatch):
+        """Test all parallelism configurations can be loaded together."""
+        # GIVEN: All parallelism env vars are set
+        monkeypatch.setenv("MAX_CONCURRENT_ASSET_GEN", "15")
+        monkeypatch.setenv("MAX_CONCURRENT_VIDEO_GEN", "4")
+        monkeypatch.setenv("MAX_CONCURRENT_AUDIO_GEN", "8")
+
+        # WHEN: Loading all configurations
+        asset = get_max_concurrent_asset_gen()
+        video = get_max_concurrent_video_gen()
+        audio = get_max_concurrent_audio_gen()
+
+        # THEN: All values are returned correctly
+        assert asset == 15
+        assert video == 4
+        assert audio == 8

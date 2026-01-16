@@ -14,6 +14,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from pgqueuer.models import Job
 from pgqueuer import PgQueuer
 
+from app.models import TaskStatus
+
 
 def get_process_video_entrypoint():
     """Helper to get process_video function after registration."""
@@ -45,8 +47,10 @@ async def test_process_video_success():
     mock_job.payload = b"task_456"
 
     # Mock Task model (Story 4.3: Added priority and channel_id)
+    # Story 4.6: Mock status as enum with .value attribute
     mock_task = MagicMock()
-    mock_task.status = "pending"
+    mock_task.status = MagicMock()
+    mock_task.status.value = "pending"
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
 
@@ -112,8 +116,10 @@ async def test_process_video_short_transaction_pattern():
     mock_job.payload = b"task_789"
 
     # Mock Task (Story 4.3: Added priority and channel_id)
+    # Story 4.6: Mock status as enum with .value attribute
     mock_task = MagicMock()
-    mock_task.status = "pending"
+    mock_task.status = MagicMock()
+    mock_task.status.value = "pending"
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
 
@@ -153,8 +159,10 @@ async def test_process_video_logging():
     mock_job.id = 123
     mock_job.payload = b"task_999"
 
+    # Story 4.6: Mock status as enum with .value attribute
     mock_task = MagicMock()
-    mock_task.status = "pending"
+    mock_task.status = MagicMock()
+    mock_task.status.value = "pending"
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
 
@@ -248,13 +256,16 @@ async def test_process_video_status_transitions():
     mock_job.payload = b"task_333"
 
     # Create two separate task mocks (one for each transaction)
+    # Story 4.6: Mock status as enum with .value attribute
     mock_task_1 = MagicMock()
-    mock_task_1.status = "pending"
+    mock_task_1.status = MagicMock()
+    mock_task_1.status.value = "pending"
     mock_task_1.priority = "high"
     mock_task_1.channel_id = "channel1"
 
     mock_task_2 = MagicMock()
-    mock_task_2.status = "processing"
+    mock_task_2.status = MagicMock()
+    mock_task_2.status.value = "processing"
     mock_task_2.priority = "high"
 
     mock_db = AsyncMock()
@@ -269,8 +280,9 @@ async def test_process_video_status_transitions():
 
         await process_video(mock_job)
 
-        # Verify status transitions: pending → claimed → processing → completed
-        assert mock_task_1.status == "processing"  # Last set in first transaction
+        # Verify status transitions: pending → claimed → generating_assets → completed
+        # Story 4.6: Status transitions to appropriate pipeline step based on current state
+        assert mock_task_1.status == TaskStatus.GENERATING_ASSETS  # Last set in first transaction (queued->generating_assets)
         assert mock_task_2.status == "completed"  # Set in second transaction
 
 

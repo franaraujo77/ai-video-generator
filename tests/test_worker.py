@@ -288,14 +288,16 @@ class TestWorkerStateInitialization:
         assert state.active_video_tasks == 0
         assert state.max_concurrent_video == 3  # Default
 
-    @patch.dict(os.environ, {"MAX_CONCURRENT_VIDEO": "5"})
+    @patch.dict(os.environ, {"MAX_CONCURRENT_VIDEO_GEN": "5"})
     def test_initialization_with_env_var(self):
-        """Test WorkerState respects MAX_CONCURRENT_VIDEO env var."""
+        """Test WorkerState respects MAX_CONCURRENT_VIDEO_GEN env var (Story 4.6)."""
         from app.worker import WorkerState
 
         state = WorkerState()
 
-        assert state.max_concurrent_video == 5
+        # Both names should reflect the same value (backward compatibility)
+        assert state.max_concurrent_video_gen == 5
+        assert state.max_concurrent_video == 5  # Legacy alias
 
 
 class TestGeminiQuotaManagement:
@@ -413,3 +415,316 @@ class TestKlingConcurrencyManagement:
 
         # Should NOT be able to claim 4th task
         assert state.can_claim_video_task() is False
+
+
+class TestAssetConcurrencyManagement:
+    """Test asset generation concurrency limiting (Story 4.6, AC1)."""
+
+    def test_can_claim_asset_task_initially_true(self):
+        """Test can claim asset task when counter is 0."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.can_claim_asset_task() is True
+
+    def test_asset_task_default_limit(self):
+        """Test default max_concurrent_asset_gen is 12."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.max_concurrent_asset_gen == 12
+
+    @patch.dict(os.environ, {"MAX_CONCURRENT_ASSET_GEN": "8"})
+    def test_asset_limit_respects_env_var(self):
+        """Test MAX_CONCURRENT_ASSET_GEN env var overrides default."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.max_concurrent_asset_gen == 8
+
+    def test_increment_asset_tasks(self):
+        """Test incrementing asset task counter."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        state.increment_asset_tasks()
+        assert state.active_asset_tasks == 1
+
+        state.increment_asset_tasks()
+        assert state.active_asset_tasks == 2
+
+    def test_decrement_asset_tasks(self):
+        """Test decrementing asset task counter."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.active_asset_tasks = 5
+
+        state.decrement_asset_tasks()
+        assert state.active_asset_tasks == 4
+
+        state.decrement_asset_tasks()
+        assert state.active_asset_tasks == 3
+
+    def test_decrement_asset_never_goes_negative(self):
+        """Test asset counter never goes below zero."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        assert state.active_asset_tasks == 0
+
+        # Decrement when already at 0
+        state.decrement_asset_tasks()
+
+        # Should stay at 0, not go negative
+        assert state.active_asset_tasks == 0
+
+    def test_can_claim_asset_task_at_limit(self):
+        """Test cannot claim when at max concurrent limit."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.max_concurrent_asset_gen = 5
+
+        # Claim 5 tasks (at limit)
+        for _ in range(5):
+            state.increment_asset_tasks()
+
+        # Should NOT be able to claim 6th task
+        assert state.can_claim_asset_task() is False
+
+    def test_can_claim_asset_task_under_limit(self):
+        """Test can claim when under limit."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.max_concurrent_asset_gen = 5
+
+        # Claim 3 tasks (under limit)
+        for _ in range(3):
+            state.increment_asset_tasks()
+
+        # Should still be able to claim more
+        assert state.can_claim_asset_task() is True
+
+
+class TestAudioConcurrencyManagement:
+    """Test audio generation concurrency limiting (Story 4.6, AC2)."""
+
+    def test_can_claim_audio_task_initially_true(self):
+        """Test can claim audio task when counter is 0."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.can_claim_audio_task() is True
+
+    def test_audio_task_default_limit(self):
+        """Test default max_concurrent_audio_gen is 6."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.max_concurrent_audio_gen == 6
+
+    @patch.dict(os.environ, {"MAX_CONCURRENT_AUDIO_GEN": "10"})
+    def test_audio_limit_respects_env_var(self):
+        """Test MAX_CONCURRENT_AUDIO_GEN env var overrides default."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.max_concurrent_audio_gen == 10
+
+    def test_increment_audio_tasks(self):
+        """Test incrementing audio task counter."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        state.increment_audio_tasks()
+        assert state.active_audio_tasks == 1
+
+        state.increment_audio_tasks()
+        assert state.active_audio_tasks == 2
+
+    def test_decrement_audio_tasks(self):
+        """Test decrementing audio task counter."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.active_audio_tasks = 4
+
+        state.decrement_audio_tasks()
+        assert state.active_audio_tasks == 3
+
+        state.decrement_audio_tasks()
+        assert state.active_audio_tasks == 2
+
+    def test_decrement_audio_never_goes_negative(self):
+        """Test audio counter never goes below zero."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        assert state.active_audio_tasks == 0
+
+        # Decrement when already at 0
+        state.decrement_audio_tasks()
+
+        # Should stay at 0, not go negative
+        assert state.active_audio_tasks == 0
+
+    def test_can_claim_audio_task_at_limit(self):
+        """Test cannot claim when at max concurrent limit."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.max_concurrent_audio_gen = 3
+
+        # Claim 3 tasks (at limit)
+        for _ in range(3):
+            state.increment_audio_tasks()
+
+        # Should NOT be able to claim 4th task
+        assert state.can_claim_audio_task() is False
+
+    def test_can_claim_audio_task_under_limit(self):
+        """Test can claim when under limit."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.max_concurrent_audio_gen = 6
+
+        # Claim 4 tasks (under limit)
+        for _ in range(4):
+            state.increment_audio_tasks()
+
+        # Should still be able to claim more
+        assert state.can_claim_audio_task() is True
+
+
+class TestConcurrencyExceptionHandling:
+    """Test concurrency counters properly decrement on exceptions (Story 4.6)."""
+
+    def test_asset_counter_decrements_on_exception(self):
+        """Test that asset counter decrements in finally block even when exception occurs."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.increment_asset_tasks()
+        assert state.active_asset_tasks == 1
+
+        # Simulate exception during processing
+        try:
+            state.increment_asset_tasks()  # Claim another
+            assert state.active_asset_tasks == 2
+            raise RuntimeError("Asset generation failed")
+        except RuntimeError:
+            pass
+        finally:
+            state.decrement_asset_tasks()
+
+        # Counter should be decremented even though exception occurred
+        assert state.active_asset_tasks == 1
+
+    def test_video_counter_decrements_on_exception(self):
+        """Test that video counter decrements in finally block even when exception occurs."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.increment_video_tasks()
+        assert state.active_video_tasks == 1
+
+        # Simulate exception during processing
+        try:
+            raise RuntimeError("Video generation failed")
+        except RuntimeError:
+            pass
+        finally:
+            state.decrement_video_tasks()
+
+        # Counter should be back to 0
+        assert state.active_video_tasks == 0
+
+    def test_audio_counter_decrements_on_exception(self):
+        """Test that audio counter decrements in finally block even when exception occurs."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.increment_audio_tasks()
+        assert state.active_audio_tasks == 1
+
+        # Simulate exception during processing
+        try:
+            raise RuntimeError("Audio generation failed")
+        except RuntimeError:
+            pass
+        finally:
+            state.decrement_audio_tasks()
+
+        # Counter should be back to 0
+        assert state.active_audio_tasks == 0
+
+
+class TestConfigReload:
+    """Test dynamic configuration reload (Story 4.6, AC4)."""
+
+    @patch.dict(os.environ, {"MAX_CONCURRENT_ASSET_GEN": "10"})
+    def test_reload_config_updates_limits(self):
+        """Test that reload_config updates all parallelism limits."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        assert state.max_concurrent_asset_gen == 10
+
+        # Change environment variable
+        with patch.dict(os.environ, {"MAX_CONCURRENT_ASSET_GEN": "15"}):
+            state.reload_config()
+            # Should now reflect new value
+            assert state.max_concurrent_asset_gen == 15
+
+    @patch.dict(os.environ, {
+        "MAX_CONCURRENT_ASSET_GEN": "8",
+        "MAX_CONCURRENT_VIDEO_GEN": "2",
+        "MAX_CONCURRENT_AUDIO_GEN": "4"
+    })
+    def test_reload_config_updates_all_limits(self):
+        """Test that reload_config updates all three parallelism limits."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        assert state.max_concurrent_asset_gen == 8
+        assert state.max_concurrent_video_gen == 2
+        assert state.max_concurrent_audio_gen == 4
+
+        # Change all environment variables
+        with patch.dict(os.environ, {
+            "MAX_CONCURRENT_ASSET_GEN": "16",
+            "MAX_CONCURRENT_VIDEO_GEN": "5",
+            "MAX_CONCURRENT_AUDIO_GEN": "10"
+        }):
+            state.reload_config()
+
+            # All should reflect new values
+            assert state.max_concurrent_asset_gen == 16
+            assert state.max_concurrent_video_gen == 5
+            assert state.max_concurrent_audio_gen == 10
+
+    def test_reload_config_updates_legacy_attribute(self):
+        """Test that reload_config also updates max_concurrent_video for backward compatibility."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        original = state.max_concurrent_video
+
+        # Change video limit
+        with patch.dict(os.environ, {"MAX_CONCURRENT_VIDEO_GEN": "7"}):
+            state.reload_config()
+
+            # Both attributes should be updated
+            assert state.max_concurrent_video_gen == 7
+            assert state.max_concurrent_video == 7  # Legacy attribute

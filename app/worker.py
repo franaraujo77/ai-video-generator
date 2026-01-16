@@ -48,13 +48,13 @@ asyncpg_pool: asyncpg.Pool | None = None
 
 
 class WorkerState:
-    """Worker-local state for rate limit tracking (Story 4.5).
+    """Worker-local state for rate limit and concurrency tracking (Stories 4.5, 4.6).
 
-    Each worker maintains its own in-memory state for Gemini quota exhaustion
-    and Kling concurrency limiting. This state is NOT shared between workers
+    Each worker maintains its own in-memory state for API rate limits and
+    per-stage parallelism control. This state is NOT shared between workers
     (intentionally worker-local).
 
-    Attributes:
+    Rate Limit Tracking (Story 4.5):
         gemini_quota_exhausted: Flag indicating Gemini API quota hit 429.
             Set to True on first 429, prevents claiming asset generation tasks.
             Reset to False after midnight PST automatic check.
@@ -62,25 +62,54 @@ class WorkerState:
         gemini_quota_reset_time: Datetime when Gemini quota resets (midnight PST).
             Set when marking quota exhausted, checked for auto-reset.
 
+    Concurrency Tracking (Story 4.6):
+        active_asset_tasks: Count of currently processing asset generation tasks.
+            Incremented when claiming asset task, decremented on completion/error.
+
         active_video_tasks: Count of currently processing video generation tasks.
             Incremented when claiming video task, decremented on completion/error.
-            Prevents claiming new video tasks when at max_concurrent_video limit.
 
-        max_concurrent_video: Maximum parallel video generation tasks per worker.
-            Default: 3 (Kling API concurrency limit)
-            Configurable via environment variable: MAX_CONCURRENT_VIDEO
+        active_audio_tasks: Count of currently processing audio generation tasks.
+            Incremented when claiming audio task, decremented on completion/error.
+
+        max_concurrent_asset_gen: Maximum parallel asset tasks per worker.
+            Default: 12 (Gemini, no published concurrency limit)
+
+        max_concurrent_video_gen: Maximum parallel video tasks per worker.
+            Default: 3 (Kling API has 10 concurrent request global limit)
+
+        max_concurrent_audio_gen: Maximum parallel audio tasks per worker.
+            Default: 6 (ElevenLabs, no published concurrency limit)
 
     Note:
         YouTube quota is tracked in database (YouTubeQuotaUsage table).
-        Gemini/Kling limits are worker-local (transient API rate limits).
+        Gemini/Kling/ElevenLabs limits are worker-local (transient API limits).
     """
 
     def __init__(self):
-        """Initialize worker state."""
+        """Initialize worker state with rate limit and concurrency tracking."""
+        from app.config import (
+            get_max_concurrent_asset_gen,
+            get_max_concurrent_audio_gen,
+            get_max_concurrent_video_gen,
+        )
+
+        # Rate limit tracking (Story 4.5)
         self.gemini_quota_exhausted: bool = False
         self.gemini_quota_reset_time: datetime | None = None
+
+        # Concurrency counters (Story 4.6)
+        self.active_asset_tasks: int = 0
         self.active_video_tasks: int = 0
-        self.max_concurrent_video: int = int(os.getenv("MAX_CONCURRENT_VIDEO", "3"))
+        self.active_audio_tasks: int = 0
+
+        # Concurrency limits from config (Story 4.6)
+        self.max_concurrent_asset_gen: int = get_max_concurrent_asset_gen()
+        self.max_concurrent_video_gen: int = get_max_concurrent_video_gen()
+        self.max_concurrent_audio_gen: int = get_max_concurrent_audio_gen()
+
+        # Legacy support: max_concurrent_video for backward compatibility
+        self.max_concurrent_video: int = self.max_concurrent_video_gen
 
     def mark_gemini_quota_exhausted(self) -> None:
         """Mark Gemini quota as exhausted (resets at midnight PST).
@@ -159,6 +188,120 @@ class WorkerState:
             active_tasks=self.active_video_tasks,
             max_concurrent=self.max_concurrent_video
         )
+
+    def can_claim_asset_task(self) -> bool:
+        """Check if worker can claim another asset generation task.
+
+        Returns:
+            True if under concurrency limit, False if at max.
+
+        Story: 4.6 - Parallel Task Execution (AC1)
+        """
+        return self.active_asset_tasks < self.max_concurrent_asset_gen
+
+    def increment_asset_tasks(self) -> None:
+        """Increment active asset task counter.
+
+        Called when claiming an asset generation task.
+
+        Story: 4.6 - Parallel Task Execution (AC1)
+        """
+        self.active_asset_tasks += 1
+        log.debug(
+            "asset_tasks_incremented",
+            active_tasks=self.active_asset_tasks,
+            max_concurrent=self.max_concurrent_asset_gen
+        )
+
+    def decrement_asset_tasks(self) -> None:
+        """Decrement active asset task counter.
+
+        Called when asset generation task completes or fails.
+        Prevents counter from going negative.
+
+        Story: 4.6 - Parallel Task Execution (AC1)
+        """
+        self.active_asset_tasks = max(0, self.active_asset_tasks - 1)
+        log.debug(
+            "asset_tasks_decremented",
+            active_tasks=self.active_asset_tasks,
+            max_concurrent=self.max_concurrent_asset_gen
+        )
+
+    def can_claim_audio_task(self) -> bool:
+        """Check if worker can claim another audio generation task.
+
+        Returns:
+            True if under concurrency limit, False if at max.
+
+        Story: 4.6 - Parallel Task Execution (AC2)
+        """
+        return self.active_audio_tasks < self.max_concurrent_audio_gen
+
+    def increment_audio_tasks(self) -> None:
+        """Increment active audio task counter.
+
+        Called when claiming an audio generation task.
+
+        Story: 4.6 - Parallel Task Execution (AC2)
+        """
+        self.active_audio_tasks += 1
+        log.debug(
+            "audio_tasks_incremented",
+            active_tasks=self.active_audio_tasks,
+            max_concurrent=self.max_concurrent_audio_gen
+        )
+
+    def decrement_audio_tasks(self) -> None:
+        """Decrement active audio task counter.
+
+        Called when audio generation task completes or fails.
+        Prevents counter from going negative.
+
+        Story: 4.6 - Parallel Task Execution (AC2)
+        """
+        self.active_audio_tasks = max(0, self.active_audio_tasks - 1)
+        log.debug(
+            "audio_tasks_decremented",
+            active_tasks=self.active_audio_tasks,
+            max_concurrent=self.max_concurrent_audio_gen
+        )
+
+    def reload_config(self) -> None:
+        """Reload parallelism configuration without worker restart.
+
+        This allows dynamic configuration changes by re-reading environment
+        variables. Call periodically (e.g., every 60s) or via signal handler.
+
+        Story: 4.6 - Parallel Task Execution (AC4)
+        """
+        from app.config import (
+            get_max_concurrent_asset_gen,
+            get_max_concurrent_audio_gen,
+            get_max_concurrent_video_gen,
+        )
+
+        old_asset = self.max_concurrent_asset_gen
+        old_video = self.max_concurrent_video_gen
+        old_audio = self.max_concurrent_audio_gen
+
+        self.max_concurrent_asset_gen = get_max_concurrent_asset_gen()
+        self.max_concurrent_video_gen = get_max_concurrent_video_gen()
+        self.max_concurrent_audio_gen = get_max_concurrent_audio_gen()
+
+        # Update legacy attribute for backward compatibility
+        self.max_concurrent_video = self.max_concurrent_video_gen
+
+        # Log only if values changed
+        if (old_asset != self.max_concurrent_asset_gen or
+            old_video != self.max_concurrent_video_gen or
+            old_audio != self.max_concurrent_audio_gen):
+            log.info(
+                "worker_config_reloaded",
+                asset_gen=self.max_concurrent_asset_gen,
+                video_gen=self.max_concurrent_video_gen,
+                audio_gen=self.max_concurrent_audio_gen
+            )
 
 
 # Global worker state instance

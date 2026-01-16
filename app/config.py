@@ -175,3 +175,74 @@ def get_notion_sync_interval() -> int:
             using_default=60,
         )
         return 60
+
+
+# Parallelism defaults (Story 4.6)
+DEFAULT_MAX_CONCURRENT_ASSET = 12  # Gemini: no published limit, conservative
+DEFAULT_MAX_CONCURRENT_VIDEO = 3   # Kling: 10 global limit, 3 workers × 3 = 9 total
+DEFAULT_MAX_CONCURRENT_AUDIO = 6   # ElevenLabs: no published limit, conservative
+
+
+def get_max_concurrent_asset_gen() -> int:
+    """Get max concurrent asset generation tasks per worker.
+
+    This limits parallelism for Gemini asset generation within each worker.
+    Rate limiting (quota exhaustion) is handled separately via WorkerState.
+
+    Environment Variable:
+        MAX_CONCURRENT_ASSET_GEN: Maximum parallel asset tasks (default: 12)
+
+    Returns:
+        Maximum concurrent asset generation tasks.
+
+    Note:
+        Default of 12 is conservative for Gemini API, which has daily quota
+        limits but no published concurrency limits. Each worker enforces this
+        limit independently (worker-local state, not global).
+
+    Story: 4.6 - Parallel Task Execution (AC4)
+    """
+    return int(os.getenv("MAX_CONCURRENT_ASSET_GEN", str(DEFAULT_MAX_CONCURRENT_ASSET)))
+
+
+def get_max_concurrent_video_gen() -> int:
+    """Get max concurrent video generation tasks per worker.
+
+    This limits parallelism for Kling video generation within each worker.
+    Kling API has a GLOBAL limit of 10 concurrent requests across all clients.
+
+    Environment Variable:
+        MAX_CONCURRENT_VIDEO_GEN: Maximum parallel video tasks (default: 3)
+
+    Returns:
+        Maximum concurrent video generation tasks.
+
+    Note:
+        Default of 3 per worker is conservative. With 3 workers, this gives
+        9 concurrent videos system-wide (under Kling's 10 limit). Each worker
+        enforces this limit independently (worker-local state).
+
+    Story: 4.6 - Parallel Task Execution (AC2)
+    """
+    return int(os.getenv("MAX_CONCURRENT_VIDEO_GEN", str(DEFAULT_MAX_CONCURRENT_VIDEO)))
+
+
+def get_max_concurrent_audio_gen() -> int:
+    """Get max concurrent audio generation tasks per worker.
+
+    This limits parallelism for ElevenLabs audio generation within each worker.
+    ElevenLabs has character-based pricing with no published concurrency limits.
+
+    Environment Variable:
+        MAX_CONCURRENT_AUDIO_GEN: Maximum parallel audio tasks (default: 6)
+
+    Returns:
+        Maximum concurrent audio generation tasks.
+
+    Note:
+        Default of 6 is conservative for ElevenLabs API. Each worker enforces
+        this limit independently (worker-local state, not global).
+
+    Story: 4.6 - Parallel Task Execution (AC2)
+    """
+    return int(os.getenv("MAX_CONCURRENT_AUDIO_GEN", str(DEFAULT_MAX_CONCURRENT_AUDIO)))
