@@ -107,6 +107,7 @@ class TaskStatus(enum.Enum):
     VIDEO_ERROR = "video_error"
     AUDIO_ERROR = "audio_error"
     SFX_ERROR = "sfx_error"
+    ASSEMBLY_ERROR = "assembly_error"
     UPLOAD_ERROR = "upload_error"
 
 
@@ -479,6 +480,21 @@ class Task(Base):
         nullable=False,
         default=0.0,
         server_default="0.0",
+    )
+
+    # Final video output (Story 3.8 - Video Assembly)
+    # Path to final assembled 90-second documentary MP4 file
+    # Populated after successful FFmpeg assembly step
+    final_video_path: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    # Final video duration in seconds (Story 3.8 - Video Assembly)
+    # Measured duration of assembled final video (~90 seconds typical)
+    # Populated after successful FFmpeg assembly step
+    final_video_duration: Mapped[float | None] = mapped_column(
+        nullable=True,
     )
 
     # Timestamps (UTC timezone-aware)

@@ -176,7 +176,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             _update_notion_status_async(notion_page_id, "Assets Ready")
         )
 
-        def handle_notion_task_done(task):
+        def handle_notion_task_done(task: asyncio.Task[None]) -> None:
             try:
                 task.result()  # Re-raise exception if occurred
             except Exception:
