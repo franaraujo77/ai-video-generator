@@ -49,8 +49,8 @@ class TestRunCLIScript:
         # Execute
         result = await run_cli_script(
             "generate_asset.py",
-            ["--output", "/tmp/test.png"],
-            timeout=60,  # noqa: S108
+            ["--output", "/tmp/test.png"],  # noqa: S108
+            timeout=60,
         )
 
         # Verify
@@ -153,8 +153,8 @@ class TestRunCLIScript:
         # Execute
         await run_cli_script(
             "generate_asset.py",
-            ["--prompt", "A forest", "--output", "/tmp/asset.png"],
-            timeout=60,  # noqa: S108
+            ["--prompt", "A forest", "--output", "/tmp/asset.png"],  # noqa: S108
+            timeout=60,
         )
 
         # Verify command construction
@@ -305,8 +305,8 @@ class TestRunCLIScript:
         # Execute with sensitive args
         await run_cli_script(
             "generate_asset.py",
-            ["--api-key", "secret123", "--output", "/tmp/test.png"],
-            timeout=60,  # noqa: S108
+            ["--api-key", "secret123", "--output", "/tmp/test.png"],  # noqa: S108
+            timeout=60,
         )
 
         # Verify log.info called with sanitized args
