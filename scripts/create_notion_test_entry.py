@@ -55,9 +55,9 @@ async def create_test_entry():
 
         if response.status_code == 200:
             page = response.json()
-            print(f'✅ Created new Notion page: {page["id"]}')
+            print(f"✅ Created new Notion page: {page['id']}")
             print(f"   Title: Test Sync Entry {test_id}")
-            print(f'   URL: {page["url"]}')
+            print(f"   URL: {page['url']}")
             print(f"\n⏱️  Sync runs every 60 seconds. Check database in ~1 minute.")
         else:
             print(f"❌ Failed to create page: {response.status_code}")

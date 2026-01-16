@@ -84,7 +84,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
             patch(
                 "app.workers.video_generation_worker.track_api_cost", new_callable=AsyncMock
             ) as mock_track_cost,
@@ -142,7 +144,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
         ):
             # Mock service to raise CLI error
             mock_service = mock_service_class.return_value
@@ -170,7 +174,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
         ):
             # Mock service to raise timeout
             mock_service = mock_service_class.return_value
@@ -194,7 +200,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
         ):
             # Mock service to raise unexpected error
             mock_service = mock_service_class.return_value
@@ -237,7 +245,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
@@ -261,7 +271,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
             ) as mock_notion,
@@ -292,7 +304,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.VideoGenerationService"
+            ) as mock_service_class,
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
