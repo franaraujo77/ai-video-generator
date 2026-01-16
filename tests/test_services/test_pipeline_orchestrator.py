@@ -61,11 +61,15 @@ class TestExecutePipeline:
             }
 
             # Mock load_step_completion_metadata (returns empty dict - no steps complete)
-            with patch.object(orchestrator, "load_step_completion_metadata", new_callable=AsyncMock) as mock_metadata:
+            with patch.object(
+                orchestrator, "load_step_completion_metadata", new_callable=AsyncMock
+            ) as mock_metadata:
                 mock_metadata.return_value = {}
 
                 # Mock all execute_step calls to succeed
-                with patch.object(orchestrator, "execute_step", new_callable=AsyncMock) as mock_step:
+                with patch.object(
+                    orchestrator, "execute_step", new_callable=AsyncMock
+                ) as mock_step:
                     mock_step.return_value = StepCompletion(
                         step=PipelineStep.ASSET_GENERATION,
                         completed=True,
@@ -75,14 +79,30 @@ class TestExecutePipeline:
                     # Mock status updates
                     with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock):
                         # Mock save_step_completion
-                        with patch.object(orchestrator, "save_step_completion", new_callable=AsyncMock):
+                        with patch.object(
+                            orchestrator, "save_step_completion", new_callable=AsyncMock
+                        ):
                             # Mock performance tracking methods
-                            with patch.object(orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock):
-                                with patch.object(orchestrator, "_update_pipeline_end_time", new_callable=AsyncMock):
-                                    with patch.object(orchestrator, "calculate_pipeline_cost", new_callable=AsyncMock) as mock_cost:
+                            with patch.object(
+                                orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock
+                            ):
+                                with patch.object(
+                                    orchestrator,
+                                    "_update_pipeline_end_time",
+                                    new_callable=AsyncMock,
+                                ):
+                                    with patch.object(
+                                        orchestrator,
+                                        "calculate_pipeline_cost",
+                                        new_callable=AsyncMock,
+                                    ) as mock_cost:
                                         mock_cost.return_value = 8.45
 
-                                        with patch.object(orchestrator, "_update_pipeline_cost", new_callable=AsyncMock):
+                                        with patch.object(
+                                            orchestrator,
+                                            "_update_pipeline_cost",
+                                            new_callable=AsyncMock,
+                                        ):
                                             # Execute pipeline
                                             await orchestrator.execute_pipeline()
 
@@ -116,15 +136,23 @@ class TestExecutePipeline:
             }
 
             # Mock load_step_completion_metadata
-            with patch.object(orchestrator, "load_step_completion_metadata", new_callable=AsyncMock) as mock_metadata:
+            with patch.object(
+                orchestrator, "load_step_completion_metadata", new_callable=AsyncMock
+            ) as mock_metadata:
                 mock_metadata.return_value = {}
 
-                with patch.object(orchestrator, "execute_step", new_callable=AsyncMock) as mock_step:
+                with patch.object(
+                    orchestrator, "execute_step", new_callable=AsyncMock
+                ) as mock_step:
                     # First step fails
                     mock_step.side_effect = Exception("Gemini API timeout")
 
-                    with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock) as mock_status:
-                        with patch.object(orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock):
+                    with patch.object(
+                        orchestrator, "update_task_status", new_callable=AsyncMock
+                    ) as mock_status:
+                        with patch.object(
+                            orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock
+                        ):
                             await orchestrator.execute_pipeline()
 
                             # Verify error status was set
@@ -143,7 +171,9 @@ class TestExecuteStep:
         """Test asset generation step executes successfully."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service_class:
+        with patch(
+            "app.services.pipeline_orchestrator.AssetGenerationService"
+        ) as mock_service_class:
             mock_service = Mock()
             mock_service_class.return_value = mock_service
             mock_service.create_asset_manifest.return_value = Mock(assets=[Mock()] * 22)
@@ -170,11 +200,15 @@ class TestExecuteStep:
         """Test video generation step executes successfully."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        with patch("app.services.pipeline_orchestrator.VideoGenerationService") as mock_service_class:
+        with patch(
+            "app.services.pipeline_orchestrator.VideoGenerationService"
+        ) as mock_service_class:
             mock_service = Mock()
             mock_service_class.return_value = mock_service
             mock_service.create_video_manifest.return_value = Mock(clips=[Mock()] * 18)
-            mock_service.generate_videos = AsyncMock(return_value={"generated": 16, "skipped": 2, "total": 18})
+            mock_service.generate_videos = AsyncMock(
+                return_value={"generated": 16, "skipped": 2, "total": 18}
+            )
 
             completion = await orchestrator.execute_step(
                 PipelineStep.VIDEO_GENERATION,
@@ -196,7 +230,9 @@ class TestExecuteStep:
         """Test narration generation step executes successfully."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        with patch("app.services.pipeline_orchestrator.NarrationGenerationService") as mock_service_class:
+        with patch(
+            "app.services.pipeline_orchestrator.NarrationGenerationService"
+        ) as mock_service_class:
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
             mock_service.generate_narrations = AsyncMock(return_value={"generated": 18})
@@ -256,7 +292,9 @@ class TestExecuteStep:
         """Test execute_step lets exceptions propagate (no internal error handling)."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service_class:
+        with patch(
+            "app.services.pipeline_orchestrator.AssetGenerationService"
+        ) as mock_service_class:
             # Use regular Mock since create_asset_manifest is synchronous
             mock_service = Mock()
             mock_service_class.return_value = mock_service
@@ -307,7 +345,9 @@ class TestPartialResume:
 
         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session.get = AsyncMock(return_value=task)
@@ -350,7 +390,9 @@ class TestPartialResume:
 
         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session.get = AsyncMock(return_value=task)
@@ -397,7 +439,9 @@ class TestErrorClassification:
         """Test connection errors classified as transient."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        is_transient, error_type = orchestrator.classify_error(ConnectionError("Network unreachable"))
+        is_transient, error_type = orchestrator.classify_error(
+            ConnectionError("Network unreachable")
+        )
 
         assert is_transient is True
         assert error_type == "connection_error"
@@ -406,7 +450,9 @@ class TestErrorClassification:
         """Test rate limit errors classified as transient."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        is_transient, error_type = orchestrator.classify_error(Exception("HTTP 429 rate limit exceeded"))
+        is_transient, error_type = orchestrator.classify_error(
+            Exception("HTTP 429 rate limit exceeded")
+        )
 
         assert is_transient is True
         assert error_type == "transient_api_error"
@@ -415,7 +461,9 @@ class TestErrorClassification:
         """Test file not found errors classified as permanent."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        is_transient, error_type = orchestrator.classify_error(FileNotFoundError("Missing input file"))
+        is_transient, error_type = orchestrator.classify_error(
+            FileNotFoundError("Missing input file")
+        )
 
         assert is_transient is False
         assert error_type == "file_not_found"
@@ -468,7 +516,9 @@ class TestStatusUpdates:
 
         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session_class.return_value.__aexit__.return_value = AsyncMock()
@@ -511,7 +561,9 @@ class TestStatusUpdates:
 
         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session_class.return_value.__aexit__.return_value = AsyncMock()
@@ -561,7 +613,9 @@ class TestPerformanceTracking:
 
         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session.get = AsyncMock(return_value=task)
@@ -596,7 +650,9 @@ class TestPerformanceTracking:
 
         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session_class.return_value.__aexit__.return_value = AsyncMock()
