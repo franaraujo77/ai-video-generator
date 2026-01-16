@@ -677,7 +677,9 @@ class TestPerformanceTracking:
             with patch("asyncio.create_task") as mock_create_task:
                 # Mock create_task to return a mock task
                 mock_task = AsyncMock()
-                mock_task.result = Mock(return_value=None)  # result() should return None, not a coroutine
+                mock_task.result = Mock(
+                    return_value=None
+                )  # result() should return None, not a coroutine
                 mock_task.add_done_callback = Mock()
                 mock_create_task.return_value = mock_task
 
