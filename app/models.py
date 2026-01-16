@@ -19,18 +19,21 @@ Example:
 
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
+    CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
     Index,
     Integer,
     LargeBinary,
+    PrimaryKeyConstraint,
     String,
     Text,
 )
@@ -626,4 +629,108 @@ class NotionWebhookEvent(Base):
         return (
             f"<NotionWebhookEvent(event_id={self.event_id!r}, "
             f"event_type={self.event_type!r}, page_id={self.page_id!r})>"
+        )
+
+
+class YouTubeQuotaUsage(Base):
+    """YouTube Data API v3 quota tracking per channel per day.
+
+    Tracks YouTube API quota consumption to prevent exceeding the 10,000 units/day
+    limit. Used for rate-aware task selection (Story 4.5) - workers check quota
+    availability before claiming upload tasks.
+
+    Composite Primary Key:
+        (channel_id, date) - One row per channel per day for quota isolation.
+
+    Quota Costs (YouTube Data API v3):
+        - Upload video: 1,600 units
+        - Update video: 50 units
+        - List videos: 1 unit
+        - Search: 100 units
+
+    Quota Reset:
+        YouTube quotas reset at midnight Pacific Time (PST/PDT) daily.
+
+    Alert Thresholds:
+        - 80% usage: WARNING alert to Discord webhook
+        - 100% usage: CRITICAL alert to Discord webhook
+
+    Attributes:
+        channel_id: Foreign key to channels.id (part of composite PK).
+        date: Date of quota tracking (part of composite PK).
+        units_used: Accumulated quota units used today (default: 0).
+        daily_limit: Daily quota limit in units (default: 10,000).
+
+    Indexes:
+        - Composite PK on (channel_id, date) for fast lookups
+        - Index on date for cleanup queries (delete rows older than 7 days)
+
+    Constraints:
+        - units_used >= 0 (no negative usage)
+        - daily_limit > 0 (positive limit required)
+
+    Usage:
+        # Check quota before upload
+        quota = await db.get(YouTubeQuotaUsage, (channel_id, date.today()))
+        if quota and (quota.units_used + 1600) > quota.daily_limit:
+            # Quota exhausted - skip upload task
+            ...
+
+    Related:
+        - Story 4.5: Rate Limit Aware Task Selection
+        - FR42: Pre-claim quota verification
+        - FR34: API quota monitoring
+    """
+
+    __tablename__ = "youtube_quota_usage"
+
+    # Composite primary key: (channel_id, date)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+
+    date: Mapped[date] = mapped_column(
+        Date,
+        primary_key=True,
+        nullable=False,
+    )
+
+    # Quota tracking
+    units_used: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    daily_limit: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=10000,
+        server_default="10000",
+    )
+
+    # Relationship to channel
+    channel: Mapped["Channel"] = relationship("Channel")
+
+    __table_args__ = (
+        # Composite primary key constraint (explicit name)
+        PrimaryKeyConstraint("channel_id", "date", name="pk_youtube_quota"),
+        # Index for cleanup queries (delete WHERE date < CURRENT_DATE - 7)
+        Index("ix_youtube_quota_date", "date"),
+        # Check constraints for data integrity
+        CheckConstraint("units_used >= 0", name="ck_youtube_quota_non_negative"),
+        CheckConstraint("daily_limit > 0", name="ck_youtube_quota_limit_positive"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        percentage = (self.units_used / self.daily_limit * 100) if self.daily_limit > 0 else 0
+        return (
+            f"<YouTubeQuotaUsage(channel_id={self.channel_id!s:.8}, "
+            f"date={self.date!s}, usage={self.units_used}/{self.daily_limit} "
+            f"({percentage:.1f}%))>"
         )
