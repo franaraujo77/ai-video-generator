@@ -106,6 +106,7 @@ class TaskStatus(enum.Enum):
     ASSET_ERROR = "asset_error"
     VIDEO_ERROR = "video_error"
     AUDIO_ERROR = "audio_error"
+    SFX_ERROR = "sfx_error"
     UPLOAD_ERROR = "upload_error"
 
 
@@ -417,6 +418,17 @@ class Task(Base):
     # Stored as JSONB for structured querying in PostgreSQL
     # SQLite (for tests) will use JSON TEXT type
     narration_scripts: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    # Sound effects descriptions (Story 3.7)
+    # List of 18 SFX description strings, one per video clip
+    # Describes environmental ambience: forest sounds, wind, water, etc.
+    # NOT narration - this is ambient environmental audio
+    # Stored as JSONB for structured querying in PostgreSQL
+    # SQLite (for tests) will use JSON TEXT type
+    sfx_descriptions: Mapped[list[str] | None] = mapped_column(
         JSON,
         nullable=True,
     )
