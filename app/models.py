@@ -412,6 +412,26 @@ class Task(Base):
         nullable=False,
     )
 
+    # Narration scripts (Story 3.6)
+    # List of 18 narration text strings, one per video clip
+    # Stored as JSONB for structured querying in PostgreSQL
+    # SQLite (for tests) will use JSON TEXT type
+    narration_scripts: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    # Sound effects descriptions (Story 3.7)
+    # List of 18 SFX description strings, one per video clip
+    # Describes environmental ambience: forest sounds, wind, water, etc.
+    # NOT narration - this is ambient environmental audio
+    # Stored as JSONB for structured querying in PostgreSQL
+    # SQLite (for tests) will use JSON TEXT type
+    sfx_descriptions: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
     # Workflow state (26-status enum)
     # Uses PostgreSQL native enum type with lowercase values matching Python enum .value
     # values_callable tells SQLAlchemy to use enum.value (lowercase) not enum.name (UPPERCASE)
@@ -448,6 +468,54 @@ class Task(Base):
     # YouTube output
     youtube_url: Mapped[str | None] = mapped_column(
         String(255),
+        nullable=True,
+    )
+
+    # Cost tracking (Epic 8 - Story 3.3 requirement)
+    # Running total of all API costs for this task (Gemini, Kling, ElevenLabs)
+    # Updated incrementally as each pipeline step completes
+    total_cost_usd: Mapped[float] = mapped_column(
+        nullable=False,
+        default=0.0,
+        server_default="0.0",
+    )
+
+    # Final video output (Story 3.8 - Video Assembly)
+    # Path to final assembled 90-second documentary MP4 file
+    # Populated after successful FFmpeg assembly step
+    final_video_path: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+    )
+
+    # Final video duration in seconds (Story 3.8 - Video Assembly)
+    # Measured duration of assembled final video (~90 seconds typical)
+    # Populated after successful FFmpeg assembly step
+    final_video_duration: Mapped[float | None] = mapped_column(
+        nullable=True,
+    )
+
+    # Pipeline orchestration metadata (Story 3.9)
+    # Tracks step completion for partial resume and performance monitoring
+    step_completion_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    # Pipeline timing and performance tracking (Story 3.9)
+    # Used for NFR-P1 compliance (≤2 hours target) and cost analysis
+    pipeline_start_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    pipeline_end_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    pipeline_duration_seconds: Mapped[float | None] = mapped_column(
+        nullable=True,
+    )
+    pipeline_cost_usd: Mapped[float | None] = mapped_column(
         nullable=True,
     )
 

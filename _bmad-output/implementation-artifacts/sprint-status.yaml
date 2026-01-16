@@ -61,21 +61,21 @@ development_status:
   epic-2-retrospective: done
 
   # Epic 3: Video Generation Pipeline
-  epic-3: backlog
-  3-1-cli-script-wrapper-async-execution: backlog
-  3-2-filesystem-organization-path-helpers: backlog
-  3-3-asset-generation-step-gemini: backlog
-  3-4-composite-creation-step: backlog
-  3-5-video-clip-generation-step-kling: backlog
-  3-6-narration-generation-step-elevenlabs: backlog
-  3-7-sound-effects-generation-step: backlog
-  3-8-video-assembly-step-ffmpeg: backlog
-  3-9-end-to-end-pipeline-orchestration: backlog
+  epic-3: in-progress
+  3-1-cli-script-wrapper-async-execution: done
+  3-2-filesystem-organization-path-helpers: done
+  3-3-asset-generation-step-gemini: done
+  3-4-composite-creation-step: done
+  3-5-video-clip-generation-step-kling: done
+  3-6-narration-generation-step-elevenlabs: done
+  3-7-sound-effects-generation-step: done
+  3-8-video-assembly-step-ffmpeg: done
+  3-9-end-to-end-pipeline-orchestration: done
   epic-3-retrospective: optional
 
   # Epic 4: Worker Orchestration & Parallel Processing
-  epic-4: backlog
-  4-1-worker-process-foundation: backlog
+  epic-4: in-progress
+  4-1-worker-process-foundation: ready-for-dev
   4-2-task-claiming-with-pgqueuer: backlog
   4-3-priority-queue-management: backlog
   4-4-round-robin-channel-scheduling: backlog

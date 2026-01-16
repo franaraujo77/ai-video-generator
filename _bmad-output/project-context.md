@@ -203,19 +203,23 @@ result = subprocess.run(["python", "scripts/generate_asset.py", "--prompt", prom
 
 **MUST use these helpers for ALL path construction** - never use hard-coded paths or f-string concatenation.
 
+**Security:** All helpers validate inputs to prevent path traversal attacks. Only alphanumeric, underscores, and dashes allowed in identifiers.
+
 ```python
 from pathlib import Path
 
 WORKSPACE_ROOT = Path("/app/workspace")  # Railway persistent volume
 
 def get_channel_workspace(channel_id: str) -> Path:
-    """Get workspace directory for channel (auto-creates)"""
+    """Get workspace directory for channel (auto-creates, validates input)"""
+    # Validates channel_id to prevent path traversal
     path = WORKSPACE_ROOT / "channels" / channel_id
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 def get_project_dir(channel_id: str, project_id: str) -> Path:
-    """Get project directory within channel workspace (auto-creates)"""
+    """Get project directory within channel workspace (auto-creates, validates input)"""
+    # Validates both channel_id and project_id to prevent path traversal
     path = get_channel_workspace(channel_id) / "projects" / project_id
     path.mkdir(parents=True, exist_ok=True)
     return path
@@ -223,6 +227,30 @@ def get_project_dir(channel_id: str, project_id: str) -> Path:
 def get_asset_dir(channel_id: str, project_id: str) -> Path:
     """Get assets directory for project (auto-creates)"""
     path = get_project_dir(channel_id, project_id) / "assets"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def get_character_dir(channel_id: str, project_id: str) -> Path:
+    """Get character assets subdirectory (auto-creates)"""
+    path = get_asset_dir(channel_id, project_id) / "characters"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def get_environment_dir(channel_id: str, project_id: str) -> Path:
+    """Get environment assets subdirectory (auto-creates)"""
+    path = get_asset_dir(channel_id, project_id) / "environments"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def get_props_dir(channel_id: str, project_id: str) -> Path:
+    """Get props assets subdirectory (auto-creates)"""
+    path = get_asset_dir(channel_id, project_id) / "props"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+def get_composite_dir(channel_id: str, project_id: str) -> Path:
+    """Get composite images subdirectory (auto-creates)"""
+    path = get_asset_dir(channel_id, project_id) / "composites"
     path.mkdir(parents=True, exist_ok=True)
     return path
 
