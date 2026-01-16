@@ -169,8 +169,8 @@ class TestVideoGenerationService:
         composite_path.write_bytes(b"fake-png")
         expected_url = "https://files.catbox.moe/abc123.png"
 
-        with patch("app.services.video_generation.CatboxClient") as MockClient:
-            mock_client = MockClient.return_value
+        with patch("app.services.video_generation.CatboxClient") as mock_client_class:
+            mock_client = mock_client_class.return_value
             mock_client.upload_image = AsyncMock(return_value=expected_url)
             mock_client.close = AsyncMock()
 
@@ -184,8 +184,8 @@ class TestVideoGenerationService:
         """Test catbox upload fails for missing file."""
         nonexistent_path = tmp_path / "missing.png"
 
-        with patch("app.services.video_generation.CatboxClient") as MockClient:
-            mock_client = MockClient.return_value
+        with patch("app.services.video_generation.CatboxClient") as mock_client_class:
+            mock_client = mock_client_class.return_value
             mock_client.upload_image = AsyncMock(side_effect=FileNotFoundError("File not found"))
             mock_client.close = AsyncMock()
 
@@ -198,13 +198,13 @@ class TestVideoGenerationService:
         manifest = VideoManifest(clips=[mock_video_clip])
 
         with (
-            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch("app.services.video_generation.CatboxClient") as mock_client_class,
             patch(
                 "app.services.video_generation.run_cli_script", new_callable=AsyncMock
             ) as mock_cli,
         ):
             # Mock catbox upload
-            mock_client = MockClient.return_value
+            mock_client = mock_client_class.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc123.png")
             mock_client.close = AsyncMock()
 
@@ -237,12 +237,12 @@ class TestVideoGenerationService:
         manifest = VideoManifest(clips=[mock_video_clip])
 
         with (
-            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch("app.services.video_generation.CatboxClient") as mock_client_class,
             patch(
                 "app.services.video_generation.run_cli_script", new_callable=AsyncMock
             ) as mock_cli,
         ):
-            mock_client = MockClient.return_value
+            mock_client = mock_client_class.return_value
             mock_client.close = AsyncMock()
 
             # Generate videos with resume=True
@@ -291,12 +291,12 @@ class TestVideoGenerationService:
             return Mock(returncode=0, stdout="Success")
 
         with (
-            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch("app.services.video_generation.CatboxClient") as mock_client_class,
             patch(
                 "app.services.video_generation.run_cli_script", new_callable=AsyncMock
             ) as mock_cli,
         ):
-            mock_client = MockClient.return_value
+            mock_client = mock_client_class.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc.png")
             mock_client.close = AsyncMock()
             mock_cli.side_effect = mock_cli_with_tracking
@@ -314,12 +314,12 @@ class TestVideoGenerationService:
         manifest = VideoManifest(clips=[mock_video_clip])
 
         with (
-            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch("app.services.video_generation.CatboxClient") as mock_client_class,
             patch(
                 "app.services.video_generation.run_cli_script", new_callable=AsyncMock
             ) as mock_cli,
         ):
-            mock_client = MockClient.return_value
+            mock_client = mock_client_class.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc.png")
             mock_client.close = AsyncMock()
 
@@ -342,12 +342,12 @@ class TestVideoGenerationService:
         manifest = VideoManifest(clips=[mock_video_clip])
 
         with (
-            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch("app.services.video_generation.CatboxClient") as mock_client_class,
             patch(
                 "app.services.video_generation.run_cli_script", new_callable=AsyncMock
             ) as mock_cli,
         ):
-            mock_client = MockClient.return_value
+            mock_client = mock_client_class.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc.png")
             mock_client.close = AsyncMock()
 

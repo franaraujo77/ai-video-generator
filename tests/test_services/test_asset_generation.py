@@ -380,7 +380,7 @@ class TestEstimateCost:
         service = AssetGenerationService("poke1", "vid_abc123")
         cost = service.estimate_cost(22)
 
-        # 22 assets × $0.068/asset = $1.496
+        # 22 assets x $0.068/asset = $1.496
         assert cost == pytest.approx(1.496, abs=0.01)
 
     def test_cost_calculation_zero_assets(self):
@@ -395,7 +395,7 @@ class TestEstimateCost:
         service = AssetGenerationService("poke1", "vid_abc123")
         cost = service.estimate_cost(10)
 
-        # 10 assets × $0.068/asset = $0.68
+        # 10 assets x $0.068/asset = $0.68
         assert cost == pytest.approx(0.68, abs=0.01)
 
 

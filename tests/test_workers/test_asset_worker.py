@@ -90,8 +90,8 @@ class TestProcessAssetGenerationTask:
             "app.workers.asset_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
                     global_atmosphere="Natural lighting", assets=[]
                 )
@@ -151,8 +151,8 @@ class TestProcessAssetGenerationTask:
             "app.workers.asset_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
                     global_atmosphere="Natural lighting", assets=[]
                 )
@@ -199,8 +199,8 @@ class TestProcessAssetGenerationTask:
             "app.workers.asset_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
                     global_atmosphere="Natural lighting", assets=[]
                 )
@@ -246,8 +246,8 @@ class TestProcessAssetGenerationTask:
             "app.workers.asset_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.side_effect = ValueError("Unexpected error")
 
                 await process_asset_generation_task(task_id)
@@ -320,8 +320,8 @@ class TestProcessAssetGenerationTask:
         mock_factory = MagicMock(side_effect=create_tracking_factory)
 
         with patch("app.workers.asset_worker.async_session_factory", mock_factory):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
                     global_atmosphere="Natural lighting", assets=[]
                 )
@@ -380,8 +380,8 @@ class TestProcessAssetGenerationTask:
             "app.workers.asset_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
                     global_atmosphere="Natural lighting", assets=[]
                 )
@@ -436,8 +436,8 @@ class TestProcessAssetGenerationTask:
             "app.workers.asset_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
-                mock_service = MockService.return_value
+            with patch("app.workers.asset_worker.AssetGenerationService") as mock_service_class:
+                mock_service = mock_service_class.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
                     global_atmosphere="Natural lighting", assets=[]
                 )
