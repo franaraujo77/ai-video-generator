@@ -48,7 +48,8 @@ RUN mkdir -p /app/workspace /app/config
 # Expose port for web service (Railway provides $PORT)
 EXPOSE 8000
 
-# Default command for Epic 1: Run FastAPI web service
+# Default command: Run FastAPI web service
 # Railway will use $PORT environment variable for the port
-# Future epics: Override with service-specific commands in Railway dashboard
+# Worker services override this with: python -m app.worker
+# Web service uses: uvicorn app.main:app --host 0.0.0.0 --port $PORT
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -2,26 +2,30 @@
 
 This module provides the async SQLAlchemy 2.0 engine configuration,
 session factory, and FastAPI dependency injection for database sessions.
-Story 2.6 adds PgQueuer integration for task queue management.
+
+Provides async engine and session factory for both FastAPI routes (via Depends)
+and worker processes (via direct session factory usage).
+
+Architecture Pattern:
+    - Single async engine shared across all workers and web service
+    - Connection pooling sized for 3 workers + web service (pool_size=10)
+    - pool_pre_ping=True handles Railway connection recycling
+    - AsyncSession with expire_on_commit=False prevents lazy loading issues
 
 Usage:
-    from app.database import get_session, task_queue
+    FastAPI Routes:
+        async def route_handler(db: AsyncSession = Depends(get_session)):
+            # Use db session, auto-closed after request
 
-    async def my_route(db: AsyncSession = Depends(get_session)):
-        result = await db.execute(select(Channel))
-        ...
-
-    # Enqueue task to PgQueuer
-    from pgqueuer.models import Job
-    await task_queue.enqueue(Job(queue_name="video_tasks", payload={"task_id": "..."}))
+    Workers:
+        async with AsyncSessionLocal() as db:
+            async with db.begin():
+                # Use db session, auto-closed after context
 """
 
 import os
 from collections.abc import AsyncGenerator
 
-# PgQueuer will be fully integrated in Epic 4 (Worker Orchestration)
-# from pgqueuer.db import AsyncpgDriver, Driver
-# from pgqueuer.qm import QueueManager
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -131,7 +135,10 @@ def create_test_engine(
     return test_engine, test_session_factory
 
 
-# PgQueuer queue manager setup (Story 2.6)
-# Full integration deferred to Epic 4 (Worker Orchestration)
+# PgQueuer queue manager setup - will be initialized in Story 4.2
 # For now, tasks with status='queued' are ready for workers
-task_queue = None  # Will be initialized in Epic 4
+task_queue = None  # Will be initialized in Story 4.2 (Task Claiming with PgQueuer)
+
+# Export engine and session factory for worker processes (Story 4.1)
+async_engine = engine
+AsyncSessionLocal = async_session_factory

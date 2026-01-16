@@ -75,7 +75,7 @@ development_status:
 
   # Epic 4: Worker Orchestration & Parallel Processing
   epic-4: in-progress
-  4-1-worker-process-foundation: ready-for-dev
+  4-1-worker-process-foundation: in-progress
   4-2-task-claiming-with-pgqueuer: backlog
   4-3-priority-queue-management: backlog
   4-4-round-robin-channel-scheduling: backlog

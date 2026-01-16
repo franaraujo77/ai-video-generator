@@ -466,6 +466,141 @@ Script calls Gemini API → Downloads image → Exits
 
 This keeps scripts simple, testable, and reusable.
 
+## Local Development: Running Worker Processes
+
+The orchestration platform uses separate worker processes to handle video generation tasks. Here's how to run and test workers locally:
+
+### Running a Single Worker
+
+```bash
+# Set environment variables
+export DATABASE_URL="postgresql://user:pass@localhost:5432/ai_video_gen"
+export FERNET_KEY="your-44-character-base64-encryption-key"
+
+# Start worker process
+python -m app.worker
+```
+
+The worker will:
+- Initialize database connection pool (pool_size=10)
+- Enter continuous event loop
+- Log heartbeat every 60 seconds
+- Exit gracefully on Ctrl+C (SIGINT)
+
+### Running Multiple Workers (Parallel Testing)
+
+Test worker independence by running multiple workers in separate terminals:
+
+```bash
+# Terminal 1: Worker 1
+export DATABASE_URL="postgresql://user:pass@localhost:5432/ai_video_gen"
+export FERNET_KEY="your-encryption-key"
+export RAILWAY_SERVICE_NAME="worker-1"
+python -m app.worker
+
+# Terminal 2: Worker 2
+export DATABASE_URL="postgresql://user:pass@localhost:5432/ai_video_gen"
+export FERNET_KEY="your-encryption-key"
+export RAILWAY_SERVICE_NAME="worker-2"
+python -m app.worker
+
+# Terminal 3: Worker 3
+export DATABASE_URL="postgresql://user:pass@localhost:5432/ai_video_gen"
+export FERNET_KEY="your-encryption-key"
+export RAILWAY_SERVICE_NAME="worker-3"
+python -m app.worker
+```
+
+**What to verify:**
+- Each worker logs with different `worker_id` (worker-1, worker-2, worker-3)
+- Workers don't interfere with each other
+- Stopping one worker doesn't affect others
+- All workers share same database connection pool
+
+### Expected Log Output
+
+When a worker starts successfully, you should see:
+
+```json
+{
+  "event": "worker_started",
+  "worker_id": "worker-1",
+  "timestamp": "2026-01-16T12:00:00Z",
+  "level": "info"
+}
+
+{
+  "event": "worker_heartbeat",
+  "worker_id": "worker-1",
+  "iteration_count": 60,
+  "consecutive_errors": 0,
+  "timestamp": "2026-01-16T12:01:00Z",
+  "level": "info"
+}
+```
+
+### Graceful Shutdown
+
+Workers handle shutdown signals gracefully:
+
+```bash
+# Press Ctrl+C to trigger SIGINT
+# Worker will:
+# 1. Set shutdown flag
+# 2. Complete current iteration
+# 3. Close database connections
+# 4. Exit with code 0
+```
+
+### Running with Web Service
+
+You can run workers alongside the FastAPI web service:
+
+```bash
+# Terminal 1: Web service
+uvicorn app.main:app --reload --port 8000
+
+# Terminal 2: Worker
+python -m app.worker
+
+# Both share same DATABASE_URL and connection pool
+```
+
+### Environment Variables
+
+| Variable | Required | Description | Example |
+|----------|----------|-------------|---------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string | `postgresql://user:pass@localhost:5432/db` |
+| `FERNET_KEY` | Yes | Encryption key (44-char base64) | Generate with `scripts/generate_fernet_key.py` |
+| `RAILWAY_SERVICE_NAME` | No | Worker identifier for logs | `worker-1`, `worker-2`, `worker-local` (default) |
+| `DATABASE_ECHO` | No | Enable SQL query logging | `true` or `false` (default) |
+
+### Railway Deployment
+
+On Railway, workers run as separate services:
+
+```yaml
+# Railway Configuration (via Dashboard)
+Services:
+  web:
+    Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    Env Vars: DATABASE_URL, FERNET_KEY, RAILWAY_SERVICE_NAME=web
+
+  worker-1:
+    Start Command: python -m app.worker
+    Env Vars: DATABASE_URL, FERNET_KEY, RAILWAY_SERVICE_NAME=worker-1
+
+  worker-2:
+    Start Command: python -m app.worker
+    Env Vars: DATABASE_URL, FERNET_KEY, RAILWAY_SERVICE_NAME=worker-2
+
+  worker-3:
+    Start Command: python -m app.worker
+    Env Vars: DATABASE_URL, FERNET_KEY, RAILWAY_SERVICE_NAME=worker-3
+```
+
+All services share the same PostgreSQL database and connection pool.
+
 ## FAQ
 
 **Q: How much does this cost?**
