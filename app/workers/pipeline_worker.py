@@ -47,6 +47,7 @@ Safety:
 """
 
 import asyncio
+import contextlib
 import signal
 import sys
 from typing import Any
@@ -156,7 +157,7 @@ async def process_pipeline_task(task_id: str) -> None:
         )
 
         # Attempt to mark task as failed (best effort)
-        try:
+        with contextlib.suppress(Exception):
             async with async_session_factory() as db, db.begin():  # type: ignore[misc]
                 task = await db.get(Task, task_id)
                 if task:
@@ -166,8 +167,6 @@ async def process_pipeline_task(task_id: str) -> None:
                     error_entry = f"[Worker Error] {type(e).__name__}: {e!s}"
                     task.error_log = f"{current_log}\n{error_entry}".strip()
                     await db.commit()
-        except Exception:
-            pass  # Log error but don't raise (worker cleanup)
 
 
 async def claim_next_task() -> str | None:

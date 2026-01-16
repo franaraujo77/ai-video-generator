@@ -91,7 +91,9 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as mock_service_class:
+            with patch(
+                "app.workers.video_assembly_worker.VideoAssemblyService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
 
                 # Mock create_assembly_manifest (async)
@@ -163,7 +165,9 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as mock_service_class:
+            with patch(
+                "app.workers.video_assembly_worker.VideoAssemblyService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
 
                 # Mock create_assembly_manifest to raise FileNotFoundError
@@ -212,7 +216,9 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as mock_service_class:
+            with patch(
+                "app.workers.video_assembly_worker.VideoAssemblyService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
 
                 # Mock methods
@@ -271,7 +277,9 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as mock_service_class:
+            with patch(
+                "app.workers.video_assembly_worker.VideoAssemblyService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
 
                 # Mock methods
@@ -326,7 +334,9 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as mock_service_class:
+            with patch(
+                "app.workers.video_assembly_worker.VideoAssemblyService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
 
                 # Mock methods
