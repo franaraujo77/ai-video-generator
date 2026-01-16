@@ -72,7 +72,7 @@ Sound Effects Generation (status="generating_sfx", 18 clips, 3-5 min)
   ↓
 Video Assembly (status="assembling", 1 final video, 1-2 min)
   ↓
-Review Gate (status="awaiting_review") ← Pauses for human review
+Review Gate (status="final_review") ← Pauses for human review
   ↓
 Pipeline Complete (status="completed", ready for YouTube upload in Epic 7)
 ```
@@ -118,7 +118,7 @@ All 8 pipeline steps already implemented (Stories 3.1-3.8):
 3. **Status Updates**: Update Notion after each major step completion
 4. **Error Handling**: Catch step failures, log details, set appropriate error status
 5. **Partial Resume**: Check completion metadata, skip completed steps on retry
-6. **Review Gate Integration**: Pause at "awaiting_review" for human approval (Epic 5 integration point)
+6. **Review Gate Integration**: Pause at "final_review" for human approval (Epic 5 integration point)
 7. **Performance Monitoring**: Track total pipeline duration, report if exceeding 2-hour target
 
 **Derived from Previous Story (3.8) Analysis:**
@@ -154,7 +154,7 @@ All 8 pipeline steps already implemented (Stories 3.1-3.8):
 - ✅ Execute all 6 steps in sequence (assets → composites → videos → audio → SFX → assembly)
 - ✅ Update status after each step: "generating_assets" → "generating_composites" → "generating_video" → "generating_audio" → "generating_sfx" → "assembling"
 - ✅ Update Notion status within 5 seconds of each step completion
-- ✅ Set final status to "awaiting_review" (pauses for human review)
+- ✅ Set final status to "final_review" (pauses for human review)
 - ✅ Complete entire pipeline in ≤2 hours (90th percentile target)
 - ✅ Log pipeline start time, step durations, total duration
 - ✅ Track total cost ($6-13 per video expected)
@@ -208,8 +208,8 @@ All 8 pipeline steps already implemented (Stories 3.1-3.8):
 **Given** the pipeline completes video assembly (final step before upload)
 **When** assembly finishes successfully
 **Then** the orchestrator should:
-- ✅ Set task status to "awaiting_review" (NOT "completed")
-- ✅ Update Notion status to "Awaiting Review"
+- ✅ Set task status to "final_review" (NOT "completed")
+- ✅ Update Notion status to "Final Review"
 - ✅ Log "Pipeline paused for human review (YouTube compliance)"
 - ✅ NOT proceed to YouTube upload (Epic 7, requires human approval)
 - ✅ Wait for human to change status to "approved" before continuing
@@ -381,7 +381,7 @@ class PipelineOrchestrator:
            c. Record completion metadata
            d. Update task status
            e. Update Notion status (async, non-blocking)
-        4. Set final status to "awaiting_review" (human review gate)
+        4. Set final status to "final_review" (human review gate)
         5. Log pipeline duration and cost summary
 
         Error Handling:
@@ -466,7 +466,7 @@ class PipelineOrchestrator:
         4. Log status change with correlation_id
 
         Args:
-            status: New task status (e.g., "generating_assets", "awaiting_review")
+            status: New task status (e.g., "generating_assets", "final_review")
             error_message: Optional error details if status is error state
 
         Example:
@@ -587,7 +587,7 @@ async def process_pipeline_task(task_id: str) -> None:
         1. Load task from database (get channel_id, project_id)
         2. Initialize PipelineOrchestrator(task_id)
         3. Execute complete pipeline (all 6 steps)
-        4. Set final status to "awaiting_review" (human review gate)
+        4. Set final status to "final_review" (human review gate)
         5. Update Notion status (async, non-blocking)
         6. Log pipeline completion summary
 
@@ -740,7 +740,7 @@ await orchestrator.execute_pipeline()  # 51-124 minutes, NO DB HELD
 async with AsyncSessionLocal() as db:
     async with db.begin():
         task = await db.get(Task, task_id)
-        task.status = "awaiting_review"
+        task.status = "final_review"
         await db.commit()
 
 # ❌ WRONG: Hold transaction during pipeline execution
@@ -748,7 +748,7 @@ async with db.begin():
     task = await db.get(Task, task_id)
     task.status = "processing"
     await orchestrator.execute_pipeline()  # BLOCKS DB FOR 2 HOURS!
-    task.status = "awaiting_review"
+    task.status = "final_review"
     await db.commit()
 ```
 
@@ -765,7 +765,7 @@ PIPELINE_STATES = [
     "generating_audio",    # Step 4 in progress
     "generating_sfx",      # Step 5 in progress
     "assembling",          # Step 6 in progress
-    "awaiting_review",     # Human review gate (YouTube compliance)
+    "final_review",     # Human review gate (YouTube compliance)
     "completed",           # Terminal success state
     "failed"               # Terminal failure state
 ]
@@ -1060,9 +1060,9 @@ tasks (
 
 - Story 4.1: Worker process foundation (needs orchestrator pattern)
 - Story 5.1: 26-status workflow state machine (needs pipeline states defined)
-- Story 7.1: YouTube OAuth setup (needs "awaiting_review" gate working)
+- Story 7.1: YouTube OAuth setup (needs "final_review" gate working)
 - Epic 4: Worker orchestration (needs complete pipeline to orchestrate)
-- Epic 5: Review gates (needs "awaiting_review" status integration)
+- Epic 5: Review gates (needs "final_review" status integration)
 - Epic 7: YouTube publishing (needs pipeline completion before upload)
 
 ## Latest Technical Information
@@ -1133,7 +1133,7 @@ await orchestrator.execute_pipeline()  # 51-124 minutes
 
 async with AsyncSessionLocal() as db:
     async with db.begin():
-        task.status = "awaiting_review"
+        task.status = "final_review"
         await db.commit()
 ```
 
@@ -1154,7 +1154,7 @@ async with AsyncSessionLocal() as db:
 - [ ] Status updates tested (PostgreSQL + Notion sync)
 - [ ] Performance tracking tested (duration logging, 2-hour target)
 - [ ] Cost calculation tested (total pipeline cost)
-- [ ] Review gate integration tested (pause at "awaiting_review")
+- [ ] Review gate integration tested (pause at "final_review")
 - [ ] Multi-channel isolation tested (3 workers, different channels)
 - [ ] Logging integration complete (JSON structured logs, correlation IDs)
 - [ ] Type hints complete (all parameters and return types)
@@ -1208,7 +1208,7 @@ async def execute_pipeline(self):
             return
 
     # All steps complete - pause for review
-    await self.update_task_status("awaiting_review")
+    await self.update_task_status("final_review")
 ```
 
 **Step-to-Status Mapping:**
@@ -1290,7 +1290,7 @@ total_cost = await orchestrator.calculate_pipeline_cost()
 - **Blocks:**
   - 4-1 (Worker Process Foundation) - needs orchestrator pattern defined
   - 5-1 (26-Status Workflow State Machine) - needs pipeline states working
-  - 7-1 (YouTube OAuth Setup) - needs "awaiting_review" gate functioning
+  - 7-1 (YouTube OAuth Setup) - needs "final_review" gate functioning
   - Epic 4 (Worker Orchestration) - needs complete pipeline to orchestrate
   - Epic 5 (Review Gates) - needs pipeline pause points defined
   - Epic 7 (YouTube Publishing) - needs pipeline completion before upload
@@ -1445,11 +1445,11 @@ _To be filled in after implementation_
 
 ### Clarifications (Not Issues)
 
-**Issue #1: Status name "awaiting_review" vs FINAL_REVIEW**
-- Story ACs use "awaiting_review" but code correctly uses `TaskStatus.FINAL_REVIEW`
-- The enum value `FINAL_REVIEW` is the correct status (line 98 in models.py)
-- Story documentation should be updated to use FINAL_REVIEW for consistency
-- **Code is correct, no fix needed**
+**Issue #1: Status name "final_review" vs FINAL_REVIEW** ✅ FIXED
+- Original issue: Story ACs used "awaiting_review" but code correctly uses `TaskStatus.FINAL_REVIEW` (enum value: "final_review")
+- The enum constant is `FINAL_REVIEW` with string value "final_review" (line 98 in models.py)
+- **Resolution:** Updated all story documentation references from "awaiting_review" to "final_review" for consistency
+- **Code was already correct, documentation now updated**
 
 **Issue #14: Inconsistent error status fallback**
 - Current behavior: defaults to `TaskStatus.ASSET_ERROR` for unknown steps
@@ -1482,11 +1482,12 @@ These issues require more extensive implementation work beyond code review fixes
     4. Ensure non-blocking (fire-and-forget pattern)
   - **Dependencies:** Epic 2 Notion API client integration
 
-- [ ] **[AI-Review][MEDIUM]** Update story documentation for status name consistency
-  - **Context:** Story ACs use "awaiting_review" but correct enum is FINAL_REVIEW
-  - **Impact:** Documentation inconsistency causes confusion
-  - **Locations:** Story lines 154, 157, 210, 213
-  - **Solution:** Replace all "awaiting_review" references with "FINAL_REVIEW"
+- [x] **[AI-Review][MEDIUM]** Update story documentation for status name consistency ✅ COMPLETED
+  - **Context:** Story ACs used "awaiting_review" but correct enum is FINAL_REVIEW (value: "final_review")
+  - **Impact:** Documentation inconsistency caused confusion
+  - **Locations:** Story lines 75, 121, 157, 211, 384, 469, 590, 743, 751, 768, 1063, 1065, 1137, 1157, 1211, 1293
+  - **Solution:** Replaced all "awaiting_review" references with "final_review" to match enum value
+  - **Fixed:** 2026-01-16 - All 16+ occurrences updated in story documentation
 
 ## Status
 
