@@ -646,8 +646,6 @@ class PipelineOrchestrator:
                     new_entry = f"[{timestamp}] {status.value}: {error_message}"
                     task.error_log = f"{current_log}\n{new_entry}".strip()
 
-                await db.commit()
-
                 self.log.info(
                     "status_updated",
                     status=status.value,
@@ -712,8 +710,6 @@ class PipelineOrchestrator:
                     "partial_progress": completion.partial_progress,
                     "error_message": completion.error_message,
                 }
-
-                await db.commit()
 
     async def _sync_to_notion_async(self, status: TaskStatus) -> None:
         """Sync task status to Notion (async, non-blocking).
@@ -908,7 +904,6 @@ class PipelineOrchestrator:
             task = await db.get(Task, self.task_id)
             if task:
                 task.pipeline_start_time = start_time
-                await db.commit()
 
     async def _update_pipeline_end_time(
         self,
@@ -921,7 +916,6 @@ class PipelineOrchestrator:
             if task:
                 task.pipeline_end_time = end_time
                 task.pipeline_duration_seconds = duration_seconds
-                await db.commit()
 
     async def _update_pipeline_cost(self, cost_usd: float) -> None:
         """Update pipeline_cost_usd in database."""
@@ -929,4 +923,3 @@ class PipelineOrchestrator:
             task = await db.get(Task, self.task_id)
             if task:
                 task.pipeline_cost_usd = cost_usd
-                await db.commit()
