@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from tenacity import (  # type: ignore[import-not-found]
+from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
@@ -402,7 +402,7 @@ class VideoGenerationService:
             "total_cost_usd": total_cost_usd,
         }
 
-    @retry(  # type: ignore[misc]
+    @retry(
         retry=retry_if_exception_type((httpx.HTTPError, asyncio.TimeoutError)),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),

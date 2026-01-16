@@ -41,7 +41,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from PIL import Image  # type: ignore[import-untyped]
+from PIL import Image
 
 from app.utils.cli_wrapper import CLIScriptError, run_cli_script
 from app.utils.filesystem import (

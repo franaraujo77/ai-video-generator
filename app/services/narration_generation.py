@@ -46,7 +46,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from tenacity import (  # type: ignore[import-not-found]
+from tenacity import (
     retry,
     retry_if_exception_type,
     stop_after_attempt,
@@ -333,7 +333,7 @@ class NarrationGenerationService:
         # Semaphore limits concurrent ElevenLabs API requests
         semaphore = asyncio.Semaphore(max_concurrent)
 
-        @retry(  # type: ignore[misc]
+        @retry(
             retry=retry_if_exception_type(CLIScriptError),
             stop=stop_after_attempt(3),
             wait=wait_exponential(multiplier=2, min=2, max=8),
