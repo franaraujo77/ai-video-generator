@@ -8,7 +8,7 @@ Test Coverage:
 - Short transaction pattern (claim → close DB → work → reopen → update)
 - SFX generation orchestration (service integration)
 - Error handling (CLIScriptError, ValueError, generic Exception)
-- Status transitions (GENERATING_SFX → SFX_READY or SFX_ERROR)
+- Status transitions (GENERATING_SFX → SFX_READY or AUDIO_ERROR)
 - Cost tracking integration
 - Multi-channel isolation
 
@@ -64,6 +64,33 @@ async def mock_task(async_session, mock_channel):
     return task
 
 
+def create_mock_session_factory(async_session):
+    """Create a properly mocked session factory for worker tests.
+
+    Args:
+        async_session: The test async session to use
+
+    Returns:
+        Mock session factory that returns the test session with begin() mocked
+    """
+    # Create a mock transaction context manager
+    mock_transaction = AsyncMock()
+    mock_transaction.__aenter__.return_value = mock_transaction
+    mock_transaction.__aexit__.return_value = None
+
+    # Mock the session's begin() method to return our transaction
+    async_session.begin = MagicMock(return_value=mock_transaction)
+
+    # Create the session factory mock
+    mock_session_factory = MagicMock()
+    mock_context_manager = AsyncMock()
+    mock_context_manager.__aenter__.return_value = async_session
+    mock_context_manager.__aexit__.return_value = None
+    mock_session_factory.return_value = mock_context_manager
+
+    return mock_session_factory
+
+
 class TestProcessSFXGenerationTaskSuccess:
     """Test successful SFX generation scenarios."""
 
@@ -72,15 +99,11 @@ class TestProcessSFXGenerationTaskSuccess:
         """Test successful SFX generation updates task status to SFX_READY."""
         task_id = mock_task.id
 
-        # Mock async_session_factory to return the test session
-        def mock_session_factory():
-            return async_session
-
         # Mock SFXGenerationService
         with (
             patch(
                 "app.workers.sfx_generation_worker.async_session_factory",
-                side_effect=mock_session_factory,
+                create_mock_session_factory(async_session),
             ),
             patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
             patch("app.workers.sfx_generation_worker.track_api_cost") as mock_cost,
@@ -140,6 +163,10 @@ class TestProcessSFXGenerationTaskSuccess:
             }
 
         with (
+            patch(
+                "app.workers.sfx_generation_worker.async_session_factory",
+                create_mock_session_factory(async_session),
+            ),
             patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
             patch("app.workers.sfx_generation_worker.track_api_cost"),
         ):
@@ -161,10 +188,16 @@ class TestProcessSFXGenerationTaskErrors:
 
     @pytest.mark.asyncio
     async def test_cli_script_error_handling(self, async_session, mock_task):
-        """Test CLIScriptError marks task as SFX_ERROR."""
+        """Test CLIScriptError marks task as AUDIO_ERROR."""
         task_id = mock_task.id
 
-        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class:
+        with (
+            patch(
+                "app.workers.sfx_generation_worker.async_session_factory",
+                create_mock_session_factory(async_session),
+            ),
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
+        ):
             # Setup service to raise CLIScriptError
             mock_service_instance = AsyncMock()
             mock_service_class.return_value = mock_service_instance
@@ -182,18 +215,24 @@ class TestProcessSFXGenerationTaskErrors:
 
             await process_sfx_generation_task(task_id)
 
-            # Verify task status is SFX_ERROR
+            # Verify task status is AUDIO_ERROR
             result = await async_session.execute(select(Task).where(Task.id == task_id))
             task = result.scalar_one()
-            assert task.status == TaskStatus.SFX_ERROR
+            assert task.status == TaskStatus.AUDIO_ERROR
             assert "SFX generation failed" in task.error_log
 
     @pytest.mark.asyncio
     async def test_validation_error_handling(self, async_session, mock_task):
-        """Test ValueError marks task as SFX_ERROR."""
+        """Test ValueError marks task as AUDIO_ERROR."""
         task_id = mock_task.id
 
-        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class:
+        with (
+            patch(
+                "app.workers.sfx_generation_worker.async_session_factory",
+                create_mock_session_factory(async_session),
+            ),
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
+        ):
             # Setup service to raise ValueError
             mock_service_instance = AsyncMock()
             mock_service_class.return_value = mock_service_instance
@@ -203,18 +242,24 @@ class TestProcessSFXGenerationTaskErrors:
 
             await process_sfx_generation_task(task_id)
 
-            # Verify task status is SFX_ERROR
+            # Verify task status is AUDIO_ERROR
             result = await async_session.execute(select(Task).where(Task.id == task_id))
             task = result.scalar_one()
-            assert task.status == TaskStatus.SFX_ERROR
+            assert task.status == TaskStatus.AUDIO_ERROR
             assert "Validation error" in task.error_log
 
     @pytest.mark.asyncio
     async def test_unexpected_error_handling(self, async_session, mock_task):
-        """Test generic Exception marks task as SFX_ERROR."""
+        """Test generic Exception marks task as AUDIO_ERROR."""
         task_id = mock_task.id
 
-        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class:
+        with (
+            patch(
+                "app.workers.sfx_generation_worker.async_session_factory",
+                create_mock_session_factory(async_session),
+            ),
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
+        ):
             # Setup service to raise unexpected error
             mock_service_instance = AsyncMock()
             mock_service_class.return_value = mock_service_instance
@@ -222,10 +267,10 @@ class TestProcessSFXGenerationTaskErrors:
 
             await process_sfx_generation_task(task_id)
 
-            # Verify task status is SFX_ERROR
+            # Verify task status is AUDIO_ERROR
             result = await async_session.execute(select(Task).where(Task.id == task_id))
             task = result.scalar_one()
-            assert task.status == TaskStatus.SFX_ERROR
+            assert task.status == TaskStatus.AUDIO_ERROR
             assert "Unexpected error" in task.error_log
 
 
@@ -237,8 +282,12 @@ class TestProcessSFXGenerationTaskEdgeCases:
         """Test worker handles missing task gracefully."""
         non_existent_id = uuid.uuid4()
 
-        # Should not raise exception, just log error
-        await process_sfx_generation_task(non_existent_id)
+        with patch(
+            "app.workers.sfx_generation_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            # Should not raise exception, just log error
+            await process_sfx_generation_task(non_existent_id)
 
         # Verify no task was created
         result = await async_session.execute(select(Task).where(Task.id == non_existent_id))
@@ -261,12 +310,16 @@ class TestProcessSFXGenerationTaskEdgeCases:
         async_session.add(task)
         await async_session.commit()
 
-        await process_sfx_generation_task(task.id)
+        with patch(
+            "app.workers.sfx_generation_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            await process_sfx_generation_task(task.id)
 
         # Verify task marked as error
         result = await async_session.execute(select(Task).where(Task.id == task.id))
         updated_task = result.scalar_one()
-        assert updated_task.status == TaskStatus.SFX_ERROR
+        assert updated_task.status == TaskStatus.AUDIO_ERROR
         assert "not found" in updated_task.error_log
 
     @pytest.mark.asyncio
@@ -286,12 +339,16 @@ class TestProcessSFXGenerationTaskEdgeCases:
         async_session.add(task)
         await async_session.commit()
 
-        await process_sfx_generation_task(task.id)
+        with patch(
+            "app.workers.sfx_generation_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            await process_sfx_generation_task(task.id)
 
         # Verify task marked as error
         result = await async_session.execute(select(Task).where(Task.id == task.id))
         updated_task = result.scalar_one()
-        assert updated_task.status == TaskStatus.SFX_ERROR
+        assert updated_task.status == TaskStatus.AUDIO_ERROR
         assert "missing sfx_descriptions" in updated_task.error_log.lower()
 
 
@@ -316,6 +373,10 @@ class TestShortTransactionPattern:
             }
 
         with (
+            patch(
+                "app.workers.sfx_generation_worker.async_session_factory",
+                create_mock_session_factory(async_session),
+            ),
             patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
             patch("app.workers.sfx_generation_worker.track_api_cost"),
         ):

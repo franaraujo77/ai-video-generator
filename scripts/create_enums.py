@@ -51,8 +51,6 @@ async def create_enums():
                                 'ASSET_ERROR',
                                 'VIDEO_ERROR',
                                 'AUDIO_ERROR',
-                                'SFX_ERROR',
-                                'ASSEMBLY_ERROR',
                                 'UPLOAD_ERROR'
                             );
                         END IF;

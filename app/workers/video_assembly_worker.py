@@ -205,7 +205,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             task = result_task.scalar_one_or_none()
 
             if task:
-                task.status = TaskStatus.ASSEMBLY_ERROR
+                task.status = TaskStatus.VIDEO_ERROR
                 error_msg = f"Missing file: {e!s}"
                 task.error_log = (
                     (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
@@ -228,7 +228,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             task = result_task.scalar_one_or_none()
 
             if task:
-                task.status = TaskStatus.ASSEMBLY_ERROR
+                task.status = TaskStatus.VIDEO_ERROR
                 error_msg = f"FFmpeg assembly failed: {e.stderr}"
                 task.error_log = (
                     (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
@@ -249,7 +249,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             task = result_task.scalar_one_or_none()
 
             if task:
-                task.status = TaskStatus.ASSEMBLY_ERROR
+                task.status = TaskStatus.VIDEO_ERROR
                 error_msg = f"Validation error: {e!s}"
                 task.error_log = (
                     (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
@@ -271,7 +271,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             task = result_task.scalar_one_or_none()
 
             if task:
-                task.status = TaskStatus.ASSEMBLY_ERROR
+                task.status = TaskStatus.VIDEO_ERROR
                 error_msg = f"Unexpected error: {e!s}"
                 task.error_log = (
                     (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg

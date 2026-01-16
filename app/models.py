@@ -106,8 +106,6 @@ class TaskStatus(enum.Enum):
     ASSET_ERROR = "asset_error"
     VIDEO_ERROR = "video_error"
     AUDIO_ERROR = "audio_error"
-    SFX_ERROR = "sfx_error"
-    ASSEMBLY_ERROR = "assembly_error"
     UPLOAD_ERROR = "upload_error"
 
 

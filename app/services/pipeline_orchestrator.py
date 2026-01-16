@@ -146,8 +146,8 @@ STEP_ERROR_MAP = {
     PipelineStep.COMPOSITE_CREATION: TaskStatus.ASSET_ERROR,  # No dedicated composite error status
     PipelineStep.VIDEO_GENERATION: TaskStatus.VIDEO_ERROR,
     PipelineStep.NARRATION_GENERATION: TaskStatus.AUDIO_ERROR,
-    PipelineStep.SFX_GENERATION: TaskStatus.SFX_ERROR,
-    PipelineStep.VIDEO_ASSEMBLY: TaskStatus.ASSEMBLY_ERROR,
+    PipelineStep.SFX_GENERATION: TaskStatus.AUDIO_ERROR,  # SFX is audio content
+    PipelineStep.VIDEO_ASSEMBLY: TaskStatus.VIDEO_ERROR,  # Assembly produces final video
 }
 
 
