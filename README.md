@@ -848,6 +848,192 @@ Use this to monitor:
 - **Impact:** No performance degradation - query still uses index efficiently
 - **Detection:** Monitor channel distribution logs
 
+---
+
+### Rate Limit Aware Task Selection
+
+The orchestration platform implements **pre-claim quota verification** to prevent workers from claiming tasks when external API quotas are exhausted. Workers check quota availability **before** claiming tasks, gracefully releasing tasks back to the queue if rate limits are hit.
+
+#### Quota Types
+
+**YouTube Quota (Database-Tracked):**
+- **Daily Limit:** 10,000 units per channel per day (resets midnight PST)
+- **Upload Cost:** 1,600 units per video
+- **Max Uploads:** ~6 videos per channel per day
+- **Storage:** `youtube_quota_usage` table with composite PK `(channel_id, date)`
+- **Pre-Claim Check:** Query database before upload tasks
+
+**Gemini Quota (Worker-Local):**
+- **429 Rate Limit:** Transient quota exhaustion flag
+- **Reset:** Automatic at midnight PST
+- **Pre-Claim Check:** Worker state flag with auto-reset
+
+**Kling Concurrency (Worker-Local):**
+- **Max Concurrent:** 3 video generations per worker (configurable)
+- **Counter:** In-memory active task counter
+- **Pre-Claim Check:** Worker state counter
+
+#### How Pre-Claim Verification Works
+
+Workers check quota availability **before** claiming tasks:
+
+```python
+# 1. Worker claims task from PgQueuer
+task = await pgq.claim_task()
+
+# 2. Worker checks rate limits BEFORE processing
+if task.status == "final_review":
+    # YouTube upload - check database quota
+    quota_available = await check_youtube_quota(channel_id, "upload", db)
+    if not quota_available:
+        # Release task back to queue - DO NOT update status
+        return  # PgQueuer makes task available again
+
+elif task.status == "pending":
+    # Gemini asset generation - check worker-local flag
+    if not worker_state.check_gemini_quota_available():
+        # Release task back to queue
+        return
+
+elif task.status == "composites_ready":
+    # Kling video generation - check worker-local counter
+    if not worker_state.can_claim_video_task():
+        # Release task back to queue
+        return
+
+# 3. Quota available - proceed with processing
+task.status = "processing"
+# ... execute task ...
+```
+
+#### Quota Monitoring & Alerts
+
+**Discord Webhook Alerts (YouTube Quota):**
+- **80% threshold:** WARNING alert (e.g., 8,000 / 10,000 units)
+- **100% threshold:** CRITICAL alert (quota exhausted)
+- **Throttling:** Max 1 alert per 5 minutes per channel per level (prevents spam)
+- **Configuration:** Set `DISCORD_WEBHOOK_URL` environment variable
+
+**Example Alert:**
+```json
+{
+  "level": "CRITICAL",
+  "message": "YouTube quota exhausted for channel poke1",
+  "details": {
+    "channel_id": "poke1",
+    "usage": 10600,
+    "limit": 10000,
+    "percentage": "106%",
+    "action": "Upload tasks paused until midnight PST reset"
+  }
+}
+```
+
+#### Database Schema
+
+**YouTube Quota Usage Table:**
+```sql
+CREATE TABLE youtube_quota_usage (
+    channel_id UUID NOT NULL,
+    date DATE NOT NULL,
+    units_used INTEGER NOT NULL DEFAULT 0,
+    daily_limit INTEGER NOT NULL DEFAULT 10000,
+    PRIMARY KEY (channel_id, date),
+    FOREIGN KEY (channel_id) REFERENCES channels(id) ON DELETE CASCADE,
+    CHECK (units_used >= 0),
+    CHECK (daily_limit > 0)
+);
+
+CREATE INDEX idx_youtube_quota_date ON youtube_quota_usage (date);
+```
+
+**Cleanup Cron Job (7-day retention):**
+```sql
+-- Run daily at 1 AM:
+DELETE FROM youtube_quota_usage
+WHERE date < CURRENT_DATE - INTERVAL '7 days';
+```
+
+#### Worker State Management
+
+**WorkerState Class (Worker-Local):**
+```python
+class WorkerState:
+    # Gemini quota exhaustion flag
+    gemini_quota_exhausted: bool = False
+    gemini_quota_reset_time: datetime | None = None
+
+    # Kling concurrency limiting
+    active_video_tasks: int = 0
+    max_concurrent_video: int = 3  # ENV: MAX_CONCURRENT_VIDEO
+
+    def check_gemini_quota_available(self) -> bool:
+        """Auto-resets flag if past midnight PST."""
+        ...
+
+    def can_claim_video_task(self) -> bool:
+        """Returns True if under concurrency limit."""
+        ...
+
+    def increment_video_tasks(self) -> None:
+        """Called when claiming video task."""
+        ...
+
+    def decrement_video_tasks(self) -> None:
+        """Called when video task completes/fails."""
+        ...
+```
+
+#### Configuration
+
+**Environment Variables:**
+```bash
+# Discord webhook for quota alerts
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+
+# Kling concurrency limit per worker (default: 3)
+MAX_CONCURRENT_VIDEO=3
+```
+
+#### Implementation Details
+
+- **Story 4.5:** Rate Limit Aware Task Selection
+- **Pre-Claim Pattern:** Check quota → Release if exhausted → PgQueuer retries
+- **No Task Status Updates:** Released tasks stay in current status (PgQueuer handles retry)
+- **Per-Channel Isolation:** YouTube quota tracked separately per channel
+- **Graceful Degradation:** Workers skip tasks when rate limited, process other tasks
+- **Migration:** `alembic/versions/20260116_0005_add_youtube_quota_usage_table.py`
+
+#### Best Practices
+
+- **Monitor quota usage** - set up Discord webhook alerts for proactive notifications
+- **Set appropriate thresholds** - 80% WARNING gives time to adjust before exhaustion
+- **Implement cleanup cron** - prevent `youtube_quota_usage` table bloat
+- **Tune Kling concurrency** - increase `MAX_CONCURRENT_VIDEO` if workers idle
+- **Test quota exhaustion** - manually set `units_used = 10000` to verify alert flow
+
+#### Failure Modes & Troubleshooting
+
+**YouTube Quota Exhausted:**
+- **Symptom:** Upload tasks not processing, CRITICAL alerts firing
+- **Cause:** Channel hit 10,000 units/day limit
+- **Resolution:** Wait for midnight PST reset (automatic)
+- **Prevention:** Monitor 80% WARNING alerts, prioritize urgent uploads
+
+**Gemini Quota Flag Stuck:**
+- **Symptom:** Asset generation tasks not processing after Gemini 429 error
+- **Cause:** `gemini_quota_exhausted` flag set but not reset
+- **Resolution:** Restart worker (flag resets on startup)
+- **Prevention:** Ensure `gemini_quota_reset_time` properly set to next midnight
+
+**Kling Concurrency Blocking:**
+- **Symptom:** Video generation tasks not claiming despite idle workers
+- **Cause:** `active_video_tasks` counter stuck at max
+- **Resolution:** Check logs for missing `decrement_video_tasks()` calls
+- **Prevention:** Ensure `finally` block always decrements counter
+
+---
+
 **Channel Deactivation Mid-Stream:**
 - **Behavior:** Deactivated channel (is_active=false) should stop receiving new tasks but in-progress tasks continue
 - **Impact:** Workers skip deactivated channel in rotation seamlessly

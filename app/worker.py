@@ -29,6 +29,7 @@ import os
 import signal
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 
 import asyncpg
 
@@ -44,6 +45,124 @@ shutdown_requested = False
 
 # Global asyncpg pool reference (for cleanup in shutdown)
 asyncpg_pool: asyncpg.Pool | None = None
+
+
+class WorkerState:
+    """Worker-local state for rate limit tracking (Story 4.5).
+
+    Each worker maintains its own in-memory state for Gemini quota exhaustion
+    and Kling concurrency limiting. This state is NOT shared between workers
+    (intentionally worker-local).
+
+    Attributes:
+        gemini_quota_exhausted: Flag indicating Gemini API quota hit 429.
+            Set to True on first 429, prevents claiming asset generation tasks.
+            Reset to False after midnight PST automatic check.
+
+        gemini_quota_reset_time: Datetime when Gemini quota resets (midnight PST).
+            Set when marking quota exhausted, checked for auto-reset.
+
+        active_video_tasks: Count of currently processing video generation tasks.
+            Incremented when claiming video task, decremented on completion/error.
+            Prevents claiming new video tasks when at max_concurrent_video limit.
+
+        max_concurrent_video: Maximum parallel video generation tasks per worker.
+            Default: 3 (Kling API concurrency limit)
+            Configurable via environment variable: MAX_CONCURRENT_VIDEO
+
+    Note:
+        YouTube quota is tracked in database (YouTubeQuotaUsage table).
+        Gemini/Kling limits are worker-local (transient API rate limits).
+    """
+
+    def __init__(self):
+        """Initialize worker state."""
+        self.gemini_quota_exhausted: bool = False
+        self.gemini_quota_reset_time: datetime | None = None
+        self.active_video_tasks: int = 0
+        self.max_concurrent_video: int = int(os.getenv("MAX_CONCURRENT_VIDEO", "3"))
+
+    def mark_gemini_quota_exhausted(self) -> None:
+        """Mark Gemini quota as exhausted (resets at midnight PST).
+
+        Sets quota exhausted flag and calculates reset time (next midnight PST).
+        Workers will skip asset generation tasks until reset time passes.
+        """
+        from datetime import datetime, timedelta, timezone
+
+        self.gemini_quota_exhausted = True
+
+        # Calculate next midnight PST (UTC-8 or UTC-7 depending on DST)
+        # For simplicity, use UTC midnight as approximation (8 hours ahead of PST)
+        tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
+        self.gemini_quota_reset_time = datetime.combine(
+            tomorrow,
+            datetime.min.time()
+        ).replace(tzinfo=timezone.utc)
+
+        log.warning(
+            "gemini_quota_marked_exhausted",
+            reset_time=self.gemini_quota_reset_time.isoformat()
+        )
+
+    def check_gemini_quota_available(self) -> bool:
+        """Check if Gemini quota has reset.
+
+        Auto-resets quota exhausted flag if past reset time.
+
+        Returns:
+            True if quota available, False if exhausted.
+        """
+        from datetime import datetime, timezone
+
+        if not self.gemini_quota_exhausted:
+            return True
+
+        # Check if past reset time
+        if self.gemini_quota_reset_time and datetime.now(timezone.utc) >= self.gemini_quota_reset_time:
+            self.gemini_quota_exhausted = False
+            self.gemini_quota_reset_time = None
+            log.info("gemini_quota_auto_reset")
+            return True
+
+        return False
+
+    def can_claim_video_task(self) -> bool:
+        """Check if worker can claim another video generation task.
+
+        Returns:
+            True if under concurrency limit, False if at max.
+        """
+        return self.active_video_tasks < self.max_concurrent_video
+
+    def increment_video_tasks(self) -> None:
+        """Increment active video task counter.
+
+        Called when claiming a video generation task.
+        """
+        self.active_video_tasks += 1
+        log.debug(
+            "video_tasks_incremented",
+            active_tasks=self.active_video_tasks,
+            max_concurrent=self.max_concurrent_video
+        )
+
+    def decrement_video_tasks(self) -> None:
+        """Decrement active video task counter.
+
+        Called when video generation task completes or fails.
+        Prevents counter from going negative.
+        """
+        self.active_video_tasks = max(0, self.active_video_tasks - 1)
+        log.debug(
+            "video_tasks_decremented",
+            active_tasks=self.active_video_tasks,
+            max_concurrent=self.max_concurrent_video
+        )
+
+
+# Global worker state instance
+worker_state = WorkerState()
 
 
 def signal_handler(signum: int, frame: object) -> None:

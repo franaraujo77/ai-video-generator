@@ -3,9 +3,16 @@
 This module defines entrypoints (task handlers) for each pipeline step.
 Each entrypoint follows the short transaction pattern:
     1. Claim task (PgQueuer automatic)
-    2. Update status to "processing" (short transaction, close DB)
-    3. Execute pipeline step (OUTSIDE transaction)
-    4. Update status to "completed" or "failed" (short transaction)
+    2. Check rate limits (YouTube quota, Gemini/Kling worker-local state)
+    3. Update status to "processing" (short transaction, close DB)
+    4. Execute pipeline step (OUTSIDE transaction)
+    5. Update status to "completed" or "failed" (short transaction)
+
+Rate Limit Awareness (Story 4.5):
+    - YouTube quota: Check database before upload tasks
+    - Gemini quota: Check worker_state flag before asset tasks
+    - Kling concurrency: Check worker_state counter before video tasks
+    - If rate limit hit: Release task back to queue, skip processing
 
 Entrypoints:
     - process_video: Orchestrate entire video generation pipeline
@@ -20,6 +27,7 @@ Future Entrypoints (Story 4.8):
 
 References:
     - Architecture: Short Transaction Pattern (Architecture Decision 3)
+    - Story 4.5: Rate Limit Aware Task Selection
     - PgQueuer Documentation: https://pgqueuer.readthedocs.io/
 """
 
@@ -29,8 +37,10 @@ from pgqueuer import PgQueuer
 from pgqueuer.models import Job
 
 from app.database import AsyncSessionLocal
-from app.models import Task
+from app.models import Task, TaskStatus
+from app.services.quota_manager import check_youtube_quota, get_required_api
 from app.utils.logging import get_logger
+from app.worker import worker_state
 
 log = get_logger(__name__)
 
@@ -80,6 +90,9 @@ def register_entrypoints(pgq: PgQueuer) -> None:
 
         worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
 
+        # Initialize required_api for finally block (Story 4.5)
+        required_api = None
+
         # Step 1: Claim and log with priority context (short transaction)
         async with AsyncSessionLocal() as db:  # type: ignore[misc]
             task = await db.get(Task, task_id)
@@ -97,11 +110,80 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 pgqueuer_job_id=str(job.id),
             )
 
-            # Transition: pending → claimed → processing (per AC2)
-            task.status = "claimed"
+            # Step 1.5: Rate limit awareness - double-check quota (Story 4.5)
+            # Determine which API this task requires based on its status
+            required_api = get_required_api(task.status.value)
+
+            rate_limit_hit = False
+
+            if required_api == "youtube":
+                # Check YouTube quota before upload
+                quota_available = await check_youtube_quota(
+                    channel_id=task.channel_id,
+                    operation="upload",
+                    db=db
+                )
+                if not quota_available:
+                    rate_limit_hit = True
+                    log.warning(
+                        "youtube_quota_exhausted_releasing_task",
+                        task_id=task_id,
+                        channel_id=task.channel_id,
+                        status=task.status.value
+                    )
+
+            elif required_api == "gemini":
+                # Check Gemini quota flag (worker-local) with auto-reset
+                if not worker_state.check_gemini_quota_available():
+                    rate_limit_hit = True
+                    log.warning(
+                        "gemini_quota_exhausted_releasing_task",
+                        task_id=task_id,
+                        status=task.status.value,
+                        reset_time=worker_state.gemini_quota_reset_time.isoformat() if worker_state.gemini_quota_reset_time else None
+                    )
+
+            elif required_api == "kling":
+                # Check Kling concurrency limit (worker-local)
+                if not worker_state.can_claim_video_task():
+                    rate_limit_hit = True
+                    log.warning(
+                        "kling_concurrency_limit_releasing_task",
+                        task_id=task_id,
+                        active_tasks=worker_state.active_video_tasks,
+                        max_concurrent=worker_state.max_concurrent_video
+                    )
+
+            # If rate limit hit, release task back to queue
+            if rate_limit_hit:
+                # Do NOT update task status - leave it in current state
+                # PgQueuer will make it available for other workers
+                log.info(
+                    "task_released_due_to_rate_limit",
+                    task_id=task_id,
+                    required_api=required_api,
+                    worker_id=worker_id
+                )
+                # Return early - don't process this task
+                return
+
+            # Increment video task counter if claiming video task
+            if required_api == "kling":
+                worker_state.increment_video_tasks()
+
+            # Transition: claimed → processing (with dynamic status based on task type)
+            task.status = TaskStatus.CLAIMED
             await db.commit()
 
-            task.status = "processing"
+            # Determine next processing status based on current status
+            status_transitions = {
+                TaskStatus.PENDING: TaskStatus.GENERATING_ASSETS,
+                TaskStatus.COMPOSITES_READY: TaskStatus.GENERATING_VIDEO,
+                TaskStatus.VIDEO_APPROVED: TaskStatus.GENERATING_AUDIO,
+                TaskStatus.FINAL_REVIEW: TaskStatus.UPLOADING,
+            }
+            next_status = status_transitions.get(task.status, TaskStatus.GENERATING_ASSETS)
+            task.status = next_status
             await db.commit()
 
         log.info(
@@ -136,6 +218,10 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         is_retriable=is_retriable,
                     )
             raise
+        finally:
+            # Decrement video task counter if this was a video task (Story 4.5)
+            if required_api == "kling":
+                worker_state.decrement_video_tasks()
 
         # Step 3b: Update status to completed (short transaction)
         async with AsyncSessionLocal() as db:  # type: ignore[misc]

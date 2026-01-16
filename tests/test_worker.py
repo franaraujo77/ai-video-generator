@@ -272,3 +272,144 @@ class TestStructuredLogging:
 
         # Worker should include this in all log calls
         # (Actual log output tested in integration tests)
+
+
+class TestWorkerStateInitialization:
+    """Test WorkerState initialization (Story 4.5)."""
+
+    def test_default_initialization(self):
+        """Test WorkerState initializes with correct defaults."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.gemini_quota_exhausted is False
+        assert state.gemini_quota_reset_time is None
+        assert state.active_video_tasks == 0
+        assert state.max_concurrent_video == 3  # Default
+
+    @patch.dict(os.environ, {"MAX_CONCURRENT_VIDEO": "5"})
+    def test_initialization_with_env_var(self):
+        """Test WorkerState respects MAX_CONCURRENT_VIDEO env var."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.max_concurrent_video == 5
+
+
+class TestGeminiQuotaManagement:
+    """Test Gemini quota exhaustion flag management (Story 4.5)."""
+
+    def test_check_gemini_quota_available_initially_true(self):
+        """Test quota available on fresh worker state."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.check_gemini_quota_available() is True
+
+    def test_mark_gemini_quota_exhausted_sets_flag(self):
+        """Test marking quota exhausted sets flag and reset time."""
+        from app.worker import WorkerState
+        from datetime import timezone, datetime
+
+        state = WorkerState()
+
+        state.mark_gemini_quota_exhausted()
+
+        assert state.gemini_quota_exhausted is True
+        assert state.gemini_quota_reset_time is not None
+        assert state.gemini_quota_reset_time > datetime.now(timezone.utc)
+
+    def test_check_gemini_quota_exhausted_returns_false(self):
+        """Test quota check returns False when exhausted."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.mark_gemini_quota_exhausted()
+
+        assert state.check_gemini_quota_available() is False
+
+    def test_gemini_quota_auto_reset_at_midnight(self):
+        """Test quota auto-resets when past reset time."""
+        from app.worker import WorkerState
+        from datetime import timezone, datetime, timedelta
+
+        state = WorkerState()
+
+        # Mark quota exhausted with reset time in the past
+        state.gemini_quota_exhausted = True
+        state.gemini_quota_reset_time = datetime.now(timezone.utc) - timedelta(hours=1)
+
+        # Check should auto-reset
+        result = state.check_gemini_quota_available()
+
+        assert result is True
+        assert state.gemini_quota_exhausted is False
+        assert state.gemini_quota_reset_time is None
+
+
+class TestKlingConcurrencyManagement:
+    """Test Kling video task concurrency limiting (Story 4.5)."""
+
+    def test_can_claim_video_task_initially_true(self):
+        """Test can claim video task when counter is 0."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        assert state.can_claim_video_task() is True
+
+    def test_increment_video_tasks(self):
+        """Test incrementing video task counter."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+
+        state.increment_video_tasks()
+        assert state.active_video_tasks == 1
+
+        state.increment_video_tasks()
+        assert state.active_video_tasks == 2
+
+    def test_decrement_video_tasks(self):
+        """Test decrementing video task counter."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.active_video_tasks = 3
+
+        state.decrement_video_tasks()
+        assert state.active_video_tasks == 2
+
+        state.decrement_video_tasks()
+        assert state.active_video_tasks == 1
+
+    def test_decrement_never_goes_negative(self):
+        """Test counter never goes below zero."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        assert state.active_video_tasks == 0
+
+        # Decrement when already at 0
+        state.decrement_video_tasks()
+
+        # Should stay at 0, not go negative
+        assert state.active_video_tasks == 0
+
+    def test_can_claim_video_task_at_limit(self):
+        """Test cannot claim when at max concurrent limit."""
+        from app.worker import WorkerState
+
+        state = WorkerState()
+        state.max_concurrent_video = 3
+
+        # Claim 3 tasks (at limit)
+        state.increment_video_tasks()
+        state.increment_video_tasks()
+        state.increment_video_tasks()
+
+        # Should NOT be able to claim 4th task
+        assert state.can_claim_video_task() is False
