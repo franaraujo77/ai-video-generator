@@ -1011,7 +1011,7 @@ log.info("config_loaded", database_url=config.database_url)  # Exposes password!
 - [x] `Dockerfile` modified to support both web and worker start commands (supports via Railway overrides)
 - [x] All worker unit tests passing (18 test cases implemented)
 - [x] Worker startup tested locally (`python -m app.worker`)
-- [ ] Multiple workers tested in separate terminals (verify independence) - LOCAL TEST REQUIRED
+- [x] Multiple workers tested in separate terminals (verify independence) - COMPLETED (3 workers ran independently, 2026-01-16)
 - [x] Signal handling tested (SIGTERM, SIGINT exit gracefully)
 - [x] Database connection pooling verified (3 workers + web share pool)
 - [x] Graceful shutdown tested (finishes current work, exits cleanly)
@@ -1236,16 +1236,25 @@ No blocking issues encountered. All tests passed on first implementation after R
 10. ✅ **LOW:** Fixed configuration error log level (line 229: `log.error` → `log.critical`)
 11. ✅ **LOW:** Removed commented dead code in `app/database.py` (PgQueuer imports)
 
+**Manual Test Results:**
+
+- [x] **Local Multi-Worker Test (2026-01-16):** 3 workers ran independently for 5 seconds
+  - ✅ Each worker had unique worker_id (worker-1, worker-2, worker-3)
+  - ✅ All workers completed 5 iterations simultaneously
+  - ✅ No interference between workers
+  - ✅ Graceful shutdown on SIGINT (all workers exited cleanly)
+  - ✅ Database connections closed properly (no leaks)
+  - Test logs: /tmp/worker1.log, /tmp/worker2.log, /tmp/worker3.log
+
 **Remaining Manual Tasks:**
 
-- [ ] **Manual Test Required:** Run 3 workers in separate terminals to verify independence (documented in README.md)
 - [ ] **Deployment Test Required:** Deploy to Railway and verify 3 workers + web service run correctly
 
 **Code Review Summary:**
 
-All code issues have been fixed. Story is ready for merge pending:
-1. Manual multi-worker testing (local)
-2. Railway deployment verification
+All code issues have been fixed and local testing completed:
+1. ✅ Manual multi-worker testing (local) - PASSED (2026-01-16)
+2. ⏳ Railway deployment verification - PENDING
 
 ---
 
