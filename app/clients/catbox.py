@@ -92,11 +92,7 @@ class CatboxClient:
             files = {"fileToUpload": f}
             data = {"reqtype": "fileupload"}
 
-            response = await self.client.post(
-                self.base_url,
-                data=data,
-                files=files
-            )
+            response = await self.client.post(self.base_url, data=data, files=files)
             response.raise_for_status()
 
             url = response.text.strip()

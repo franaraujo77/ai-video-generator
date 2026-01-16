@@ -218,6 +218,7 @@ class TestWorkerLoop:
 
         # Create a function that sets shutdown flag after first call
         call_count = [0]
+
         async def mock_claim_side_effect():
             call_count[0] += 1
             if call_count[0] == 1:
@@ -226,10 +227,14 @@ class TestWorkerLoop:
                 pipeline_worker.SHUTDOWN_REQUESTED = True
                 return None
 
-        with patch("app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock) as mock_claim:
+        with patch(
+            "app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock
+        ) as mock_claim:
             mock_claim.side_effect = mock_claim_side_effect
 
-            with patch("app.workers.pipeline_worker.process_pipeline_task", new_callable=AsyncMock) as mock_process:
+            with patch(
+                "app.workers.pipeline_worker.process_pipeline_task", new_callable=AsyncMock
+            ) as mock_process:
                 await pipeline_worker.worker_loop()
 
                 # Verify task was processed
@@ -248,7 +253,9 @@ class TestWorkerLoop:
         async def mock_sleep_side_effect(duration):
             pipeline_worker.SHUTDOWN_REQUESTED = True
 
-        with patch("app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock) as mock_claim:
+        with patch(
+            "app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock
+        ) as mock_claim:
             mock_claim.return_value = None  # No tasks available
 
             with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
@@ -264,7 +271,9 @@ class TestWorkerLoop:
     @pytest.mark.asyncio
     async def test_worker_loop_handles_exceptions(self):
         """Test worker loop continues after exceptions."""
-        with patch("app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock) as mock_claim:
+        with patch(
+            "app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock
+        ) as mock_claim:
             # First call raises exception, second returns None
             mock_claim.side_effect = [Exception("Database error"), None]
 
@@ -283,7 +292,9 @@ class TestWorkerLoop:
         # Set shutdown flag before starting
         pipeline_worker.SHUTDOWN_REQUESTED = True
 
-        with patch("app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock) as mock_claim:
+        with patch(
+            "app.workers.pipeline_worker.claim_next_task", new_callable=AsyncMock
+        ) as mock_claim:
             await pipeline_worker.worker_loop()
 
             # Should not attempt to claim tasks
@@ -335,7 +346,9 @@ class TestMain:
     @pytest.mark.asyncio
     async def test_main_single_task_mode(self):
         """Test main processes single task when --task-id provided."""
-        with patch("app.workers.pipeline_worker.process_pipeline_task", new_callable=AsyncMock) as mock_process:
+        with patch(
+            "app.workers.pipeline_worker.process_pipeline_task", new_callable=AsyncMock
+        ) as mock_process:
             with patch("sys.argv", ["pipeline_worker.py", "--task-id", "test-task-123"]):
                 await pipeline_worker.main()
 

@@ -1,0 +1,23 @@
+# Pokemon Nature Documentary Channel Configuration
+
+# Required: Unique identifier for this channel (must match filename without .yaml)
+channel_id: poke1
+
+# Required: Human-readable display name
+channel_name: "Pokemon Nature Documentary"
+
+# Channel is active
+is_active: true
+
+# ElevenLabs voice ID for David Attenborough-style narration
+# Using default voice for now - can be updated later
+# voice_id: "EXAVITQu4vr4xnSDxMaL"
+
+# Storage strategy - using Notion for now
+storage_strategy: notion
+
+# Maximum concurrent tasks for this channel
+max_concurrent: 3
+
+# Notion database ID for task tracking
+notion_database_id: "6b870ef4134346168f14367291bc89e6"

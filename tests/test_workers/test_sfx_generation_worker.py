@@ -55,8 +55,7 @@ async def mock_task(async_session, mock_channel):
         story_direction="Test story",
         status=TaskStatus.AUDIO_READY,  # Previous step complete
         sfx_descriptions=[
-            f"SFX description {i} with sufficient length for validation"
-            for i in range(1, 19)
+            f"SFX description {i} with sufficient length for validation" for i in range(1, 19)
         ],
         total_cost_usd=1.50,  # Previous pipeline costs
     )
@@ -83,9 +82,7 @@ class TestProcessSFXGenerationTaskSuccess:
                 "app.workers.sfx_generation_worker.async_session_factory",
                 side_effect=mock_session_factory,
             ),
-            patch(
-                "app.workers.sfx_generation_worker.SFXGenerationService"
-            ) as MockService,
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService,
             patch("app.workers.sfx_generation_worker.track_api_cost") as mock_cost,
         ):
             # Setup service mock
@@ -143,9 +140,7 @@ class TestProcessSFXGenerationTaskSuccess:
             }
 
         with (
-            patch(
-                "app.workers.sfx_generation_worker.SFXGenerationService"
-            ) as MockService,
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService,
             patch("app.workers.sfx_generation_worker.track_api_cost"),
         ):
             mock_service_instance = AsyncMock()
@@ -169,9 +164,7 @@ class TestProcessSFXGenerationTaskErrors:
         """Test CLIScriptError marks task as SFX_ERROR."""
         task_id = mock_task.id
 
-        with patch(
-            "app.workers.sfx_generation_worker.SFXGenerationService"
-        ) as MockService:
+        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService:
             # Setup service to raise CLIScriptError
             mock_service_instance = AsyncMock()
             MockService.return_value = mock_service_instance
@@ -200,9 +193,7 @@ class TestProcessSFXGenerationTaskErrors:
         """Test ValueError marks task as SFX_ERROR."""
         task_id = mock_task.id
 
-        with patch(
-            "app.workers.sfx_generation_worker.SFXGenerationService"
-        ) as MockService:
+        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService:
             # Setup service to raise ValueError
             mock_service_instance = AsyncMock()
             MockService.return_value = mock_service_instance
@@ -223,15 +214,11 @@ class TestProcessSFXGenerationTaskErrors:
         """Test generic Exception marks task as SFX_ERROR."""
         task_id = mock_task.id
 
-        with patch(
-            "app.workers.sfx_generation_worker.SFXGenerationService"
-        ) as MockService:
+        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService:
             # Setup service to raise unexpected error
             mock_service_instance = AsyncMock()
             MockService.return_value = mock_service_instance
-            mock_service_instance.create_sfx_manifest.side_effect = RuntimeError(
-                "Unexpected error"
-            )
+            mock_service_instance.create_sfx_manifest.side_effect = RuntimeError("Unexpected error")
 
             await process_sfx_generation_task(task_id)
 
@@ -254,9 +241,7 @@ class TestProcessSFXGenerationTaskEdgeCases:
         await process_sfx_generation_task(non_existent_id)
 
         # Verify no task was created
-        result = await async_session.execute(
-            select(Task).where(Task.id == non_existent_id)
-        )
+        result = await async_session.execute(select(Task).where(Task.id == non_existent_id))
         assert result.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
@@ -331,9 +316,7 @@ class TestShortTransactionPattern:
             }
 
         with (
-            patch(
-                "app.workers.sfx_generation_worker.SFXGenerationService"
-            ) as MockService,
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService,
             patch("app.workers.sfx_generation_worker.track_api_cost"),
         ):
             mock_service_instance = AsyncMock()

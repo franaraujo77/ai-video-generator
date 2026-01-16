@@ -39,7 +39,6 @@ Usage:
     await process_video_assembly_task(task_id="uuid-here")
 """
 
-import asyncio
 from uuid import UUID
 
 from sqlalchemy import select
@@ -162,9 +161,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             duration=result["duration"],
             file_size_mb=result["file_size_mb"],
             resolution=result["resolution"],
-            codec=result.get("video_codec", "unknown")
-            + "/"
-            + result.get("audio_codec", "unknown"),
+            codec=result.get("video_codec", "unknown") + "/" + result.get("audio_codec", "unknown"),
         )
 
         # Step 3: Update task (short transaction)
@@ -209,11 +206,9 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
 
             if task:
                 task.status = TaskStatus.ASSEMBLY_ERROR
-                error_msg = f"Missing file: {str(e)}"
+                error_msg = f"Missing file: {e!s}"
                 task.error_log = (
-                    (task.error_log or "") + "\n" + error_msg
-                    if task.error_log
-                    else error_msg
+                    (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
                 )
                 await db.commit()
 
@@ -236,9 +231,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
                 task.status = TaskStatus.ASSEMBLY_ERROR
                 error_msg = f"FFmpeg assembly failed: {e.stderr}"
                 task.error_log = (
-                    (task.error_log or "") + "\n" + error_msg
-                    if task.error_log
-                    else error_msg
+                    (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
                 )
                 await db.commit()
 
@@ -257,11 +250,9 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
 
             if task:
                 task.status = TaskStatus.ASSEMBLY_ERROR
-                error_msg = f"Validation error: {str(e)}"
+                error_msg = f"Validation error: {e!s}"
                 task.error_log = (
-                    (task.error_log or "") + "\n" + error_msg
-                    if task.error_log
-                    else error_msg
+                    (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
                 )
                 await db.commit()
 
@@ -281,10 +272,8 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
 
             if task:
                 task.status = TaskStatus.ASSEMBLY_ERROR
-                error_msg = f"Unexpected error: {str(e)}"
+                error_msg = f"Unexpected error: {e!s}"
                 task.error_log = (
-                    (task.error_log or "") + "\n" + error_msg
-                    if task.error_log
-                    else error_msg
+                    (task.error_log or "") + "\n" + error_msg if task.error_log else error_msg
                 )
                 await db.commit()

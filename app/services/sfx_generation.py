@@ -75,7 +75,7 @@ def _validate_identifier(value: str, name: str) -> None:
     # Check length first (before pattern match)
     if len(value) == 0 or len(value) > 100:
         raise ValueError(f"{name} length must be 1-100 characters")
-    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise ValueError(f"{name} contains invalid characters: {value}")
 
 
@@ -200,16 +200,14 @@ class SFXGenerationService:
             ...         "Wind howling through dark caves",
             ...         # ... 16 more descriptions
             ...     ],
-            ...     video_durations=[7.2, 6.8, 8.1, ...]
+            ...     video_durations=[7.2, 6.8, 8.1, ...],
             ... )
             >>> print(len(manifest.clips))
             18
         """
         # Validate input parameters
         if len(sfx_descriptions) != 18:
-            raise ValueError(
-                f"Expected 18 SFX descriptions, got {len(sfx_descriptions)}"
-            )
+            raise ValueError(f"Expected 18 SFX descriptions, got {len(sfx_descriptions)}")
 
         # Get SFX directory (auto-creates with secure validation)
         sfx_dir = get_sfx_dir(self.channel_id, self.project_id)
@@ -427,9 +425,7 @@ class SFXGenerationService:
         # If any clip fails with non-retriable error, the entire batch fails
         # This ensures we don't mark task as success when clips are missing
         try:
-            await asyncio.gather(
-                *[generate_single_clip(clip) for clip in manifest.clips]
-            )
+            await asyncio.gather(*[generate_single_clip(clip) for clip in manifest.clips])
         except CLIScriptError:
             # If any clip fails after retries, mark entire generation as failed
             # This will propagate to worker which will mark task as SFX_ERROR

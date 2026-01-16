@@ -65,7 +65,7 @@ def _validate_identifier(value: str, name: str) -> None:
         Prevents path traversal attacks by enforcing alphanumeric, underscore,
         and hyphen characters only. Matches Story 3.2 security patterns.
     """
-    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise ValueError(f"{name} contains invalid characters: {value}")
     if len(value) == 0 or len(value) > 100:
         raise ValueError(f"{name} length must be 1-100 characters")
@@ -141,11 +141,7 @@ class AssetGenerationService:
         self.project_id = project_id
         self.log = get_logger(__name__)
 
-    def create_asset_manifest(
-        self,
-        topic: str,
-        story_direction: str
-    ) -> AssetManifest:
+    def create_asset_manifest(self, topic: str, story_direction: str) -> AssetManifest:
         """Create asset manifest from Notion Topic and Story Direction.
 
         This method performs critical prompt engineering:
@@ -163,8 +159,7 @@ class AssetGenerationService:
 
         Example:
             >>> manifest = service.create_asset_manifest(
-            ...     "Bulbasaur forest documentary",
-            ...     "Show evolution through seasons"
+            ...     "Bulbasaur forest documentary", "Show evolution through seasons"
             ... )
             >>> print(manifest.global_atmosphere)
             "Natural forest lighting, misty morning atmosphere..."
@@ -178,21 +173,15 @@ class AssetGenerationService:
 
         # Generate character assets (6-8 images)
         character_dir = get_character_dir(self.channel_id, self.project_id)
-        characters = self._generate_character_prompts(
-            topic, story_direction, character_dir
-        )
+        characters = self._generate_character_prompts(topic, story_direction, character_dir)
 
         # Generate environment assets (8-10 images)
         environment_dir = get_environment_dir(self.channel_id, self.project_id)
-        environments = self._generate_environment_prompts(
-            topic, story_direction, environment_dir
-        )
+        environments = self._generate_environment_prompts(topic, story_direction, environment_dir)
 
         # Generate prop assets (4-6 images)
         props_dir = get_props_dir(self.channel_id, self.project_id)
-        props = self._generate_prop_prompts(
-            topic, story_direction, props_dir
-        )
+        props = self._generate_prop_prompts(topic, story_direction, props_dir)
 
         assets = characters + environments + props
 
@@ -204,18 +193,13 @@ class AssetGenerationService:
             characters=len(characters),
             environments=len(environments),
             props=len(props),
-            atmosphere_preview=global_atmosphere[:100]
+            atmosphere_preview=global_atmosphere[:100],
         )
 
-        return AssetManifest(
-            global_atmosphere=global_atmosphere,
-            assets=assets
-        )
+        return AssetManifest(global_atmosphere=global_atmosphere, assets=assets)
 
     async def generate_assets(
-        self,
-        manifest: AssetManifest,
-        resume: bool = False
+        self, manifest: AssetManifest, resume: bool = False
     ) -> dict[str, Any]:
         """Generate all assets in manifest by invoking CLI script.
 
@@ -261,7 +245,7 @@ class AssetGenerationService:
                     "asset_skipped",
                     name=asset.name,
                     type=asset.asset_type,
-                    path=str(asset.output_path)
+                    path=str(asset.output_path),
                 )
                 continue
 
@@ -272,11 +256,8 @@ class AssetGenerationService:
                 # Invoke CLI script via async wrapper (Story 3.1)
                 await run_cli_script(
                     "generate_asset.py",
-                    [
-                        "--prompt", combined_prompt,
-                        "--output", str(asset.output_path)
-                    ],
-                    timeout=60  # Gemini API timeout
+                    ["--prompt", combined_prompt, "--output", str(asset.output_path)],
+                    timeout=60,  # Gemini API timeout
                 )
 
                 # Verify file was created
@@ -290,7 +271,7 @@ class AssetGenerationService:
                     "asset_generated",
                     name=asset.name,
                     type=asset.asset_type,
-                    path=str(asset.output_path)
+                    path=str(asset.output_path),
                 )
 
             except Exception as e:
@@ -301,7 +282,7 @@ class AssetGenerationService:
                     name=asset.name,
                     type=asset.asset_type,
                     error=str(e),
-                    prompt_preview=combined_prompt[:100]
+                    prompt_preview=combined_prompt[:100],
                 )
                 # Re-raise to allow worker to handle (mark task failed, retry, etc.)
                 raise
@@ -316,14 +297,14 @@ class AssetGenerationService:
             generated=generated,
             skipped=skipped,
             failed=failed,
-            total_cost_usd=total_cost_usd
+            total_cost_usd=total_cost_usd,
         )
 
         return {
             "generated": generated,
             "skipped": skipped,
             "failed": failed,
-            "total_cost_usd": total_cost_usd
+            "total_cost_usd": total_cost_usd,
         }
 
     def check_asset_exists(self, asset_path: Path) -> bool:
@@ -407,10 +388,7 @@ class AssetGenerationService:
         )
 
     def _generate_character_prompts(
-        self,
-        topic: str,
-        story_direction: str,
-        character_dir: Path
+        self, topic: str, story_direction: str, character_dir: Path
     ) -> list[AssetPrompt]:
         """Generate character asset prompts.
 
@@ -435,59 +413,56 @@ class AssetGenerationService:
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_resting",
                 prompt=f"{pokemon_name} resting peacefully, eyes closed, relaxed pose",
-                output_path=character_dir / f"{pokemon_name.lower()}_resting.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_resting.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_walking",
                 prompt=f"{pokemon_name} walking forward, natural gait, alert expression",
-                output_path=character_dir / f"{pokemon_name.lower()}_walking.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_walking.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_looking",
                 prompt=f"{pokemon_name} looking at camera, curious expression, front view",
-                output_path=character_dir / f"{pokemon_name.lower()}_looking.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_looking.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_side",
                 prompt=f"{pokemon_name} side profile view, standing still, detailed features",
-                output_path=character_dir / f"{pokemon_name.lower()}_side.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_side.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_action",
                 prompt=f"{pokemon_name} using signature ability, energy glowing, dynamic pose",
-                output_path=character_dir / f"{pokemon_name.lower()}_action.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_action.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_eating",
                 prompt=f"{pokemon_name} eating berries, content expression, natural behavior",
-                output_path=character_dir / f"{pokemon_name.lower()}_eating.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_eating.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_sleeping",
                 prompt=f"{pokemon_name} sleeping curled up, peaceful rest, nighttime behavior",
-                output_path=character_dir / f"{pokemon_name.lower()}_sleeping.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_sleeping.png",
             ),
             AssetPrompt(
                 asset_type="character",
                 name=f"{pokemon_name.lower()}_stretching",
                 prompt=f"{pokemon_name} stretching after waking, yawning, morning routine",
-                output_path=character_dir / f"{pokemon_name.lower()}_stretching.png"
+                output_path=character_dir / f"{pokemon_name.lower()}_stretching.png",
             ),
         ]
 
         return characters
 
     def _generate_environment_prompts(
-        self,
-        topic: str,
-        story_direction: str,
-        environment_dir: Path
+        self, topic: str, story_direction: str, environment_dir: Path
     ) -> list[AssetPrompt]:
         """Generate environment asset prompts.
 
@@ -507,59 +482,56 @@ class AssetGenerationService:
                 asset_type="environment",
                 name="forest_clearing",
                 prompt="Forest clearing with sunlight, lush vegetation, natural habitat",
-                output_path=environment_dir / "forest_clearing.png"
+                output_path=environment_dir / "forest_clearing.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="forest_stream",
                 prompt="Small forest stream with flowing water, rocks, moss-covered stones",
-                output_path=environment_dir / "forest_stream.png"
+                output_path=environment_dir / "forest_stream.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="forest_canopy",
                 prompt="Dense forest canopy view, tall trees, filtered sunlight",
-                output_path=environment_dir / "forest_canopy.png"
+                output_path=environment_dir / "forest_canopy.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="forest_path",
                 prompt="Winding forest path, dappled sunlight, natural trail",
-                output_path=environment_dir / "forest_path.png"
+                output_path=environment_dir / "forest_path.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="tree_hollow",
                 prompt="Large tree hollow entrance, moss and bark texture, den habitat",
-                output_path=environment_dir / "tree_hollow.png"
+                output_path=environment_dir / "tree_hollow.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="forest_undergrowth",
                 prompt="Dense forest undergrowth, ferns and shrubs, ground level view",
-                output_path=environment_dir / "forest_undergrowth.png"
+                output_path=environment_dir / "forest_undergrowth.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="forest_pond",
                 prompt="Small forest pond with still water, reflection, lily pads",
-                output_path=environment_dir / "forest_pond.png"
+                output_path=environment_dir / "forest_pond.png",
             ),
             AssetPrompt(
                 asset_type="environment",
                 name="forest_rocks",
                 prompt="Large moss-covered rocks in forest, natural formation",
-                output_path=environment_dir / "forest_rocks.png"
+                output_path=environment_dir / "forest_rocks.png",
             ),
         ]
 
         return environments
 
     def _generate_prop_prompts(
-        self,
-        topic: str,
-        story_direction: str,
-        props_dir: Path
+        self, topic: str, story_direction: str, props_dir: Path
     ) -> list[AssetPrompt]:
         """Generate prop asset prompts.
 
@@ -579,37 +551,37 @@ class AssetGenerationService:
                 asset_type="prop",
                 name="mushroom_cluster",
                 prompt="Cluster of forest mushrooms, various sizes, natural grouping",
-                output_path=props_dir / "mushroom_cluster.png"
+                output_path=props_dir / "mushroom_cluster.png",
             ),
             AssetPrompt(
                 asset_type="prop",
                 name="berry_bush",
                 prompt="Bush with ripe berries, green leaves, natural food source",
-                output_path=props_dir / "berry_bush.png"
+                output_path=props_dir / "berry_bush.png",
             ),
             AssetPrompt(
                 asset_type="prop",
                 name="fallen_log",
                 prompt="Large fallen log with moss and fungi, decomposing wood",
-                output_path=props_dir / "fallen_log.png"
+                output_path=props_dir / "fallen_log.png",
             ),
             AssetPrompt(
                 asset_type="prop",
                 name="forest_flowers",
                 prompt="Small forest flowers, delicate petals, natural groundcover",
-                output_path=props_dir / "forest_flowers.png"
+                output_path=props_dir / "forest_flowers.png",
             ),
             AssetPrompt(
                 asset_type="prop",
                 name="tree_bark_closeup",
                 prompt="Close-up of tree bark texture, moss and lichen details, natural patterns",
-                output_path=props_dir / "tree_bark_closeup.png"
+                output_path=props_dir / "tree_bark_closeup.png",
             ),
             AssetPrompt(
                 asset_type="prop",
                 name="forest_ferns",
                 prompt="Lush forest ferns, unfurling fronds, undergrowth vegetation",
-                output_path=props_dir / "forest_ferns.png"
+                output_path=props_dir / "forest_ferns.png",
             ),
         ]
 

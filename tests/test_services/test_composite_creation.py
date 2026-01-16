@@ -47,7 +47,7 @@ class TestSceneCompositeDataclass:
             environment_path=env_path,
             output_path=output_path,
             is_split_screen=False,
-            character_scale=1.0
+            character_scale=1.0,
         )
 
         assert composite.clip_number == 1
@@ -75,7 +75,7 @@ class TestSceneCompositeDataclass:
             is_split_screen=True,
             character_b_path=char_b_path,
             environment_b_path=env_b_path,
-            character_scale=1.0
+            character_scale=1.0,
         )
 
         assert composite.clip_number == 15
@@ -93,13 +93,13 @@ class TestCompositeManifestDataclass:
             clip_number=1,
             character_path=tmp_path / "char1.png",
             environment_path=tmp_path / "env1.png",
-            output_path=tmp_path / "clip_01.png"
+            output_path=tmp_path / "clip_01.png",
         )
         composite2 = SceneComposite(
             clip_number=2,
             character_path=tmp_path / "char2.png",
             environment_path=tmp_path / "env2.png",
-            output_path=tmp_path / "clip_02.png"
+            output_path=tmp_path / "clip_02.png",
         )
 
         manifest = CompositeManifest(composites=[composite1, composite2])
@@ -134,15 +134,11 @@ class TestCompositeCreationServiceInit:
 class TestCreateCompositeManifest:
     """Test create_composite_manifest method."""
 
-    @patch('app.services.composite_creation.get_composite_dir')
-    @patch('app.services.composite_creation.get_environment_dir')
-    @patch('app.services.composite_creation.get_character_dir')
+    @patch("app.services.composite_creation.get_composite_dir")
+    @patch("app.services.composite_creation.get_environment_dir")
+    @patch("app.services.composite_creation.get_character_dir")
     def test_create_manifest_generates_18_scenes(
-        self,
-        mock_char_dir,
-        mock_env_dir,
-        mock_composite_dir,
-        tmp_path: Path
+        self, mock_char_dir, mock_env_dir, mock_composite_dir, tmp_path: Path
     ):
         """Test manifest contains exactly 18 SceneComposite objects."""
         # Setup mocked directories with assets
@@ -167,8 +163,7 @@ class TestCreateCompositeManifest:
 
         service = CompositeCreationService("poke1", "vid_abc123")
         manifest = service.create_composite_manifest(
-            "Bulbasaur forest documentary",
-            "18-scene narrative showing evolution"
+            "Bulbasaur forest documentary", "18-scene narrative showing evolution"
         )
 
         # Verify exactly 18 composites
@@ -178,15 +173,11 @@ class TestCreateCompositeManifest:
         clip_numbers = [c.clip_number for c in manifest.composites]
         assert clip_numbers == list(range(1, 19))
 
-    @patch('app.services.composite_creation.get_composite_dir')
-    @patch('app.services.composite_creation.get_environment_dir')
-    @patch('app.services.composite_creation.get_character_dir')
+    @patch("app.services.composite_creation.get_composite_dir")
+    @patch("app.services.composite_creation.get_environment_dir")
+    @patch("app.services.composite_creation.get_character_dir")
     def test_create_manifest_maps_assets_correctly(
-        self,
-        mock_char_dir,
-        mock_env_dir,
-        mock_composite_dir,
-        tmp_path: Path
+        self, mock_char_dir, mock_env_dir, mock_composite_dir, tmp_path: Path
     ):
         """Test each clip maps to valid character and environment paths."""
         char_dir = tmp_path / "characters"
@@ -216,15 +207,11 @@ class TestCreateCompositeManifest:
             assert composite.environment_path.parent == env_dir
             assert composite.output_path.parent == composite_dir
 
-    @patch('app.services.composite_creation.get_composite_dir')
-    @patch('app.services.composite_creation.get_environment_dir')
-    @patch('app.services.composite_creation.get_character_dir')
+    @patch("app.services.composite_creation.get_composite_dir")
+    @patch("app.services.composite_creation.get_environment_dir")
+    @patch("app.services.composite_creation.get_character_dir")
     def test_create_manifest_handles_split_screen_clip_15(
-        self,
-        mock_char_dir,
-        mock_env_dir,
-        mock_composite_dir,
-        tmp_path: Path
+        self, mock_char_dir, mock_env_dir, mock_composite_dir, tmp_path: Path
     ):
         """Test clip 15 has is_split_screen=True with character_b and environment_b."""
         char_dir = tmp_path / "characters"
@@ -262,15 +249,11 @@ class TestCreateCompositeManifest:
         assert all(c.character_b_path is None for c in other_clips)
         assert all(c.environment_b_path is None for c in other_clips)
 
-    @patch('app.services.composite_creation.get_composite_dir')
-    @patch('app.services.composite_creation.get_environment_dir')
-    @patch('app.services.composite_creation.get_character_dir')
+    @patch("app.services.composite_creation.get_composite_dir")
+    @patch("app.services.composite_creation.get_environment_dir")
+    @patch("app.services.composite_creation.get_character_dir")
     def test_create_manifest_missing_character_assets(
-        self,
-        mock_char_dir,
-        mock_env_dir,
-        mock_composite_dir,
-        tmp_path: Path
+        self, mock_char_dir, mock_env_dir, mock_composite_dir, tmp_path: Path
     ):
         """Test manifest creation fails when no character assets exist."""
         char_dir = tmp_path / "characters"
@@ -291,15 +274,11 @@ class TestCreateCompositeManifest:
         with pytest.raises(FileNotFoundError, match="No character assets found"):
             service.create_composite_manifest("Topic", "Story")
 
-    @patch('app.services.composite_creation.get_composite_dir')
-    @patch('app.services.composite_creation.get_environment_dir')
-    @patch('app.services.composite_creation.get_character_dir')
+    @patch("app.services.composite_creation.get_composite_dir")
+    @patch("app.services.composite_creation.get_environment_dir")
+    @patch("app.services.composite_creation.get_character_dir")
     def test_create_manifest_missing_environment_assets(
-        self,
-        mock_char_dir,
-        mock_env_dir,
-        mock_composite_dir,
-        tmp_path: Path
+        self, mock_char_dir, mock_env_dir, mock_composite_dir, tmp_path: Path
     ):
         """Test manifest creation fails when no environment assets exist."""
         char_dir = tmp_path / "characters"
@@ -325,13 +304,10 @@ class TestGenerateComposites:
     """Test generate_composites method."""
 
     @pytest.mark.asyncio
-    @patch('app.services.composite_creation.run_cli_script')
-    @patch('app.services.composite_creation.Image')
+    @patch("app.services.composite_creation.run_cli_script")
+    @patch("app.services.composite_creation.Image")
     async def test_generate_composites_success_all_18_composites(
-        self,
-        mock_image,
-        mock_run_cli_script,
-        tmp_path: Path
+        self, mock_image, mock_run_cli_script, tmp_path: Path
     ):
         """Test all 18 composites generated successfully."""
         # Create manifest with 18 composites
@@ -347,7 +323,7 @@ class TestGenerateComposites:
                     output_path=output_path,
                     is_split_screen=True,
                     character_b_path=tmp_path / "char_b.png",
-                    environment_b_path=tmp_path / "env_b.png"
+                    environment_b_path=tmp_path / "env_b.png",
                 )
             else:
                 output_path = tmp_path / f"clip_{i:02d}.png"
@@ -356,7 +332,7 @@ class TestGenerateComposites:
                     character_path=tmp_path / "char.png",
                     environment_path=tmp_path / "env.png",
                     output_path=output_path,
-                    is_split_screen=False
+                    is_split_screen=False,
                 )
             composites.append(composite)
 
@@ -407,13 +383,10 @@ class TestGenerateComposites:
         assert mock_run_cli_script.call_count == 17
 
     @pytest.mark.asyncio
-    @patch('app.services.composite_creation.run_cli_script')
-    @patch('app.services.composite_creation.Image')
+    @patch("app.services.composite_creation.run_cli_script")
+    @patch("app.services.composite_creation.Image")
     async def test_generate_composites_with_partial_resume(
-        self,
-        mock_image,
-        mock_run_cli_script,
-        tmp_path: Path
+        self, mock_image, mock_run_cli_script, tmp_path: Path
     ):
         """Test partial resume skips existing composites."""
         # Create manifest with 18 composites
@@ -429,7 +402,7 @@ class TestGenerateComposites:
                     output_path=output_path,
                     is_split_screen=True,
                     character_b_path=tmp_path / "char_b.png",
-                    environment_b_path=tmp_path / "env_b.png"
+                    environment_b_path=tmp_path / "env_b.png",
                 )
             else:
                 output_path = tmp_path / f"clip_{i:02d}.png"
@@ -438,7 +411,7 @@ class TestGenerateComposites:
                     character_path=tmp_path / "char.png",
                     environment_path=tmp_path / "env.png",
                     output_path=output_path,
-                    is_split_screen=False
+                    is_split_screen=False,
                 )
             composites.append(composite)
 
@@ -489,26 +462,22 @@ class TestGenerateComposites:
         assert result["failed"] == 0
 
     @pytest.mark.asyncio
-    @patch('app.services.composite_creation.run_cli_script')
+    @patch("app.services.composite_creation.run_cli_script")
     async def test_generate_composites_failure_raises_cli_script_error(
-        self,
-        mock_run_cli_script,
-        tmp_path: Path
+        self, mock_run_cli_script, tmp_path: Path
     ):
         """Test CLI script error propagates with correct details."""
         composite = SceneComposite(
             clip_number=5,
             character_path=tmp_path / "char.png",
             environment_path=tmp_path / "env.png",
-            output_path=tmp_path / "clip_05.png"
+            output_path=tmp_path / "clip_05.png",
         )
         manifest = CompositeManifest(composites=[composite])
 
         # Mock CLI script failure
         mock_run_cli_script.side_effect = CLIScriptError(
-            "create_composite.py",
-            1,
-            "FileNotFoundError: char.png not found"
+            "create_composite.py", 1, "FileNotFoundError: char.png not found"
         )
 
         service = CompositeCreationService("poke1", "vid_abc123")
@@ -521,20 +490,17 @@ class TestGenerateComposites:
         assert "not found" in exc_info.value.stderr
 
     @pytest.mark.asyncio
-    @patch('app.services.composite_creation.run_cli_script')
-    @patch('app.services.composite_creation.Image')
+    @patch("app.services.composite_creation.run_cli_script")
+    @patch("app.services.composite_creation.Image")
     async def test_generate_composites_incorrect_dimensions(
-        self,
-        mock_image,
-        mock_run_cli_script,
-        tmp_path: Path
+        self, mock_image, mock_run_cli_script, tmp_path: Path
     ):
         """Test composite generation fails if dimensions are not 1920x1080."""
         composite = SceneComposite(
             clip_number=1,
             character_path=tmp_path / "char.png",
             environment_path=tmp_path / "env.png",
-            output_path=tmp_path / "clip_01.png"
+            output_path=tmp_path / "clip_01.png",
         )
         manifest = CompositeManifest(composites=[composite])
 
@@ -584,12 +550,8 @@ class TestCreateSplitScreenComposite:
     """Test create_split_screen_composite method."""
 
     @pytest.mark.asyncio
-    @patch('app.services.composite_creation.Image')
-    async def test_split_screen_composite_generic_implementation(
-        self,
-        mock_image,
-        tmp_path: Path
-    ):
+    @patch("app.services.composite_creation.Image")
+    async def test_split_screen_composite_generic_implementation(self, mock_image, tmp_path: Path):
         """Test split-screen composite creates 1920x1080 image."""
         # Create mock paths
         char_a_path = tmp_path / "char_a.png"
@@ -658,15 +620,11 @@ class TestCreateSplitScreenComposite:
 class TestMultiChannelIsolation:
     """Test multi-channel isolation."""
 
-    @patch('app.services.composite_creation.get_composite_dir')
-    @patch('app.services.composite_creation.get_environment_dir')
-    @patch('app.services.composite_creation.get_character_dir')
+    @patch("app.services.composite_creation.get_composite_dir")
+    @patch("app.services.composite_creation.get_environment_dir")
+    @patch("app.services.composite_creation.get_character_dir")
     def test_multi_channel_isolation_paths(
-        self,
-        mock_char_dir,
-        mock_env_dir,
-        mock_composite_dir,
-        tmp_path: Path
+        self, mock_char_dir, mock_env_dir, mock_composite_dir, tmp_path: Path
     ):
         """Test composite paths are completely isolated per channel."""
         # Setup channel 1 directories
@@ -726,13 +684,10 @@ class TestIdempotentRegeneration:
     """Test idempotent regeneration."""
 
     @pytest.mark.asyncio
-    @patch('app.services.composite_creation.run_cli_script')
-    @patch('app.services.composite_creation.Image')
+    @patch("app.services.composite_creation.run_cli_script")
+    @patch("app.services.composite_creation.Image")
     async def test_idempotent_regeneration_overwrites_existing(
-        self,
-        mock_image,
-        mock_run_cli_script,
-        tmp_path: Path
+        self, mock_image, mock_run_cli_script, tmp_path: Path
     ):
         """Test regeneration overwrites existing files (resume=False)."""
         # Create composites
@@ -745,7 +700,7 @@ class TestIdempotentRegeneration:
                 clip_number=i,
                 character_path=tmp_path / "char.png",
                 environment_path=tmp_path / "env.png",
-                output_path=output_path
+                output_path=output_path,
             )
             composites.append(composite)
 

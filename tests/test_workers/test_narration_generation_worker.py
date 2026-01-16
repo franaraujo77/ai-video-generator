@@ -224,9 +224,7 @@ class TestProcessNarrationGenerationTask:
         assert task.status == TaskStatus.AUDIO_ERROR
         assert "missing voice_id" in task.error_log
 
-    async def test_process_task_missing_narration_scripts(
-        self, async_session, encryption_env
-    ):
+    async def test_process_task_missing_narration_scripts(self, async_session, encryption_env):
         """Test task fails if narration_scripts field is missing or invalid."""
         channel = Channel(
             channel_id="poke1",

@@ -46,6 +46,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from app.utils.cli_wrapper import CLIScriptError, run_cli_script
 from app.utils.filesystem import (
@@ -111,7 +112,7 @@ class AssemblyManifest:
     clips: list[ClipAssemblySpec]
     output_path: Path
 
-    def to_json_dict(self) -> dict:
+    def to_json_dict(self) -> dict[str, Any]:
         """Convert manifest to JSON format for CLI script.
 
         Returns:
@@ -371,7 +372,7 @@ class VideoAssemblyService:
                 f"Invalid ffprobe output for {audio_path}: {result.stdout.strip()}"
             ) from e
 
-    async def assemble_video(self, manifest: AssemblyManifest) -> dict:
+    async def assemble_video(self, manifest: AssemblyManifest) -> dict[str, Any]:
         """Assemble final video by invoking FFmpeg CLI script.
 
         Orchestration Flow:
@@ -444,7 +445,7 @@ class VideoAssemblyService:
             )
             raise
 
-        except asyncio.TimeoutError as e:
+        except asyncio.TimeoutError:
             self.log.error(
                 "ffmpeg_timeout",
                 timeout=180,
@@ -466,12 +467,14 @@ class VideoAssemblyService:
             duration=video_metadata["duration"],
             file_size_mb=video_metadata["file_size_mb"],
             resolution=video_metadata["resolution"],
-            codec=video_metadata.get("video_codec", "unknown") + "/" + video_metadata.get("audio_codec", "unknown"),
+            codec=video_metadata.get("video_codec", "unknown")
+            + "/"
+            + video_metadata.get("audio_codec", "unknown"),
         )
 
         return video_metadata
 
-    async def validate_output_video(self, video_path: Path) -> dict:
+    async def validate_output_video(self, video_path: Path) -> dict[str, Any]:
         """Validate final assembled video using ffprobe.
 
         Validation Checks:
@@ -615,6 +618,4 @@ class VideoAssemblyService:
         Returns:
             True if file exists and is readable, False otherwise
         """
-        return (
-            file_path.exists() and file_path.is_file() and file_path.stat().st_size > 0
-        )
+        return file_path.exists() and file_path.is_file() and file_path.stat().st_size > 0

@@ -235,7 +235,10 @@ class TestExecuteStep:
         ) as mock_service_class:
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
-            mock_service.generate_narrations = AsyncMock(return_value={"generated": 18})
+            mock_service.create_narration_manifest = AsyncMock(return_value=Mock())
+            mock_service.generate_narration = AsyncMock(
+                return_value={"generated": 16, "skipped": 2}
+            )
 
             completion = await orchestrator.execute_step(
                 PipelineStep.NARRATION_GENERATION,
@@ -255,7 +258,10 @@ class TestExecuteStep:
         with patch("app.services.pipeline_orchestrator.SFXGenerationService") as mock_service_class:
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
-            mock_service.generate_sfx = AsyncMock(return_value={"generated": 18})
+            mock_service.create_sfx_manifest = AsyncMock(return_value=Mock())
+            mock_service.generate_sfx = AsyncMock(
+                return_value={"generated": 16, "skipped": 2}
+            )
 
             completion = await orchestrator.execute_step(
                 PipelineStep.SFX_GENERATION,
@@ -275,6 +281,7 @@ class TestExecuteStep:
         with patch("app.services.pipeline_orchestrator.VideoAssemblyService") as mock_service_class:
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
+            mock_service.create_assembly_manifest = AsyncMock(return_value=Mock())
             mock_service.assemble_video = AsyncMock(return_value={"output": "final.mp4"})
 
             completion = await orchestrator.execute_step(

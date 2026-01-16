@@ -52,7 +52,7 @@ from tenacity import (
 )
 
 from app.clients.catbox import CatboxClient
-from app.utils.cli_wrapper import CLIScriptError, run_cli_script
+from app.utils.cli_wrapper import run_cli_script
 from app.utils.filesystem import get_composite_dir, get_video_dir
 from app.utils.logging import get_logger
 
@@ -76,7 +76,7 @@ def _validate_identifier(value: str, name: str) -> None:
     # Check length first (before pattern match)
     if len(value) == 0 or len(value) > 100:
         raise ValueError(f"{name} length must be 1-100 characters")
-    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise ValueError(f"{name} contains invalid characters: {value}")
 
 
@@ -153,11 +153,7 @@ class VideoGenerationService:
         self.log = get_logger(__name__)
         self._catbox_client: CatboxClient | None = None
 
-    def create_video_manifest(
-        self,
-        topic: str,
-        story_direction: str
-    ) -> VideoManifest:
+    def create_video_manifest(self, topic: str, story_direction: str) -> VideoManifest:
         """Create video manifest by mapping 18 composites to motion prompts.
 
         Motion Prompt Derivation Strategy:
@@ -185,7 +181,7 @@ class VideoGenerationService:
         Example:
             >>> manifest = service.create_video_manifest(
             ...     "Bulbasaur forest documentary",
-            ...     "Show seasonal evolution: spring growth, summer activity, autumn rest"
+            ...     "Show seasonal evolution: spring growth, summer activity, autumn rest",
             ... )
             >>> print(len(manifest.clips))
             18
@@ -208,28 +204,21 @@ class VideoGenerationService:
             output_path = video_dir / f"clip_{clip_number:02d}.mp4"
 
             # Generate motion prompt following Priority Hierarchy
-            motion_prompt = self._generate_motion_prompt(
-                clip_number,
-                topic,
-                story_direction
-            )
+            motion_prompt = self._generate_motion_prompt(clip_number, topic, story_direction)
 
-            clips.append(VideoClip(
-                clip_number=clip_number,
-                composite_path=composite_path,
-                motion_prompt=motion_prompt,
-                output_path=output_path,
-                catbox_url=None
-            ))
+            clips.append(
+                VideoClip(
+                    clip_number=clip_number,
+                    composite_path=composite_path,
+                    motion_prompt=motion_prompt,
+                    output_path=output_path,
+                    catbox_url=None,
+                )
+            )
 
         return VideoManifest(clips=clips)
 
-    def _generate_motion_prompt(
-        self,
-        clip_number: int,
-        topic: str,
-        story_direction: str
-    ) -> str:
+    def _generate_motion_prompt(self, clip_number: int, topic: str, story_direction: str) -> str:
         """Generate motion prompt following Priority Hierarchy.
 
         CURRENT IMPLEMENTATION: Uses generic template prompts.
@@ -252,9 +241,7 @@ class VideoGenerationService:
 
         Example:
             >>> prompt = service._generate_motion_prompt(
-            ...     1,
-            ...     "Bulbasaur forest documentary",
-            ...     "Show seasonal evolution"
+            ...     1, "Bulbasaur forest documentary", "Show seasonal evolution"
             ... )
             >>> print(prompt)
             "Bulbasaur stands in forest clearing. Bulb on back..."
@@ -267,7 +254,7 @@ class VideoGenerationService:
             "generating_motion_prompt",
             clip_number=clip_number,
             character=character,
-            story_direction_hint=story_direction[:100]  # Log first 100 chars
+            story_direction_hint=story_direction[:100],  # Log first 100 chars
         )
 
         # Generic motion prompts following Priority Hierarchy
@@ -298,10 +285,7 @@ class VideoGenerationService:
         return motion_prompts[prompt_index]
 
     async def generate_videos(
-        self,
-        manifest: VideoManifest,
-        resume: bool = False,
-        max_concurrent: int = 5
+        self, manifest: VideoManifest, resume: bool = False, max_concurrent: int = 5
     ) -> dict[str, Any]:
         """Generate all video clips in manifest by invoking CLI script.
 
@@ -356,7 +340,7 @@ class VideoGenerationService:
                     self.log.info(
                         "video_clip_skipped",
                         clip_number=clip.clip_number,
-                        output_path=str(clip.output_path)
+                        output_path=str(clip.output_path),
                     )
                     skipped += 1
                     return True
@@ -369,24 +353,27 @@ class VideoGenerationService:
                         "video_generation_start",
                         clip_number=clip.clip_number,
                         catbox_url=catbox_url,
-                        output_path=str(clip.output_path)
+                        output_path=str(clip.output_path),
                     )
 
                     # Call CLI script to generate video
                     await run_cli_script(
                         "generate_video.py",
                         [
-                            "--image", catbox_url,
-                            "--prompt", clip.motion_prompt,
-                            "--output", str(clip.output_path)
+                            "--image",
+                            catbox_url,
+                            "--prompt",
+                            clip.motion_prompt,
+                            "--output",
+                            str(clip.output_path),
                         ],
-                        timeout=600  # 10 minutes (NFR-I3)
+                        timeout=600,  # 10 minutes (NFR-I3)
                     )
 
                     self.log.info(
                         "video_generation_complete",
                         clip_number=clip.clip_number,
-                        output_path=str(clip.output_path)
+                        output_path=str(clip.output_path),
                     )
 
                     generated += 1
@@ -397,7 +384,7 @@ class VideoGenerationService:
                         "video_generation_failed",
                         clip_number=clip.clip_number,
                         error=str(e),
-                        error_type=type(e).__name__
+                        error_type=type(e).__name__,
                     )
                     failed += 1
                     return False  # Continue with other clips (partial resume support)
@@ -412,14 +399,14 @@ class VideoGenerationService:
             "generated": generated,
             "skipped": skipped,
             "failed": failed,
-            "total_cost_usd": total_cost_usd
+            "total_cost_usd": total_cost_usd,
         }
 
     @retry(
         retry=retry_if_exception_type((httpx.HTTPError, asyncio.TimeoutError)),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
-        reraise=True
+        reraise=True,
     )
     async def upload_to_catbox(self, composite_path: Path) -> str:
         """Upload composite image to catbox.moe for public hosting.
@@ -478,9 +465,7 @@ class VideoGenerationService:
         file_size = video_path.stat().st_size
         if file_size < 1_000_000:  # 1MB minimum
             self.log.warning(
-                "video_file_too_small",
-                video_path=str(video_path),
-                file_size=file_size
+                "video_file_too_small", video_path=str(video_path), file_size=file_size
             )
             return False
 

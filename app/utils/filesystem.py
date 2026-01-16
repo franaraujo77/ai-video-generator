@@ -79,7 +79,7 @@ PROPS_DIR_NAME = "props"
 COMPOSITE_DIR_NAME = "composites"
 
 # Validation pattern: alphanumeric, underscores, dashes only
-_ID_PATTERN = re.compile(r'^[a-zA-Z0-9_-]+$')
+_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _validate_identifier(identifier: str, name: str) -> None:

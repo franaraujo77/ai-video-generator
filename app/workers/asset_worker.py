@@ -120,7 +120,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             "task_claimed",
             task_id=str(task_id),
             channel_id=channel_id_str,
-            status="generating_assets"
+            status="generating_assets",
         )
 
     # Step 2: Generate assets (OUTSIDE transaction - DB connection closed)
@@ -133,7 +133,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             task_id=str(task_id),
             asset_count=len(manifest.assets),
             # Truncate atmosphere for logging
-            global_atmosphere=manifest.global_atmosphere[:100] + "..."
+            global_atmosphere=manifest.global_atmosphere[:100] + "...",
         )
 
         result = await service.generate_assets(manifest, resume=False)
@@ -144,7 +144,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             generated=result["generated"],
             skipped=result["skipped"],
             failed=result["failed"],
-            total_cost_usd=result["total_cost_usd"]
+            total_cost_usd=result["total_cost_usd"],
         )
 
         # Step 3: Update task (short transaction)
@@ -158,11 +158,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             task.total_cost_usd += result["total_cost_usd"]
             await db.commit()
 
-            log.info(
-                "task_updated",
-                task_id=str(task_id),
-                status="assets_ready"
-            )
+            log.info("task_updated", task_id=str(task_id), status="assets_ready")
 
         # Step 4: Update Notion (async, non-blocking)
         # Note: Notion sync service not yet implemented in Epic 2
@@ -192,7 +188,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             script=e.script,
             exit_code=e.exit_code,
             # Truncate stderr to prevent log bloat
-            stderr=e.stderr[:500] + "..." if len(e.stderr) > 500 else e.stderr
+            stderr=e.stderr[:500] + "..." if len(e.stderr) > 500 else e.stderr,
         )
 
         # Update task with error status
@@ -207,11 +203,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                 await db.commit()
 
     except asyncio.TimeoutError:
-        log.error(
-            "asset_generation_timeout",
-            task_id=str(task_id),
-            timeout=60
-        )
+        log.error("asset_generation_timeout", task_id=str(task_id), timeout=60)
 
         async with async_session_factory() as db, db.begin():
             task = await db.get(Task, task_id)
@@ -222,11 +214,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                 await db.commit()
 
     except Exception as e:
-        log.error(
-            "asset_generation_unexpected_error",
-            task_id=str(task_id),
-            error=str(e)
-        )
+        log.error("asset_generation_unexpected_error", task_id=str(task_id), error=str(e))
 
         async with async_session_factory() as db, db.begin():
             task = await db.get(Task, task_id)
@@ -253,10 +241,6 @@ async def _update_notion_status_async(notion_page_id: str, status: str) -> None:
     """
     # TODO: Implement Notion status update using Epic 2 NotionSyncService
     # For now, just log the intent
-    log.info(
-        "notion_status_update_placeholder",
-        notion_page_id=notion_page_id,
-        status=status
-    )
+    log.info("notion_status_update_placeholder", notion_page_id=notion_page_id, status=status)
     # In production, this would call:
     # await notion_client.update_page_status(notion_page_id, status)

@@ -38,7 +38,7 @@ class TestCatboxClient:
         """Test successful image upload to catbox.moe."""
         expected_url = "https://files.catbox.moe/abc123.png"
 
-        with patch.object(client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(client.client, "post", new_callable=AsyncMock) as mock_post:
             # Mock successful response
             mock_response = Mock()
             mock_response.text = expected_url
@@ -67,13 +67,11 @@ class TestCatboxClient:
     @pytest.mark.asyncio
     async def test_upload_image_http_error(self, client, temp_image):
         """Test upload fails when catbox.moe returns HTTP error."""
-        with patch.object(client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(client.client, "post", new_callable=AsyncMock) as mock_post:
             # Mock HTTP error response
             mock_response = Mock()
             mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-                "500 Internal Server Error",
-                request=Mock(),
-                response=Mock(status_code=500)
+                "500 Internal Server Error", request=Mock(), response=Mock(status_code=500)
             )
             mock_post.return_value = mock_response
 
@@ -83,7 +81,7 @@ class TestCatboxClient:
     @pytest.mark.asyncio
     async def test_upload_image_network_error(self, client, temp_image):
         """Test upload fails when network error occurs."""
-        with patch.object(client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(client.client, "post", new_callable=AsyncMock) as mock_post:
             # Mock network error
             mock_post.side_effect = httpx.ConnectError("Connection failed")
 
@@ -93,7 +91,7 @@ class TestCatboxClient:
     @pytest.mark.asyncio
     async def test_close_client(self, client):
         """Test client connection is closed properly."""
-        with patch.object(client.client, 'aclose', new_callable=AsyncMock) as mock_close:
+        with patch.object(client.client, "aclose", new_callable=AsyncMock) as mock_close:
             await client.close()
             mock_close.assert_called_once()
 
@@ -113,11 +111,10 @@ class TestCatboxClient:
             "https://files.catbox.moe/ghi789.png",
         ]
 
-        with patch.object(client.client, 'post', new_callable=AsyncMock) as mock_post:
+        with patch.object(client.client, "post", new_callable=AsyncMock) as mock_post:
             # Mock responses for each upload
             mock_post.side_effect = [
-                Mock(text=url, raise_for_status=Mock())
-                for url in expected_urls
+                Mock(text=url, raise_for_status=Mock()) for url in expected_urls
             ]
 
             # Upload all images

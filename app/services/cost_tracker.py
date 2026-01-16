@@ -19,12 +19,7 @@ log = get_logger(__name__)
 
 
 async def track_api_cost(
-    db: Any,
-    task_id: UUID,
-    component: str,
-    cost_usd: Decimal,
-    api_calls: int,
-    units_consumed: int
+    db: Any, task_id: UUID, component: str, cost_usd: Decimal, api_calls: int, units_consumed: int
 ) -> None:
     """Track API cost for a video component.
 
@@ -46,7 +41,7 @@ async def track_api_cost(
         ...     component="kling_video_clips",
         ...     cost_usd=Decimal("7.56"),
         ...     api_calls=18,
-        ...     units_consumed=18
+        ...     units_consumed=18,
         ... )
     """
     log.info(
@@ -56,7 +51,7 @@ async def track_api_cost(
         cost_usd=str(cost_usd),
         api_calls=api_calls,
         units_consumed=units_consumed,
-        note="STUB: Cost not persisted to database (waiting for Story 3.3)"
+        note="STUB: Cost not persisted to database (waiting for Story 3.3)",
     )
     # TODO: Implement full cost tracking when VideoCost model exists
     # async with db.begin():

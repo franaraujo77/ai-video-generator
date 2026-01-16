@@ -95,9 +95,7 @@ class TestAssemblyManifestDataclass:
             narration_duration=7.2,
         )
 
-        manifest = AssemblyManifest(
-            clips=[clip], output_path=tmp_path / "final.mp4"
-        )
+        manifest = AssemblyManifest(clips=[clip], output_path=tmp_path / "final.mp4")
 
         json_dict = manifest.to_json_dict()
 
@@ -318,9 +316,7 @@ class TestValidateInputFiles:
         clip.narration_path.write_text("fake audio")
         clip.sfx_path.write_text("fake sfx")
 
-        manifest = AssemblyManifest(
-            clips=[clip], output_path=tmp_path / "final.mp4"
-        )
+        manifest = AssemblyManifest(clips=[clip], output_path=tmp_path / "final.mp4")
 
         service = VideoAssemblyService("poke1", "vid_abc123")
         await service.validate_input_files(manifest)  # Should not raise
@@ -340,9 +336,7 @@ class TestValidateInputFiles:
         clip.video_path.write_text("fake video")
         clip.narration_path.write_text("fake audio")
 
-        manifest = AssemblyManifest(
-            clips=[clip], output_path=tmp_path / "final.mp4"
-        )
+        manifest = AssemblyManifest(clips=[clip], output_path=tmp_path / "final.mp4")
 
         service = VideoAssemblyService("poke1", "vid_abc123")
 
@@ -427,9 +421,7 @@ class TestAssembleVideo:
             narration_duration=7.2,
         )
 
-        manifest = AssemblyManifest(
-            clips=[clip], output_path=tmp_path / "final.mp4"
-        )
+        manifest = AssemblyManifest(clips=[clip], output_path=tmp_path / "final.mp4")
 
         # Mock CLI script failure
         mock_run_cli_script.side_effect = CLIScriptError(

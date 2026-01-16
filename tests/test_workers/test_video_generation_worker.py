@@ -76,13 +76,19 @@ class TestVideoGenerationWorker:
             "generated": 18,
             "skipped": 0,
             "failed": 0,
-            "total_cost_usd": Decimal("7.56")
+            "total_cost_usd": Decimal("7.56"),
         }
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService, \
-             patch('app.workers.video_generation_worker.track_api_cost', new_callable=AsyncMock) as mock_track_cost:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch(
+                "app.workers.video_generation_worker.track_api_cost", new_callable=AsyncMock
+            ) as mock_track_cost,
+        ):
             # Mock service
             mock_service = MockService.return_value
             mock_service.create_video_manifest = Mock(return_value=mock_manifest)
@@ -97,15 +103,12 @@ class TestVideoGenerationWorker:
 
             # Verify manifest creation
             mock_service.create_video_manifest.assert_called_once_with(
-                "Bulbasaur forest documentary",
-                "Show evolution through seasons"
+                "Bulbasaur forest documentary", "Show evolution through seasons"
             )
 
             # Verify video generation
             mock_service.generate_videos.assert_called_once_with(
-                mock_manifest,
-                resume=False,
-                max_concurrent=5
+                mock_manifest, resume=False, max_concurrent=5
             )
 
             # Verify status updates
@@ -119,7 +122,10 @@ class TestVideoGenerationWorker:
         task_id = str(uuid4())
         mock_db_session.get = AsyncMock(return_value=None)
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session):
+        with patch(
+            "app.workers.video_generation_worker.async_session_factory",
+            return_value=mock_db_session,
+        ):
             # Should not raise error, just log and return
             await process_video_generation_task(task_id)
 
@@ -131,17 +137,19 @@ class TestVideoGenerationWorker:
         """Test handling of CLI script errors."""
         task_id = str(mock_task.id)
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+        ):
             # Mock service to raise CLI error
             mock_service = MockService.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = AsyncMock(
                 side_effect=CLIScriptError(
-                    "generate_video.py",
-                    1,
-                    "KIE.ai API error: Invalid API key"
+                    "generate_video.py", 1, "KIE.ai API error: Invalid API key"
                 )
             )
 
@@ -157,9 +165,13 @@ class TestVideoGenerationWorker:
         """Test handling of timeout errors."""
         task_id = str(mock_task.id)
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+        ):
             # Mock service to raise timeout
             mock_service = MockService.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
@@ -177,14 +189,16 @@ class TestVideoGenerationWorker:
         """Test handling of unexpected errors."""
         task_id = str(mock_task.id)
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+        ):
             # Mock service to raise unexpected error
             mock_service = MockService.return_value
-            mock_service.create_video_manifest = Mock(
-                side_effect=RuntimeError("Unexpected error")
-            )
+            mock_service.create_video_manifest = Mock(side_effect=RuntimeError("Unexpected error"))
 
             # Process task
             await process_video_generation_task(task_id)
@@ -206,12 +220,7 @@ class TestVideoGenerationWorker:
             nonlocal long_operation_completed
             await asyncio.sleep(0.01)  # Simulate long operation
             long_operation_completed = True
-            return {
-                "generated": 18,
-                "skipped": 0,
-                "failed": 0,
-                "total_cost_usd": Decimal("7.56")
-            }
+            return {"generated": 18, "skipped": 0, "failed": 0, "total_cost_usd": Decimal("7.56")}
 
         def mock_begin():
             nonlocal transaction_count
@@ -223,9 +232,13 @@ class TestVideoGenerationWorker:
 
         mock_db_session.begin = mock_begin
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+        ):
             mock_service = MockService.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = mock_generate_videos
@@ -243,18 +256,26 @@ class TestVideoGenerationWorker:
         """Test that Notion status is updated after success."""
         task_id = str(mock_task.id)
 
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService, \
-             patch('app.workers.video_generation_worker.update_notion_status', new_callable=AsyncMock) as mock_notion:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch(
+                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
+            ) as mock_notion,
+        ):
             mock_service = MockService.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
-            mock_service.generate_videos = AsyncMock(return_value={
-                "generated": 18,
-                "skipped": 0,
-                "failed": 0,
-                "total_cost_usd": Decimal("7.56")
-            })
+            mock_service.generate_videos = AsyncMock(
+                return_value={
+                    "generated": 18,
+                    "skipped": 0,
+                    "failed": 0,
+                    "total_cost_usd": Decimal("7.56"),
+                }
+            )
 
             # Process task
             await process_video_generation_task(task_id)
@@ -266,17 +287,23 @@ class TestVideoGenerationWorker:
     async def test_process_video_generation_string_or_uuid(self, mock_task, mock_db_session):
         """Test worker accepts both string and UUID task_id."""
         # Test with UUID object
-        with patch('app.workers.video_generation_worker.async_session_factory', return_value=mock_db_session), \
-             patch('app.workers.video_generation_worker.VideoGenerationService') as MockService:
-
+        with (
+            patch(
+                "app.workers.video_generation_worker.async_session_factory",
+                return_value=mock_db_session,
+            ),
+            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+        ):
             mock_service = MockService.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
-            mock_service.generate_videos = AsyncMock(return_value={
-                "generated": 18,
-                "skipped": 0,
-                "failed": 0,
-                "total_cost_usd": Decimal("7.56")
-            })
+            mock_service.generate_videos = AsyncMock(
+                return_value={
+                    "generated": 18,
+                    "skipped": 0,
+                    "failed": 0,
+                    "total_cost_usd": Decimal("7.56"),
+                }
+            )
 
             # Process with UUID
             await process_video_generation_task(mock_task.id)
