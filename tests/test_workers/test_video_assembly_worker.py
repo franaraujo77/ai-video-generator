@@ -181,7 +181,7 @@ class TestProcessVideoAssemblyTask:
 
         # Verify task status updated to error
         await async_session.refresh(task)
-        assert task.status == TaskStatus.ASSEMBLY_ERROR
+        assert task.status == TaskStatus.VIDEO_ERROR
         assert "Missing file" in task.error_log
 
     async def test_process_task_cli_script_error(self, async_session, encryption_env):
@@ -242,7 +242,7 @@ class TestProcessVideoAssemblyTask:
 
         # Verify task status updated to error
         await async_session.refresh(task)
-        assert task.status == TaskStatus.ASSEMBLY_ERROR
+        assert task.status == TaskStatus.VIDEO_ERROR
         assert "FFmpeg assembly failed" in task.error_log
 
     async def test_process_task_validation_error(self, async_session, encryption_env):
@@ -299,7 +299,7 @@ class TestProcessVideoAssemblyTask:
 
         # Verify task status updated to error
         await async_session.refresh(task)
-        assert task.status == TaskStatus.ASSEMBLY_ERROR
+        assert task.status == TaskStatus.VIDEO_ERROR
         assert "Validation error" in task.error_log
 
     async def test_process_task_unexpected_error(self, async_session, encryption_env):
@@ -350,7 +350,7 @@ class TestProcessVideoAssemblyTask:
 
         # Verify task status updated to error
         await async_session.refresh(task)
-        assert task.status == TaskStatus.ASSEMBLY_ERROR
+        assert task.status == TaskStatus.VIDEO_ERROR
         assert "Unexpected error" in task.error_log
 
     async def test_process_task_not_found(self, async_session, encryption_env):

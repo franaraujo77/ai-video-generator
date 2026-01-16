@@ -428,7 +428,7 @@ class SFXGenerationService:
             await asyncio.gather(*[generate_single_clip(clip) for clip in manifest.clips])
         except CLIScriptError:
             # If any clip fails after retries, mark entire generation as failed
-            # This will propagate to worker which will mark task as SFX_ERROR
+            # This will propagate to worker which will mark task as AUDIO_ERROR
             self.log.error(
                 "sfx_generation_failed",
                 generated=generated,

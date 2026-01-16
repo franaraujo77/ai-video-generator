@@ -60,8 +60,6 @@ TERMINAL_TASK_STATUSES = {
     TaskStatus.ASSET_ERROR,  # Failed states (recoverable)
     TaskStatus.VIDEO_ERROR,
     TaskStatus.AUDIO_ERROR,
-    TaskStatus.SFX_ERROR,
-    TaskStatus.ASSEMBLY_ERROR,
     TaskStatus.UPLOAD_ERROR,
 }
 

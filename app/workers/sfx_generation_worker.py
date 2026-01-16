@@ -114,7 +114,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
         channel = channel_result.scalar_one_or_none()
         if not channel:
             log.error("channel_not_found", channel_id=str(task.channel_id))
-            task.status = TaskStatus.SFX_ERROR
+            task.status = TaskStatus.AUDIO_ERROR
             task.error_log = f"Channel {task.channel_id} not found"
             await db.commit()
             return
@@ -132,7 +132,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
                 task_id=str(task_id),
                 descriptions_count=len(sfx_descriptions) if sfx_descriptions else 0,
             )
-            task.status = TaskStatus.SFX_ERROR
+            task.status = TaskStatus.AUDIO_ERROR
             task.error_log = "Task missing sfx_descriptions field or count != 18"
             await db.commit()
             return
@@ -216,7 +216,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
             result_task = await db.execute(select(Task).where(Task.id == task_id))
             task = result_task.scalar_one_or_none()
             if task:
-                task.status = TaskStatus.SFX_ERROR
+                task.status = TaskStatus.AUDIO_ERROR
                 task.error_log = f"SFX generation failed: {e.stderr}"
                 await db.commit()
 
@@ -227,7 +227,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
             result_task = await db.execute(select(Task).where(Task.id == task_id))
             task = result_task.scalar_one_or_none()
             if task:
-                task.status = TaskStatus.SFX_ERROR
+                task.status = TaskStatus.AUDIO_ERROR
                 task.error_log = f"Validation error: {e!s}"
                 await db.commit()
 
@@ -238,6 +238,6 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
             result_task = await db.execute(select(Task).where(Task.id == task_id))
             task = result_task.scalar_one_or_none()
             if task:
-                task.status = TaskStatus.SFX_ERROR
+                task.status = TaskStatus.AUDIO_ERROR
                 task.error_log = f"Unexpected error: {e!s}"
                 await db.commit()
