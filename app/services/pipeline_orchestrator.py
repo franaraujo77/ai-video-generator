@@ -52,7 +52,7 @@ import asyncio
 import contextlib
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any
 
@@ -263,7 +263,7 @@ class PipelineOrchestrator:
             )
 
             # Record pipeline start time in database
-            await self._update_pipeline_start_time(datetime.utcnow())
+            await self._update_pipeline_start_time(datetime.now(UTC))
 
             # Load step completion metadata for partial resume
             self.step_completions = await self.load_step_completion_metadata()
@@ -345,7 +345,7 @@ class PipelineOrchestrator:
             # Calculate total pipeline duration
             pipeline_duration = time.time() - pipeline_start
             await self._update_pipeline_end_time(
-                datetime.utcnow(),
+                datetime.now(UTC),
                 pipeline_duration,
             )
 
@@ -642,7 +642,7 @@ class PipelineOrchestrator:
                 if error_message:
                     # Append to error log (append-only pattern)
                     current_log = task.error_log or ""
-                    timestamp = datetime.utcnow().isoformat()
+                    timestamp = datetime.now(UTC).isoformat()
                     new_entry = f"[{timestamp}] {status.value}: {error_message}"
                     task.error_log = f"{current_log}\n{new_entry}".strip()
 
@@ -655,8 +655,13 @@ class PipelineOrchestrator:
                 )
 
         # Store task reference to prevent garbage collection warnings (RUF006)
+        # Done callback consumes any exceptions to prevent warnings
+        def _handle_notion_task_done(task: asyncio.Task[None]) -> None:
+            with contextlib.suppress(Exception):
+                task.result()
+
         _notion_sync_task = asyncio.create_task(self._sync_to_notion_async(status))
-        _notion_sync_task.add_done_callback(lambda t: None)  # Suppress warnings
+        _notion_sync_task.add_done_callback(_handle_notion_task_done)
 
     async def save_step_completion(
         self,
