@@ -48,7 +48,7 @@ class TestRunCLIScript:
 
         # Execute
         result = await run_cli_script(
-            "generate_asset.py", ["--output", "/tmp/test.png"], timeout=60
+            "generate_asset.py", ["--output", "/tmp/test.png"], timeout=60  # noqa: S108
         )
 
         # Verify
@@ -69,7 +69,7 @@ class TestRunCLIScript:
 
         # Execute and verify exception
         with pytest.raises(CLIScriptError) as exc_info:
-            await run_cli_script("generate_asset.py", ["--output", "/tmp/test.png"])
+            await run_cli_script("generate_asset.py", ["--output", "/tmp/test.png"])  # noqa: S108
 
         # Verify exception attributes
         assert exc_info.value.script == "generate_asset.py"
@@ -150,7 +150,7 @@ class TestRunCLIScript:
 
         # Execute
         await run_cli_script(
-            "generate_asset.py", ["--prompt", "A forest", "--output", "/tmp/asset.png"], timeout=60
+            "generate_asset.py", ["--prompt", "A forest", "--output", "/tmp/asset.png"], timeout=60  # noqa: S108
         )
 
         # Verify command construction
@@ -159,7 +159,7 @@ class TestRunCLIScript:
         assert "--prompt" in captured_command
         assert "A forest" in captured_command
         assert "--output" in captured_command
-        assert "/tmp/asset.png" in captured_command
+        assert "/tmp/asset.png" in captured_command  # noqa: S108
 
     @pytest.mark.asyncio
     async def test_run_cli_script_passes_timeout_to_subprocess(self, mocker):
@@ -300,7 +300,7 @@ class TestRunCLIScript:
 
         # Execute with sensitive args
         await run_cli_script(
-            "generate_asset.py", ["--api-key", "secret123", "--output", "/tmp/test.png"], timeout=60
+            "generate_asset.py", ["--api-key", "secret123", "--output", "/tmp/test.png"], timeout=60  # noqa: S108
         )
 
         # Verify log.info called with sanitized args
