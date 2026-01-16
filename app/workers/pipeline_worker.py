@@ -53,7 +53,7 @@ import sys
 from typing import Any
 
 from app.database import async_session_factory
-from app.models import Task, TaskStatus
+from app.models import PriorityLevel, Task, TaskStatus
 from app.services.pipeline_orchestrator import PipelineOrchestrator
 from app.utils.logging import get_logger
 
@@ -195,9 +195,9 @@ async def claim_next_task() -> str | None:
         # Use ORM with proper priority ordering via case statement
         # TODO: Add FOR UPDATE SKIP LOCKED when PgQueuer is integrated (Epic 4)
         priority_order = case(
-            (Task.priority == "high", 1),
-            (Task.priority == "normal", 2),
-            (Task.priority == "low", 3),
+            (Task.priority == PriorityLevel.HIGH, 1),
+            (Task.priority == PriorityLevel.NORMAL, 2),
+            (Task.priority == PriorityLevel.LOW, 3),
             else_=4,
         )
 
