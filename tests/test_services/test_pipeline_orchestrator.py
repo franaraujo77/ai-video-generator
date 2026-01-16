@@ -542,8 +542,8 @@ class TestStatusUpdates:
 
             await orchestrator.update_task_status(TaskStatus.GENERATING_ASSETS)
 
-            # Verify status was updated
-            mock_session.commit.assert_called()
+            # Verify status was updated (db.begin() auto-commits on successful exit)
+            assert task.status == TaskStatus.GENERATING_ASSETS
 
     @pytest.mark.asyncio
     async def test_update_task_status_with_error(self, async_session):
