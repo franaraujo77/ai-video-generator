@@ -246,6 +246,9 @@ class TestExecuteStep:
                 "vid_123",
                 "Bulbasaur documentary",
                 "Forest story",
+                narration_scripts=["Script 1"] * 18,
+                sfx_descriptions=None,
+                voice_id="test_voice_123",
             )
 
             assert completion.completed is True
@@ -259,9 +262,7 @@ class TestExecuteStep:
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
             mock_service.create_sfx_manifest = AsyncMock(return_value=Mock())
-            mock_service.generate_sfx = AsyncMock(
-                return_value={"generated": 16, "skipped": 2}
-            )
+            mock_service.generate_sfx = AsyncMock(return_value={"generated": 16, "skipped": 2})
 
             completion = await orchestrator.execute_step(
                 PipelineStep.SFX_GENERATION,
@@ -269,6 +270,9 @@ class TestExecuteStep:
                 "vid_123",
                 "Bulbasaur documentary",
                 "Forest story",
+                narration_scripts=None,
+                sfx_descriptions=["SFX 1"] * 18,
+                voice_id=None,
             )
 
             assert completion.completed is True

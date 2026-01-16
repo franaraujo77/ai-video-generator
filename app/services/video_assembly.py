@@ -2,7 +2,8 @@
 
 This module implements the final stage (Step 6) of the 8-step video generation pipeline.
 It orchestrates the assembly of 18 video clips, narration audio, and SFX into a complete
-90-second documentary using FFmpeg, following the "Smart Agent + Dumb Scripts" architectural pattern.
+90-second documentary using FFmpeg, following the "Smart Agent + Dumb Scripts"
+architectural pattern.
 
 Key Responsibilities:
 - Probe audio durations with ffprobe for accurate video trimming synchronization
@@ -303,7 +304,8 @@ class VideoAssemblyService:
         """Probe audio file duration using ffprobe.
 
         ffprobe Command:
-        ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 audio.mp3
+        ffprobe -v error -show_entries format=duration -of \
+            default=noprint_wrappers=1:nokey=1 audio.mp3
 
         Args:
             audio_path: Path to audio file (MP3 or WAV)
@@ -403,7 +405,8 @@ class VideoAssemblyService:
         Example:
             >>> result = await service.assemble_video(manifest)
             >>> print(result)
-            {"duration": 91.5, "file_size_mb": 142.3, "resolution": "1920x1080", "codec": "h264/aac"}
+            {"duration": 91.5, "file_size_mb": 142.3, "resolution": "1920x1080",
+             "codec": "h264/aac"}
         """
         self.log.info(
             "starting_video_assembly",

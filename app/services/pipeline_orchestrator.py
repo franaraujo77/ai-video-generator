@@ -251,6 +251,9 @@ class PipelineOrchestrator:
             project_id = task_data["project_id"]
             topic = task_data["topic"]
             story_direction = task_data["story_direction"]
+            narration_scripts = task_data.get("narration_scripts")
+            sfx_descriptions = task_data.get("sfx_descriptions")
+            voice_id = task_data.get("voice_id")
 
             self.log.info(
                 "pipeline_started",
@@ -306,6 +309,9 @@ class PipelineOrchestrator:
                         project_id,
                         topic,
                         story_direction,
+                        narration_scripts,
+                        sfx_descriptions,
+                        voice_id,
                     )
                     await self.save_step_completion(step, completion)
 
@@ -381,6 +387,9 @@ class PipelineOrchestrator:
         project_id: str,
         topic: str,
         story_direction: str,
+        narration_scripts: list[str] | None = None,
+        sfx_descriptions: list[str] | None = None,
+        voice_id: str | None = None,
     ) -> StepCompletion:
         """Execute a single pipeline step.
 
@@ -399,6 +408,9 @@ class PipelineOrchestrator:
             project_id: Project/task identifier (UUID from database)
             topic: Video topic from Notion
             story_direction: Story direction from Notion
+            narration_scripts: List of 18 narration text strings for NARRATION_GENERATION
+            sfx_descriptions: List of 18 SFX description strings for SFX_GENERATION
+            voice_id: ElevenLabs voice ID for NARRATION_GENERATION
 
         Returns:
             StepCompletion object with completion details
@@ -407,6 +419,7 @@ class PipelineOrchestrator:
             CLIScriptError: If CLI script fails (captured and logged)
             FileNotFoundError: If expected output files missing
             TimeoutError: If step exceeds timeout
+            ValueError: If required parameters missing for step
 
         Example:
             >>> completion = await orchestrator.execute_step(
@@ -440,8 +453,8 @@ class PipelineOrchestrator:
 
         elif step == PipelineStep.COMPOSITE_CREATION:
             composite_service = CompositeCreationService(channel_id, project_id)
-            manifest = composite_service.create_composite_manifest(topic, story_direction)
-            result = await composite_service.generate_composites(manifest, resume=True)
+            composite_manifest = composite_service.create_composite_manifest(topic, story_direction)
+            result = await composite_service.generate_composites(composite_manifest, resume=True)
 
             return StepCompletion(
                 step=step,
@@ -473,11 +486,18 @@ class PipelineOrchestrator:
             )
 
         elif step == PipelineStep.NARRATION_GENERATION:
+            # Validate required parameters
+            if not narration_scripts:
+                raise ValueError("narration_scripts required for NARRATION_GENERATION step")
+            if not voice_id:
+                raise ValueError("voice_id required for NARRATION_GENERATION step")
+
             narration_service = NarrationGenerationService(channel_id, project_id)
-            narration_manifest = await narration_service.create_narration_manifest()
-            result = await narration_service.generate_narration(
-                narration_manifest, resume=True
+            narration_manifest = await narration_service.create_narration_manifest(
+                narration_scripts=narration_scripts,
+                voice_id=voice_id,
             )
+            result = await narration_service.generate_narration(narration_manifest, resume=True)
 
             return StepCompletion(
                 step=step,
@@ -492,8 +512,14 @@ class PipelineOrchestrator:
             )
 
         elif step == PipelineStep.SFX_GENERATION:
+            # Validate required parameters
+            if not sfx_descriptions:
+                raise ValueError("sfx_descriptions required for SFX_GENERATION step")
+
             sfx_service = SFXGenerationService(channel_id, project_id)
-            sfx_manifest = await sfx_service.create_sfx_manifest()
+            sfx_manifest = await sfx_service.create_sfx_manifest(
+                sfx_descriptions=sfx_descriptions,
+            )
             result = await sfx_service.generate_sfx(sfx_manifest, resume=True)
 
             return StepCompletion(
@@ -703,7 +729,9 @@ class PipelineOrchestrator:
 
         Example:
             >>> # Called automatically from update_task_status
-            >>> asyncio.create_task(orchestrator._sync_to_notion_async(TaskStatus.GENERATING_ASSETS))
+            >>> asyncio.create_task(
+            ...     orchestrator._sync_to_notion_async(TaskStatus.GENERATING_ASSETS)
+            ... )
         """
         try:
             # Short transaction: Load task data, then close DB before API call
@@ -847,7 +875,8 @@ class PipelineOrchestrator:
         """Load task data from database for pipeline execution.
 
         Returns:
-            Dict with channel_id, project_id, topic, story_direction
+            Dict with channel_id, project_id, topic, story_direction,
+            narration_scripts, sfx_descriptions, voice_id
             None if task not found
         """
         async with async_session_factory() as db:
@@ -865,6 +894,9 @@ class PipelineOrchestrator:
                 "project_id": str(task.id),
                 "topic": task.topic,
                 "story_direction": task.story_direction,
+                "narration_scripts": task.narration_scripts,
+                "sfx_descriptions": task.sfx_descriptions,
+                "voice_id": channel.voice_id or channel.default_voice_id,
             }
 
     async def _update_pipeline_start_time(self, start_time: datetime) -> None:
