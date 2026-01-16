@@ -144,10 +144,10 @@ class TestExecuteStep:
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
         with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service_class:
-            mock_service = AsyncMock()
+            mock_service = Mock()
             mock_service_class.return_value = mock_service
-            mock_service.create_asset_manifest.return_value = {"assets": []}
-            mock_service.generate_assets = AsyncMock(return_value={"generated": 22})
+            mock_service.create_asset_manifest.return_value = Mock(assets=[Mock()] * 22)
+            mock_service.generate_assets = AsyncMock(return_value={"generated": 20, "skipped": 2})
 
             completion = await orchestrator.execute_step(
                 PipelineStep.ASSET_GENERATION,
@@ -160,6 +160,10 @@ class TestExecuteStep:
             assert completion.completed is True
             assert completion.duration_seconds > 0
             assert completion.error_message is None
+            assert completion.partial_progress is not None
+            assert completion.partial_progress["generated"] == 20
+            assert completion.partial_progress["skipped"] == 2
+            assert completion.partial_progress["total"] == 22
 
     @pytest.mark.asyncio
     async def test_execute_step_video_generation(self):
@@ -167,9 +171,10 @@ class TestExecuteStep:
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
         with patch("app.services.pipeline_orchestrator.VideoGenerationService") as mock_service_class:
-            mock_service = AsyncMock()
+            mock_service = Mock()
             mock_service_class.return_value = mock_service
-            mock_service.generate_videos = AsyncMock(return_value={"generated": 18})
+            mock_service.create_video_manifest.return_value = Mock(clips=[Mock()] * 18)
+            mock_service.generate_videos = AsyncMock(return_value={"generated": 16, "skipped": 2, "total": 18})
 
             completion = await orchestrator.execute_step(
                 PipelineStep.VIDEO_GENERATION,
@@ -181,6 +186,10 @@ class TestExecuteStep:
 
             assert completion.completed is True
             assert completion.duration_seconds > 0
+            assert completion.partial_progress is not None
+            assert completion.partial_progress["generated"] == 16
+            assert completion.partial_progress["skipped"] == 2
+            assert completion.partial_progress["total"] == 18
 
     @pytest.mark.asyncio
     async def test_execute_step_narration_generation(self):
@@ -560,3 +569,55 @@ class TestPerformanceTracking:
             cost = await orchestrator.calculate_pipeline_cost()
 
             assert cost == 8.45
+
+    @pytest.mark.asyncio
+    async def test_update_task_status_triggers_notion_sync(self, async_session):
+        """Test that updating task status triggers async Notion sync."""
+        from app.models import Channel, Task
+
+        channel = Channel(
+            channel_id="poke1",
+            channel_name="Pokemon Channel",
+            is_active=True,
+        )
+        async_session.add(channel)
+        await async_session.flush()  # Flush to get channel.id
+
+        task = Task(
+            channel_id=channel.id,
+            notion_page_id="test123",
+            title="Test Video",
+            topic="Test Topic",
+            story_direction="Test Story",
+            status=TaskStatus.QUEUED,
+        )
+        async_session.add(task)
+        await async_session.commit()
+
+        orchestrator = PipelineOrchestrator(task_id=str(task.id))
+
+        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+            mock_session = AsyncMock()
+            mock_session_class.return_value.__aenter__.return_value = mock_session
+            mock_session_class.return_value.__aexit__.return_value = AsyncMock()
+
+            mock_session.get = AsyncMock(return_value=task)
+            mock_session.begin = Mock()
+            mock_session.begin.return_value.__aenter__ = AsyncMock()
+            mock_session.begin.return_value.__aexit__ = AsyncMock()
+            mock_session.commit = AsyncMock()
+
+            with patch("asyncio.create_task") as mock_create_task:
+                # Mock create_task to return a mock task
+                mock_task = AsyncMock()
+                mock_create_task.return_value = mock_task
+
+                await orchestrator.update_task_status(TaskStatus.GENERATING_ASSETS)
+
+                # Verify create_task was called with a coroutine
+                mock_create_task.assert_called_once()
+                call_args = mock_create_task.call_args[0][0]
+                assert asyncio.iscoroutine(call_args)
+
+                # Clean up the coroutine to prevent warnings
+                call_args.close()

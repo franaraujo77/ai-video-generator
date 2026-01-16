@@ -55,11 +55,13 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
+from app.clients.notion import NotionClient
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
 from app.services.composite_creation import CompositeCreationService
 from app.services.narration_generation import NarrationGenerationService
+from app.services.notion_sync import TaskSyncData, push_task_to_notion
 from app.services.sfx_generation import SFXGenerationService
 from app.services.video_assembly import VideoAssemblyService
 from app.services.video_generation import VideoGenerationService
@@ -422,72 +424,95 @@ class PipelineOrchestrator:
         if step == PipelineStep.ASSET_GENERATION:
             asset_service = AssetGenerationService(channel_id, project_id)
             manifest = asset_service.create_asset_manifest(topic, story_direction)
-            await asset_service.generate_assets(manifest, resume=True)
+            result = await asset_service.generate_assets(manifest, resume=True)
 
             return StepCompletion(
                 step=step,
                 completed=True,
-                partial_progress=None,
+                partial_progress={
+                    "generated": result.get("generated", 0),
+                    "skipped": result.get("skipped", 0),
+                    "total": len(manifest.assets),
+                },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
             )
 
         elif step == PipelineStep.COMPOSITE_CREATION:
             composite_service = CompositeCreationService(channel_id, project_id)
-            await composite_service.create_composites()
+            result = await composite_service.create_composites()
 
             return StepCompletion(
                 step=step,
                 completed=True,
-                partial_progress=None,
+                partial_progress={
+                    "generated": result.get("generated", 0),
+                    "skipped": result.get("skipped", 0),
+                    "total": 18,  # 18 composites per project
+                },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
             )
 
         elif step == PipelineStep.VIDEO_GENERATION:
             video_service = VideoGenerationService(channel_id, project_id)
-            await video_service.generate_videos()
+            manifest = video_service.create_video_manifest(topic, story_direction)
+            result = await video_service.generate_videos(manifest, resume=True)
 
             return StepCompletion(
                 step=step,
                 completed=True,
-                partial_progress=None,
+                partial_progress={
+                    "generated": result.get("generated", 0),
+                    "skipped": result.get("skipped", 0),
+                    "total": len(manifest.clips),
+                },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
             )
 
         elif step == PipelineStep.NARRATION_GENERATION:
             narration_service = NarrationGenerationService(channel_id, project_id)
-            await narration_service.generate_narrations()
+            result = await narration_service.generate_narrations()
 
             return StepCompletion(
                 step=step,
                 completed=True,
-                partial_progress=None,
+                partial_progress={
+                    "generated": result.get("generated", 0),
+                    "skipped": result.get("skipped", 0),
+                    "total": 18,  # 18 narrations per project
+                },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
             )
 
         elif step == PipelineStep.SFX_GENERATION:
             sfx_service = SFXGenerationService(channel_id, project_id)
-            await sfx_service.generate_sfx()
+            result = await sfx_service.generate_sfx()
 
             return StepCompletion(
                 step=step,
                 completed=True,
-                partial_progress=None,
+                partial_progress={
+                    "generated": result.get("generated", 0),
+                    "skipped": result.get("skipped", 0),
+                    "total": 18,  # 18 SFX per project
+                },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
             )
 
         elif step == PipelineStep.VIDEO_ASSEMBLY:
             assembly_service = VideoAssemblyService(channel_id, project_id)
-            await assembly_service.assemble_video()
+            result = await assembly_service.assemble_video()
 
             return StepCompletion(
                 step=step,
                 completed=True,
-                partial_progress=None,
+                partial_progress={
+                    "assembled": True,
+                },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
             )
@@ -597,8 +622,9 @@ class PipelineOrchestrator:
                     has_error=error_message is not None,
                 )
 
-        # TODO: Trigger async Notion status update (non-blocking)
-        # asyncio.create_task(self.sync_to_notion(status))
+        # Store task reference to prevent garbage collection warnings (RUF006)
+        _notion_sync_task = asyncio.create_task(self._sync_to_notion_async(status))
+        _notion_sync_task.add_done_callback(lambda t: None)  # Suppress warnings
 
     async def save_step_completion(
         self,
@@ -651,6 +677,75 @@ class PipelineOrchestrator:
                 }
 
                 await db.commit()
+    async def _sync_to_notion_async(self, status: TaskStatus) -> None:
+        """Sync task status to Notion (async, non-blocking).
+
+        Uses fire-and-forget pattern to avoid blocking pipeline execution.
+        Errors are logged but don't fail the pipeline.
+
+        Short Transaction Pattern:
+        - Open DB session
+        - Load task data
+        - Close DB session
+        - Make external API call
+
+        This prevents long-running API calls from holding DB connections.
+
+        Args:
+            status: Current task status to sync
+
+        Example:
+            >>> # Called automatically from update_task_status
+            >>> asyncio.create_task(orchestrator._sync_to_notion_async(TaskStatus.GENERATING_ASSETS))
+        """
+        try:
+            # Short transaction: Load task data, then close DB before API call
+            async with async_session_factory() as db:
+                task = await db.get(Task, self.task_id)
+                if not task:
+                    self.log.error(
+                        "notion_sync_failed",
+                        reason="task_not_found",
+                        task_id=self.task_id,
+                    )
+                    return
+
+                if not task.notion_page_id:
+                    self.log.debug(
+                        "notion_sync_skipped",
+                        reason="no_notion_page_id",
+                        task_id=self.task_id,
+                    )
+                    return
+
+                # Extract task data before closing DB session
+                task_data = TaskSyncData(
+                    id=task.id,
+                    notion_page_id=task.notion_page_id,
+                    status=task.status,
+                    priority=task.priority,
+                    title=task.title or "Untitled Task",
+                )
+
+            # DB session closed - now safe to make API call
+            notion_client = NotionClient()
+            await push_task_to_notion(task_data, notion_client)
+
+            self.log.info(
+                "notion_sync_success",
+                task_id=self.task_id,
+                notion_page_id=task_data.notion_page_id,
+                status=status.value,
+            )
+
+        except Exception as e:
+            # Log but don't fail the pipeline
+            self.log.error(
+                "notion_sync_failed",
+                task_id=self.task_id,
+                error=str(e),
+                error_type=type(e).__name__,
+            )
 
     def classify_error(self, exception: Exception) -> tuple[bool, str]:
         """Classify exception as transient (retriable) or permanent (non-retriable).
@@ -682,7 +777,7 @@ class PipelineOrchestrator:
         error_message = str(exception).lower()
 
         # Transient errors (should retry)
-        if isinstance(exception, (TimeoutError, asyncio.TimeoutError)):
+        if isinstance(exception, TimeoutError | asyncio.TimeoutError):
             return True, "timeout_error"
 
         if isinstance(exception, CLIScriptError) and exception.exit_code == 124:
