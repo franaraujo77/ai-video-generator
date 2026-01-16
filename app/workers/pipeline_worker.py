@@ -157,7 +157,7 @@ async def process_pipeline_task(task_id: str) -> None:
 
         # Attempt to mark task as failed (best effort)
         try:
-            async with async_session_factory() as db, db.begin():
+            async with async_session_factory() as db, db.begin():  # type: ignore[misc]
                 task = await db.get(Task, task_id)
                 if task:
                     task.status = TaskStatus.ASSET_ERROR
@@ -191,7 +191,7 @@ async def claim_next_task() -> str | None:
     from sqlalchemy import case, select
     from sqlalchemy.orm import selectinload
 
-    async with async_session_factory() as db, db.begin():
+    async with async_session_factory() as db, db.begin():  # type: ignore[misc]
         # Query for next available task (queued status, ordered by priority + FIFO)
         # Use ORM with proper priority ordering via case statement
         # TODO: Add FOR UPDATE SKIP LOCKED when PgQueuer is integrated (Epic 4)

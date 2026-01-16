@@ -569,7 +569,7 @@ class PipelineOrchestrator:
             >>> print(metadata[PipelineStep.ASSET_GENERATION].completed)
             True
         """
-        async with async_session_factory() as db:
+        async with async_session_factory() as db:  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if not task or not task.step_completion_metadata:
                 return {}
@@ -635,7 +635,7 @@ class PipelineOrchestrator:
             >>> await orchestrator.update_task_status(TaskStatus.GENERATING_ASSETS)
             # Updates DB, syncs to Notion, logs change
         """
-        async with async_session_factory() as db, db.begin():
+        async with async_session_factory() as db, db.begin():  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if task:
                 task.status = status
@@ -693,7 +693,7 @@ class PipelineOrchestrator:
             ...     ),
             ... )
         """
-        async with async_session_factory() as db, db.begin():
+        async with async_session_factory() as db, db.begin():  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if task:
                 # Initialize metadata dict if not exists
@@ -735,7 +735,7 @@ class PipelineOrchestrator:
         """
         try:
             # Short transaction: Load task data, then close DB before API call
-            async with async_session_factory() as db:
+            async with async_session_factory() as db:  # type: ignore[misc]
                 task = await db.get(Task, self.task_id)
                 if not task:
                     self.log.error(
@@ -862,7 +862,7 @@ class PipelineOrchestrator:
             >>> print(f"${cost:.2f}")
             $8.45
         """
-        async with async_session_factory() as db:
+        async with async_session_factory() as db:  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if task and task.total_cost_usd:
                 return task.total_cost_usd
@@ -879,7 +879,7 @@ class PipelineOrchestrator:
             narration_scripts, sfx_descriptions, voice_id
             None if task not found
         """
-        async with async_session_factory() as db:
+        async with async_session_factory() as db:  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if not task:
                 return None
@@ -901,7 +901,7 @@ class PipelineOrchestrator:
 
     async def _update_pipeline_start_time(self, start_time: datetime) -> None:
         """Update pipeline_start_time in database."""
-        async with async_session_factory() as db, db.begin():
+        async with async_session_factory() as db, db.begin():  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if task:
                 task.pipeline_start_time = start_time
@@ -913,7 +913,7 @@ class PipelineOrchestrator:
         duration_seconds: float,
     ) -> None:
         """Update pipeline_end_time and duration in database."""
-        async with async_session_factory() as db, db.begin():
+        async with async_session_factory() as db, db.begin():  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if task:
                 task.pipeline_end_time = end_time
@@ -922,7 +922,7 @@ class PipelineOrchestrator:
 
     async def _update_pipeline_cost(self, cost_usd: float) -> None:
         """Update pipeline_cost_usd in database."""
-        async with async_session_factory() as db, db.begin():
+        async with async_session_factory() as db, db.begin():  # type: ignore[misc]
             task = await db.get(Task, self.task_id)
             if task:
                 task.pipeline_cost_usd = cost_usd

@@ -68,7 +68,7 @@ async def fix_foreign_key():
                 print(f"   Table: {fk[1]}.{fk[2]}")
                 print(f"   References: {fk[3]}.{fk[4]}")
 
-                if fk[4] == 'id':
+                if fk[4] == "id":
                     print("\n✅ Foreign key correctly references channels.id!")
                 else:
                     print(f"\n❌ Foreign key still references {fk[4]} instead of id")
@@ -78,6 +78,7 @@ async def fix_foreign_key():
     except Exception as e:
         print(f"❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

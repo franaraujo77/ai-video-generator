@@ -51,9 +51,7 @@ async def create_test_entry():
     }
 
     try:
-        response = await client.client.post(
-            "https://api.notion.com/v1/pages", json=page_data
-        )
+        response = await client.client.post("https://api.notion.com/v1/pages", json=page_data)
 
         if response.status_code == 200:
             page = response.json()
