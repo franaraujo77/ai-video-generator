@@ -82,109 +82,87 @@ class TestSignalHandling:
 
 
 class TestWorkerMainLoop:
-    """Tests for worker main loop execution (Scenario 5)."""
+    """Tests for worker main loop with PgQueuer integration (Story 4.2)."""
 
     @pytest.mark.asyncio
-    @patch("app.worker.asyncio.sleep", new_callable=AsyncMock)
+    @patch("app.queue.initialize_pgqueuer", new_callable=AsyncMock)
+    @patch("app.entrypoints.register_entrypoints")
     @patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-test"})
-    async def test_main_loop_sleeps_between_iterations(self, mock_sleep):
-        """Test main loop sleeps 1 second between iterations to prevent CPU spinning."""
+    async def test_main_loop_initializes_pgqueuer(self, mock_register, mock_init_pgq):
+        """Test main loop initializes PgQueuer with asyncpg pool."""
         worker.shutdown_requested = False
 
-        # Run one iteration then trigger shutdown
-        async def sleep_and_shutdown(duration):
+        # Mock PgQueuer initialization
+        mock_pgq = MagicMock()
+        mock_pgq.run = AsyncMock()
+        mock_pool = MagicMock()
+        mock_init_pgq.return_value = (mock_pgq, mock_pool)
+
+        # Trigger shutdown immediately after pgq.run() starts
+        async def run_and_shutdown():
             worker.shutdown_requested = True
 
-        mock_sleep.side_effect = sleep_and_shutdown
+        mock_pgq.run.side_effect = run_and_shutdown
 
         await worker.worker_main_loop()
 
-        # Verify sleep was called with 1 second
-        mock_sleep.assert_called_with(1)
+        # Verify initialization and registration happened
+        mock_init_pgq.assert_called_once()
+        mock_register.assert_called_once_with(mock_pgq)
+        mock_pgq.run.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("app.worker.asyncio.sleep", new_callable=AsyncMock)
-    @patch("app.worker.datetime")
-    async def test_heartbeat_logging_every_60_seconds(self, mock_datetime, mock_sleep):
-        """Test worker logs heartbeat every 60 seconds."""
-        from datetime import datetime, timedelta, timezone
-
-        # Mock time progression
-        start_time = datetime(2026, 1, 16, 12, 0, 0, tzinfo=timezone.utc)
-        times = [
-            start_time,
-            start_time,
-            start_time + timedelta(seconds=61),  # Trigger heartbeat
-        ]
-        mock_datetime.now.side_effect = times
-
-        iterations = 0
-
-        async def sleep_and_count(duration):
-            nonlocal iterations
-            iterations += 1
-            if iterations >= 2:
-                worker.shutdown_requested = True
-
-        mock_sleep.side_effect = sleep_and_count
+    @patch("app.queue.initialize_pgqueuer", new_callable=AsyncMock)
+    @patch("app.entrypoints.register_entrypoints")
+    async def test_main_loop_registers_entrypoints(self, mock_register, mock_init_pgq):
+        """Test main loop registers entrypoints after PgQueuer initialization."""
         worker.shutdown_requested = False
+
+        # Mock PgQueuer
+        mock_pgq = MagicMock()
+        mock_pgq.run = AsyncMock(side_effect=lambda: setattr(worker, "shutdown_requested", True))
+        mock_pool = MagicMock()
+        mock_init_pgq.return_value = (mock_pgq, mock_pool)
 
         await worker.worker_main_loop()
 
-        # Should have completed 2 iterations
-        assert iterations == 2
+        # Verify entrypoints registered with PgQueuer instance
+        mock_register.assert_called_once_with(mock_pgq)
 
 
 class TestErrorHandling:
-    """Tests for worker error handling and recovery (Scenario 10)."""
+    """Tests for worker error handling with PgQueuer (Story 4.2)."""
 
     @pytest.mark.asyncio
-    @patch("app.worker.asyncio.sleep", new_callable=AsyncMock)
-    async def test_worker_continues_after_exception(self, mock_sleep):
-        """Test worker catches exceptions and continues running."""
-        iterations = 0
-
-        async def sleep_with_error(duration):
-            nonlocal iterations
-            iterations += 1
-            if iterations == 1:
-                raise RuntimeError("Simulated error")
-            elif iterations == 2:
-                worker.shutdown_requested = True
-
-        mock_sleep.side_effect = sleep_with_error
+    @patch("app.queue.initialize_pgqueuer", new_callable=AsyncMock)
+    @patch("app.entrypoints.register_entrypoints")
+    async def test_worker_handles_pgqueuer_initialization_error(self, mock_register, mock_init_pgq):
+        """Test worker logs fatal error when PgQueuer initialization fails."""
         worker.shutdown_requested = False
 
-        # Should not raise - worker catches and continues
-        await worker.worker_main_loop()
+        # Simulate initialization failure
+        mock_init_pgq.side_effect = Exception("Database connection failed")
 
-        # Should have completed both iterations despite error
-        assert iterations == 2
+        # Should re-raise exception for main() to handle
+        with pytest.raises(Exception, match="Database connection failed"):
+            await worker.worker_main_loop()
 
     @pytest.mark.asyncio
-    @patch("app.worker.asyncio.sleep", new_callable=AsyncMock)
-    async def test_consecutive_error_tracking(self, mock_sleep):
-        """Test worker tracks consecutive errors and resets on success."""
-        sleep_calls = 0
-
-        async def sleep_with_controlled_errors(duration):
-            nonlocal sleep_calls
-            sleep_calls += 1
-            # duration=1: main loop sleeps
-            # duration=5: error recovery sleeps (should not fail)
-            if duration == 1 and sleep_calls in [1, 2, 3]:
-                raise RuntimeError(f"Error {sleep_calls}")
-            elif sleep_calls == 10:  # After 3 errors + 3 recovery + 3 more iterations
-                worker.shutdown_requested = True
-
-        mock_sleep.side_effect = sleep_with_controlled_errors
+    @patch("app.queue.initialize_pgqueuer", new_callable=AsyncMock)
+    @patch("app.entrypoints.register_entrypoints")
+    async def test_worker_handles_pgqueuer_run_error(self, mock_register, mock_init_pgq):
+        """Test worker logs fatal error when PgQueuer run() fails."""
         worker.shutdown_requested = False
 
-        # Should handle 3 consecutive errors without crashing
-        await worker.worker_main_loop()
+        # Mock PgQueuer with run() failure
+        mock_pgq = MagicMock()
+        mock_pgq.run = AsyncMock(side_effect=RuntimeError("Queue processing error"))
+        mock_pool = MagicMock()
+        mock_init_pgq.return_value = (mock_pgq, mock_pool)
 
-        # Should have completed multiple iterations with errors and recoveries
-        assert sleep_calls >= 6
+        # Should re-raise exception for main() to handle
+        with pytest.raises(RuntimeError, match="Queue processing error"):
+            await worker.worker_main_loop()
 
 
 class TestDatabaseConfiguration:
@@ -260,12 +238,15 @@ class TestShutdownCleanup:
 
     @pytest.mark.asyncio
     @patch("app.worker.async_engine")
-    async def test_shutdown_closes_database_connections(self, mock_engine):
-        """Test shutdown_worker() closes database engine."""
+    @patch("app.worker.asyncpg_pool")
+    async def test_shutdown_closes_database_connections(self, mock_pool, mock_engine):
+        """Test shutdown_worker() closes both asyncpg pool and database engine."""
         mock_engine.dispose = AsyncMock()
+        mock_pool.close = AsyncMock()
 
         await worker.shutdown_worker()
 
+        mock_pool.close.assert_called_once()
         mock_engine.dispose.assert_called_once()
 
 

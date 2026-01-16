@@ -25,12 +25,12 @@ References:
 """
 
 import asyncio
-import contextlib
 import os
 import signal
 import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+
+import asyncpg
 
 from app.config import get_database_url, get_fernet_key
 from app.database import async_engine
@@ -41,6 +41,9 @@ log = get_logger(__name__)
 
 # Shutdown flag (set by SIGTERM handler)
 shutdown_requested = False
+
+# Global asyncpg pool reference (for cleanup in shutdown)
+asyncpg_pool: asyncpg.Pool | None = None
 
 
 def signal_handler(signum: int, frame: object) -> None:
@@ -66,99 +69,64 @@ def signal_handler(signum: int, frame: object) -> None:
 
 
 async def worker_main_loop() -> None:
-    """Main worker event loop - runs continuously until SIGTERM received.
+    """Main worker event loop with PgQueuer task claiming.
 
-    This function implements the foundational worker loop structure.
-    Task claiming and processing will be added in future stories:
-        - Story 4.2: PgQueuer integration for task claiming
-        - Story 4.8: Full pipeline orchestration
+    Replaces placeholder loop from Story 4.1 with PgQueuer integration.
+    Workers claim tasks atomically via FOR UPDATE SKIP LOCKED (PgQueuer automatic).
 
-    Current Behavior (Story 4.1):
-        - Logs heartbeat every 60 seconds
-        - Sleeps 1 second between iterations
-        - Exits gracefully on shutdown signal
-
-    Future Behavior (Story 4.2+):
-        - Claim tasks from PgQueuer (FOR UPDATE SKIP LOCKED)
-        - Process claimed tasks via pipeline orchestrator
-        - Update task status after completion
+    Behavior (Story 4.2):
+        - Initialize PgQueuer with asyncpg connection pool
+        - Import entrypoints to register task handlers
+        - Run PgQueuer worker loop (handles polling, LISTEN/NOTIFY, claiming)
+        - Exit gracefully on shutdown signal
 
     Error Handling:
         - Catches all exceptions to prevent worker crash
         - Logs errors with full context
-        - Continues running unless fatal error (DB unreachable)
+        - PgQueuer handles retry logic for failed tasks
 
     Raises:
         No exceptions raised (catches all internally)
     """
-    worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
-    log.info("worker_started", worker_id=worker_id)
+    global asyncpg_pool
 
-    # Use datetime.now(timezone.utc) instead of deprecated datetime.utcnow()
-    # Python 3.12+ deprecates utcnow() in favor of timezone-aware timestamps
-    last_heartbeat = datetime.now(timezone.utc)
-    iteration_count = 0
-    consecutive_errors = 0
+    worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
+    log.info("worker_started_with_pgqueuer", worker_id=worker_id)
 
     try:
-        while not shutdown_requested:
-            iteration_count += 1
+        # Import queue initialization
+        from app.entrypoints import register_entrypoints
+        from app.queue import initialize_pgqueuer
 
-            # Heartbeat logging (every 60 seconds)
-            now = datetime.now(timezone.utc)
-            if (now - last_heartbeat).total_seconds() >= 60:
-                log.info(
-                    "worker_heartbeat",
-                    worker_id=worker_id,
-                    iteration_count=iteration_count,
-                    consecutive_errors=consecutive_errors,
-                )
-                last_heartbeat = now
+        # Initialize PgQueuer
+        pgq, pool = await initialize_pgqueuer()
 
-            try:
-                # PLACEHOLDER: Task claiming will be added in Story 4.2
-                # For now, just sleep to prevent CPU spinning
-                await asyncio.sleep(1)
+        # Store pool reference for cleanup
+        asyncpg_pool = pool
 
-                # Reset error counter on successful iteration
-                consecutive_errors = 0
+        # Register entrypoints with PgQueuer
+        register_entrypoints(pgq)
 
-            except Exception as e:
-                consecutive_errors += 1
-                log.error(
-                    "worker_loop_error",
-                    worker_id=worker_id,
-                    error=str(e),
-                    error_type=type(e).__name__,
-                    consecutive_errors=consecutive_errors,
-                    exc_info=True,
-                )
-
-                # Alert if too many consecutive errors (possible fatal issue)
-                if consecutive_errors > 10:
-                    log.critical(
-                        "worker_excessive_errors",
-                        worker_id=worker_id,
-                        consecutive_errors=consecutive_errors,
-                        message="Worker experiencing excessive errors, may need restart",
-                    )
-                    # Reset counter to prevent log spam
-                    consecutive_errors = 0
-
-                # Sleep before retry to prevent tight error loop
-                # Suppress cancellation during error recovery (allows graceful shutdown)
-                with contextlib.suppress(asyncio.CancelledError):
-                    await asyncio.sleep(5)
+        # Run PgQueuer worker loop
+        # Handles: polling, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED, retry logic
+        await pgq.run()
 
     except asyncio.CancelledError:
         log.info("worker_cancelled", worker_id=worker_id)
         raise
-
+    except Exception as e:
+        log.error(
+            "worker_fatal_error",
+            worker_id=worker_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
+        raise
     finally:
         log.info(
             "worker_shutdown",
             worker_id=worker_id,
-            total_iterations=iteration_count,
         )
 
 
@@ -169,12 +137,22 @@ async def shutdown_worker() -> None:
     Important for Railway deployments to prevent connection leaks.
 
     Side Effects:
-        - Closes async database engine
+        - Closes asyncpg pool (PgQueuer)
+        - Closes async database engine (SQLAlchemy)
         - Disposes connection pool
     """
     log.info("closing_database_connections")
+
+    # Close asyncpg pool (used by PgQueuer)
+    if asyncpg_pool:
+        await asyncpg_pool.close()
+        log.info("asyncpg_pool_closed")
+
+    # Close SQLAlchemy engine
     if async_engine:
         await async_engine.dispose()
+        log.info("sqlalchemy_engine_closed")
+
     log.info("database_connections_closed")
 
 
@@ -226,7 +204,7 @@ def main() -> None:
             max_overflow=5,
         )
     except Exception as e:
-        log.critical("configuration_load_failed", error=str(e), exc_info=True)
+        log.error("configuration_load_failed", error=str(e), exc_info=True)
         sys.exit(1)
 
     # Register signal handlers for graceful shutdown

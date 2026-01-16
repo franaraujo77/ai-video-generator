@@ -113,7 +113,7 @@ def mock_task_queue(monkeypatch):
 
 # Import additional fixtures from fixtures/ package
 # These provide enhanced database mocking capabilities from Epic 3 retrospective action items
-from tests.fixtures.database import (  # noqa: F401, E402
+from tests.fixtures.database import (  # noqa: E402
     mock_async_session,
     async_test_engine,
     async_test_session,

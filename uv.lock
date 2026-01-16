@@ -1176,6 +1176,11 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/35/7d/450c3a013c47b517c99bd76ee05c0a5de2acae14065ffa40c3fa7c199ff3/pgqueuer-0.25.3-py3-none-any.whl", hash = "sha256:0dc29f95d6eec6809d54b954185239c9f9fd2af8567493beaae8245bf1f768c3", size = 69407, upload-time = "2025-12-03T08:05:46.836Z" },
 ]
 
+[package.optional-dependencies]
+asyncpg = [
+    { name = "asyncpg" },
+]
+
 [[package]]
 name = "pillow"
 version = "12.0.0"
@@ -1305,7 +1310,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "google-generativeai" },
     { name = "httpx" },
-    { name = "pgqueuer" },
+    { name = "pgqueuer", extra = ["asyncpg"] },
     { name = "pillow" },
     { name = "pydantic" },
     { name = "pyjwt" },
@@ -1342,7 +1347,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "google-generativeai", specifier = ">=0.8.0" },
     { name = "httpx", specifier = ">=0.28.1" },
-    { name = "pgqueuer", specifier = ">=0.10.0" },
+    { name = "pgqueuer", extras = ["asyncpg"], specifier = ">=0.10.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydantic", specifier = ">=2.8.0" },
     { name = "pyjwt", specifier = ">=2.8.0" },

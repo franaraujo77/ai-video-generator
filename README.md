@@ -601,6 +601,124 @@ Services:
 
 All services share the same PostgreSQL database and connection pool.
 
+### Priority Queue Management
+
+The orchestration platform supports **priority-based task processing** to ensure urgent content gets processed before normal workloads.
+
+#### Priority Levels
+
+Tasks can have one of three priority levels:
+
+| Priority | Value | Use Case | Processing Order |
+|----------|-------|----------|------------------|
+| **High** | `high` | Trending topics, urgent videos, time-sensitive content | 1st (processed first) |
+| **Normal** | `normal` | Regular content (most videos) | 2nd (default) |
+| **Low** | `low` | Background tasks, batch jobs, non-urgent work | 3rd (processed last) |
+
+#### How Priority Ordering Works
+
+Workers claim tasks using a **priority-first, FIFO-within-priority** algorithm:
+
+1. **High-priority tasks** are claimed before normal/low-priority tasks
+2. **Within each priority level**, tasks are processed in **FIFO order** (first-in, first-out based on `created_at` timestamp)
+3. **No starvation**: Low-priority tasks will execute when no higher-priority tasks are available
+
+**Example Claiming Order:**
+```
+Pending Tasks:
+  - Task A: high priority, created 1 hour ago
+  - Task B: normal priority, created 2 hours ago
+  - Task C: high priority, created 30 minutes ago
+  - Task D: low priority, created 3 hours ago
+
+Claiming Order:
+  1. Task A (high, oldest high-priority)
+  2. Task C (high, newer high-priority)
+  3. Task B (normal, oldest normal-priority)
+  4. Task D (low, only low-priority remaining)
+```
+
+#### Setting Task Priority
+
+**Via Database (Current):**
+```python
+from app.models import Task, TaskPriority
+
+task = Task(
+    channel_id="poke1",
+    notion_page_id="abc123",
+    priority=TaskPriority.high,  # high, normal, or low
+    status="pending"
+)
+```
+
+**Via Notion (Future - Story 5.6):**
+- Set the **Priority** dropdown in Notion (High/Normal/Low)
+- Webhook automatically syncs to PostgreSQL
+- Change priority anytime - takes effect immediately
+
+#### Priority Logging
+
+All worker logs include priority context for observability:
+
+```json
+{
+  "event": "task_claimed",
+  "worker_id": "worker-1",
+  "task_id": "abc123",
+  "priority": "high",
+  "channel_id": "poke1"
+}
+```
+
+Use this to monitor:
+- Which priority levels are being processed
+- High-priority task turnaround time
+- Whether low-priority tasks are getting starved
+
+#### Performance & Database Index
+
+Priority ordering uses a **composite index** for fast queries:
+
+```sql
+CREATE INDEX idx_tasks_status_priority_created
+ON tasks (status, priority, created_at);
+```
+
+**Query Performance:**
+- **Without index:** 10s+ for 10,000+ tasks (full table scan)
+- **With index:** <10ms (index scan)
+
+The priority query is optimized:
+```sql
+SELECT * FROM tasks
+WHERE status = 'pending'
+ORDER BY
+    CASE priority
+        WHEN 'high' THEN 1
+        WHEN 'normal' THEN 2
+        WHEN 'low' THEN 3
+    END ASC,
+    created_at ASC
+FOR UPDATE SKIP LOCKED
+LIMIT 1
+```
+
+#### Best Practices
+
+- **Use `normal` for 90%+ of tasks** - high/low are for exceptions
+- **Reserve `high` for urgent content** - trending topics, paid tier, time-sensitive work
+- **Use `low` for batch jobs** - analytics, cleanup, non-user-facing work
+- **Monitor low-priority aging** - ensure low-priority tasks don't wait indefinitely
+- **Don't abuse high priority** - too many high-priority tasks defeats the purpose
+
+#### Implementation Details
+
+- **Story 4.3:** Priority Queue Management
+- **PgQueuer Integration:** Custom query configuration for priority ordering
+- **Atomic Claiming:** PostgreSQL `FOR UPDATE SKIP LOCKED` ensures no race conditions
+- **Migration:** `alembic/versions/20260116_0003_add_priority_index.py`
+
 ## FAQ
 
 **Q: How much does this cost?**

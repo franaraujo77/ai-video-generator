@@ -24,7 +24,7 @@ dependencies = [
     "aiolimiter>=1.2.1",
     "httpx>=0.28.1",
     "tenacity>=9.1.2",
-    "pgqueuer>=0.10.0",
+    "pgqueuer[asyncpg]>=0.10.0",
 ]
 
 [dependency-groups]
@@ -131,5 +131,7 @@ module = [
     "aiolimiter.*",
     "fastapi.*",
     "uvicorn.*",
+    "asyncpg.*",
+    "pgqueuer.*",
 ]
 ignore_missing_imports = true
