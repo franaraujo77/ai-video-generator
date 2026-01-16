@@ -41,7 +41,7 @@ async def sync_channels() -> None:
                 print(f"Syncing channel: {channel_id}")
 
                 # Sync config to database (creates or updates Channel)
-                channel = await loader.sync_to_database(config, session)
+                await loader.sync_to_database(config, session)
                 print(f"  Synced channel: {config.channel_name}")
                 print()
 

@@ -100,8 +100,8 @@ class TestProcessNarrationGenerationTask:
         ):
             with patch(
                 "app.workers.narration_generation_worker.NarrationGenerationService"
-            ) as MockService:
-                mock_service = MockService.return_value
+            ) as mock_service_class:
+                mock_service = mock_service_class.return_value
 
                 # Mock create_narration_manifest (async)
                 async def mock_create_manifest(*args, **kwargs):
@@ -300,8 +300,8 @@ class TestProcessNarrationGenerationTask:
         ):
             with patch(
                 "app.workers.narration_generation_worker.NarrationGenerationService"
-            ) as MockService:
-                mock_service = MockService.return_value
+            ) as mock_service_class:
+                mock_service = mock_service_class.return_value
 
                 # Mock service to raise CLIScriptError
                 async def mock_create_manifest(*args, **kwargs):
@@ -362,8 +362,8 @@ class TestProcessNarrationGenerationTask:
         ):
             with patch(
                 "app.workers.narration_generation_worker.NarrationGenerationService"
-            ) as MockService:
-                mock_service = MockService.return_value
+            ) as mock_service_class:
+                mock_service = mock_service_class.return_value
 
                 # Mock service to raise ValueError
                 async def mock_create_manifest(*args, **kwargs):
@@ -414,8 +414,8 @@ class TestProcessNarrationGenerationTask:
         ):
             with patch(
                 "app.workers.narration_generation_worker.NarrationGenerationService"
-            ) as MockService:
-                mock_service = MockService.return_value
+            ) as mock_service_class:
+                mock_service = mock_service_class.return_value
 
                 # Mock service to raise unexpected exception
                 async def mock_create_manifest(*args, **kwargs):

@@ -42,6 +42,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 from uuid import UUID
 
 from app.database import async_session_factory
@@ -173,11 +174,9 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
         )
 
         def handle_notion_task_done(task: asyncio.Task[None]) -> None:
-            try:
+            # Notion updates are best-effort; don't fail task on Notion errors
+            with contextlib.suppress(Exception):
                 task.result()  # Re-raise exception if occurred
-            except Exception:
-                # Notion updates are best-effort; don't fail task on Notion errors
-                pass
 
         notion_task.add_done_callback(handle_notion_task_done)
 

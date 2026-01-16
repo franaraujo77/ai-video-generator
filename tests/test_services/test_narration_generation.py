@@ -361,7 +361,7 @@ class TestCalculateElevenlabsCost:
 
         cost = service.calculate_elevenlabs_cost(18)
 
-        # Expected: 18 clips × $0.04/clip = $0.72
+        # Expected: 18 clips x $0.04/clip = $0.72
         assert float(cost) == 0.72
 
     def test_calculate_cost_for_partial_clips(self):
@@ -370,7 +370,7 @@ class TestCalculateElevenlabsCost:
 
         cost = service.calculate_elevenlabs_cost(8)
 
-        # Expected: 8 clips × $0.04/clip = $0.32
+        # Expected: 8 clips x $0.04/clip = $0.32
         assert float(cost) == 0.32
 
 

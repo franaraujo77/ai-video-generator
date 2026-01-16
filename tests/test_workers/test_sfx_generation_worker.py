@@ -82,12 +82,12 @@ class TestProcessSFXGenerationTaskSuccess:
                 "app.workers.sfx_generation_worker.async_session_factory",
                 side_effect=mock_session_factory,
             ),
-            patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService,
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
             patch("app.workers.sfx_generation_worker.track_api_cost") as mock_cost,
         ):
             # Setup service mock
             mock_service_instance = AsyncMock()
-            MockService.return_value = mock_service_instance
+            mock_service_class.return_value = mock_service_instance
 
             # Mock manifest creation
             mock_manifest = MagicMock()
@@ -140,11 +140,11 @@ class TestProcessSFXGenerationTaskSuccess:
             }
 
         with (
-            patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService,
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
             patch("app.workers.sfx_generation_worker.track_api_cost"),
         ):
             mock_service_instance = AsyncMock()
-            MockService.return_value = mock_service_instance
+            mock_service_class.return_value = mock_service_instance
             mock_service_instance.create_sfx_manifest.return_value = MagicMock(
                 clips=[MagicMock() for _ in range(18)]
             )
@@ -164,10 +164,10 @@ class TestProcessSFXGenerationTaskErrors:
         """Test CLIScriptError marks task as SFX_ERROR."""
         task_id = mock_task.id
 
-        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService:
+        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class:
             # Setup service to raise CLIScriptError
             mock_service_instance = AsyncMock()
-            MockService.return_value = mock_service_instance
+            mock_service_class.return_value = mock_service_instance
             mock_service_instance.create_sfx_manifest.return_value = MagicMock(
                 clips=[MagicMock() for _ in range(18)]
             )
@@ -193,10 +193,10 @@ class TestProcessSFXGenerationTaskErrors:
         """Test ValueError marks task as SFX_ERROR."""
         task_id = mock_task.id
 
-        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService:
+        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class:
             # Setup service to raise ValueError
             mock_service_instance = AsyncMock()
-            MockService.return_value = mock_service_instance
+            mock_service_class.return_value = mock_service_instance
             mock_service_instance.create_sfx_manifest.side_effect = ValueError(
                 "Expected 18 SFX descriptions, got 15"
             )
@@ -214,10 +214,10 @@ class TestProcessSFXGenerationTaskErrors:
         """Test generic Exception marks task as SFX_ERROR."""
         task_id = mock_task.id
 
-        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService:
+        with patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class:
             # Setup service to raise unexpected error
             mock_service_instance = AsyncMock()
-            MockService.return_value = mock_service_instance
+            mock_service_class.return_value = mock_service_instance
             mock_service_instance.create_sfx_manifest.side_effect = RuntimeError("Unexpected error")
 
             await process_sfx_generation_task(task_id)
@@ -316,11 +316,11 @@ class TestShortTransactionPattern:
             }
 
         with (
-            patch("app.workers.sfx_generation_worker.SFXGenerationService") as MockService,
+            patch("app.workers.sfx_generation_worker.SFXGenerationService") as mock_service_class,
             patch("app.workers.sfx_generation_worker.track_api_cost"),
         ):
             mock_service_instance = AsyncMock()
-            MockService.return_value = mock_service_instance
+            mock_service_class.return_value = mock_service_instance
             mock_service_instance.create_sfx_manifest.return_value = MagicMock(
                 clips=[MagicMock() for _ in range(18)]
             )

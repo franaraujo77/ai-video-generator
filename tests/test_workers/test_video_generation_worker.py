@@ -84,13 +84,13 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
             patch(
                 "app.workers.video_generation_worker.track_api_cost", new_callable=AsyncMock
             ) as mock_track_cost,
         ):
             # Mock service
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=mock_manifest)
             mock_service.generate_videos = AsyncMock(return_value=generation_result)
             mock_service.cleanup = AsyncMock()
@@ -99,7 +99,7 @@ class TestVideoGenerationWorker:
             await process_video_generation_task(task_id)
 
             # Verify service was initialized correctly
-            MockService.assert_called_once_with("poke1", task_id)
+            mock_service_class.assert_called_once_with("poke1", task_id)
 
             # Verify manifest creation
             mock_service.create_video_manifest.assert_called_once_with(
@@ -142,10 +142,10 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
         ):
             # Mock service to raise CLI error
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = AsyncMock(
                 side_effect=CLIScriptError(
@@ -170,10 +170,10 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
         ):
             # Mock service to raise timeout
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = AsyncMock(side_effect=asyncio.TimeoutError())
 
@@ -194,10 +194,10 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
         ):
             # Mock service to raise unexpected error
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(side_effect=RuntimeError("Unexpected error"))
 
             # Process task
@@ -237,9 +237,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
         ):
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = mock_generate_videos
 
@@ -261,12 +261,12 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
             ) as mock_notion,
         ):
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = AsyncMock(
                 return_value={
@@ -292,9 +292,9 @@ class TestVideoGenerationWorker:
                 "app.workers.video_generation_worker.async_session_factory",
                 return_value=mock_db_session,
             ),
-            patch("app.workers.video_generation_worker.VideoGenerationService") as MockService,
+            patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class,
         ):
-            mock_service = MockService.return_value
+            mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = AsyncMock(
                 return_value={
