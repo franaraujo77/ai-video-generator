@@ -49,6 +49,7 @@ Performance Expectations:
 """
 
 import asyncio
+import contextlib
 import time
 from dataclasses import dataclass
 from datetime import datetime
@@ -368,11 +369,9 @@ class PipelineOrchestrator:
                 error_type=type(e).__name__,
                 error_message=str(e),
             )
-            # Attempt to mark task as failed
-            try:
+            # Attempt to mark task as failed (suppress errors during cleanup)
+            with contextlib.suppress(Exception):
                 await self.update_task_status(TaskStatus.ASSET_ERROR, error_message=str(e))
-            except Exception:
-                pass  # Log error but don't raise (pipeline cleanup)
 
     async def execute_step(
         self,
@@ -677,6 +676,7 @@ class PipelineOrchestrator:
                 }
 
                 await db.commit()
+
     async def _sync_to_notion_async(self, status: TaskStatus) -> None:
         """Sync task status to Notion (async, non-blocking).
 
@@ -696,7 +696,9 @@ class PipelineOrchestrator:
 
         Example:
             >>> # Called automatically from update_task_status
-            >>> asyncio.create_task(orchestrator._sync_to_notion_async(TaskStatus.GENERATING_ASSETS))
+            >>> asyncio.create_task(
+            ...     orchestrator._sync_to_notion_async(TaskStatus.GENERATING_ASSETS)
+            ... )
         """
         try:
             # Short transaction: Load task data, then close DB before API call
