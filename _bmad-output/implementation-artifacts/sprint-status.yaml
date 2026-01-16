@@ -68,9 +68,9 @@ development_status:
   3-4-composite-creation-step: done
   3-5-video-clip-generation-step-kling: done
   3-6-narration-generation-step-elevenlabs: done
-  3-7-sound-effects-generation-step: ready-for-dev
-  3-8-video-assembly-step-ffmpeg: backlog
-  3-9-end-to-end-pipeline-orchestration: backlog
+  3-7-sound-effects-generation-step: done
+  3-8-video-assembly-step-ffmpeg: done
+  3-9-end-to-end-pipeline-orchestration: ready-for-dev
   epic-3-retrospective: optional
 
   # Epic 4: Worker Orchestration & Parallel Processing
