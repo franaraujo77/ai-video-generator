@@ -728,8 +728,8 @@ class PipelineOrchestrator:
             status: Current task status to sync
 
         Example:
-            >>> # Called automatically from update_task_status
-            >>> asyncio.create_task(orchestrator._sync_to_notion_async(TaskStatus.GENERATING_ASSETS))  # noqa: E501
+            >>> # Called from update_task_status
+            >>> asyncio.create_task(orchestrator._sync_to_notion_async(status))
         """
         try:
             # Short transaction: Load task data, then close DB before API call
