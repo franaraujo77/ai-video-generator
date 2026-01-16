@@ -57,6 +57,7 @@ from enum import Enum
 from typing import Any
 
 from app.clients.notion import NotionClient
+from app.config import get_notion_api_token
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
@@ -439,7 +440,8 @@ class PipelineOrchestrator:
 
         elif step == PipelineStep.COMPOSITE_CREATION:
             composite_service = CompositeCreationService(channel_id, project_id)
-            result = await composite_service.create_composites()
+            manifest = composite_service.create_composite_manifest(topic, story_direction)
+            result = await composite_service.generate_composites(manifest, resume=True)
 
             return StepCompletion(
                 step=step,
@@ -455,8 +457,8 @@ class PipelineOrchestrator:
 
         elif step == PipelineStep.VIDEO_GENERATION:
             video_service = VideoGenerationService(channel_id, project_id)
-            manifest = video_service.create_video_manifest(topic, story_direction)
-            result = await video_service.generate_videos(manifest, resume=True)
+            video_manifest = video_service.create_video_manifest(topic, story_direction)
+            result = await video_service.generate_videos(video_manifest, resume=True)
 
             return StepCompletion(
                 step=step,
@@ -464,7 +466,7 @@ class PipelineOrchestrator:
                 partial_progress={
                     "generated": result.get("generated", 0),
                     "skipped": result.get("skipped", 0),
-                    "total": len(manifest.clips),
+                    "total": len(video_manifest.clips),
                 },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
@@ -472,7 +474,10 @@ class PipelineOrchestrator:
 
         elif step == PipelineStep.NARRATION_GENERATION:
             narration_service = NarrationGenerationService(channel_id, project_id)
-            result = await narration_service.generate_narrations()
+            narration_manifest = await narration_service.create_narration_manifest()
+            result = await narration_service.generate_narration(
+                narration_manifest, resume=True
+            )
 
             return StepCompletion(
                 step=step,
@@ -488,7 +493,8 @@ class PipelineOrchestrator:
 
         elif step == PipelineStep.SFX_GENERATION:
             sfx_service = SFXGenerationService(channel_id, project_id)
-            result = await sfx_service.generate_sfx()
+            sfx_manifest = await sfx_service.create_sfx_manifest()
+            result = await sfx_service.generate_sfx(sfx_manifest, resume=True)
 
             return StepCompletion(
                 step=step,
@@ -504,7 +510,8 @@ class PipelineOrchestrator:
 
         elif step == PipelineStep.VIDEO_ASSEMBLY:
             assembly_service = VideoAssemblyService(channel_id, project_id)
-            result = await assembly_service.assemble_video()
+            assembly_manifest = await assembly_service.create_assembly_manifest()
+            result = await assembly_service.assemble_video(assembly_manifest)
 
             return StepCompletion(
                 step=step,
@@ -728,7 +735,16 @@ class PipelineOrchestrator:
                 )
 
             # DB session closed - now safe to make API call
-            notion_client = NotionClient()
+            notion_api_token = get_notion_api_token()
+            if not notion_api_token:
+                self.log.warning(
+                    "notion_sync_skipped",
+                    reason="no_api_token",
+                    task_id=self.task_id,
+                )
+                return
+
+            notion_client = NotionClient(auth_token=notion_api_token)
             await push_task_to_notion(task_data, notion_client)
 
             self.log.info(

@@ -40,10 +40,7 @@ class CLIScriptError(Exception):
 
 
 async def run_cli_script(
-    script: str,
-    args: list[str],
-    timeout: int = 600,
-    env: dict[str, str] | None = None
+    script: str, args: list[str], timeout: int = 600, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run CLI script without blocking async event loop.
 
@@ -72,7 +69,7 @@ async def run_cli_script(
         >>> result = await run_cli_script(
         ...     "generate_asset.py",
         ...     ["--prompt", "A forest scene", "--output", "/path/to/asset.png"],
-        ...     timeout=60
+        ...     timeout=60,
         ... )
         >>> print(result.stdout)
         "✅ Asset generated: /path/to/asset.png"
@@ -82,7 +79,7 @@ async def run_cli_script(
         ...     "generate_audio.py",
         ...     ["--text", "narration", "--output", "audio.mp3"],
         ...     timeout=60,
-        ...     env={"ELEVENLABS_VOICE_ID": "voice123"}
+        ...     env={"ELEVENLABS_VOICE_ID": "voice123"},
         ... )
     """
     # Security: Validate script is within scripts directory (prevent path traversal)
@@ -123,6 +120,7 @@ async def run_cli_script(
     # If env provided, extend parent environment (don't replace entirely)
     # This ensures subprocess inherits system PATH, PYTHON_PATH, etc.
     import os
+
     process_env = os.environ.copy()
     if env:
         process_env.update(env)
@@ -133,30 +131,28 @@ async def run_cli_script(
             subprocess.run,
             command,
             capture_output=True,  # Capture stdout/stderr
-            text=True,            # Decode as UTF-8 strings
-            errors='replace',     # Replace invalid UTF-8 with replacement character
-            timeout=timeout,      # Enforce timeout
-            env=process_env       # Pass isolated environment (prevents global pollution)
+            text=True,  # Decode as UTF-8 strings
+            errors="replace",  # Replace invalid UTF-8 with replacement character
+            timeout=timeout,  # Enforce timeout
+            env=process_env,  # Pass isolated environment (prevents global pollution)
         )
 
         if result.returncode != 0:
             # Truncate stderr to prevent log bloat
             stderr_truncated = (
-                result.stderr[:500] + "..." if len(result.stderr) > 500
-                else result.stderr
+                result.stderr[:500] + "..." if len(result.stderr) > 500 else result.stderr
             )
             log.error(
                 "cli_script_error",
                 script=script,
                 exit_code=result.returncode,
-                stderr=stderr_truncated
+                stderr=stderr_truncated,
             )
             raise CLIScriptError(script, result.returncode, result.stderr)
 
         # Truncate stdout to prevent log bloat
         stdout_truncated = (
-            result.stdout[:500] + "..." if len(result.stdout) > 500
-            else result.stdout
+            result.stdout[:500] + "..." if len(result.stdout) > 500 else result.stdout
         )
         log.info("cli_script_success", script=script, stdout=stdout_truncated)
         return result

@@ -41,7 +41,7 @@ class TestAssetPromptDataclass:
             asset_type="character",
             name="bulbasaur_resting",
             prompt="Bulbasaur resting peacefully",
-            output_path=output_path
+            output_path=output_path,
         )
 
         assert asset.asset_type == "character"
@@ -59,18 +59,17 @@ class TestAssetManifestDataclass:
             asset_type="character",
             name="char1",
             prompt="Character 1",
-            output_path=tmp_path / "char1.png"
+            output_path=tmp_path / "char1.png",
         )
         asset2 = AssetPrompt(
             asset_type="environment",
             name="env1",
             prompt="Environment 1",
-            output_path=tmp_path / "env1.png"
+            output_path=tmp_path / "env1.png",
         )
 
         manifest = AssetManifest(
-            global_atmosphere="Natural lighting, misty atmosphere",
-            assets=[asset1, asset2]
+            global_atmosphere="Natural lighting, misty atmosphere", assets=[asset1, asset2]
         )
 
         assert manifest.global_atmosphere == "Natural lighting, misty atmosphere"
@@ -94,15 +93,11 @@ class TestAssetGenerationServiceInit:
 class TestCreateAssetManifest:
     """Test create_asset_manifest method."""
 
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     def test_create_manifest_from_topic_and_story(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, tmp_path: Path
     ):
         """Test creating asset manifest with topic and story direction."""
         # Setup mocked directories
@@ -119,8 +114,7 @@ class TestCreateAssetManifest:
 
         service = AssetGenerationService("poke1", "vid_abc123")
         manifest = service.create_asset_manifest(
-            "Bulbasaur forest documentary",
-            "Show evolution through seasons"
+            "Bulbasaur forest documentary", "Show evolution through seasons"
         )
 
         # Verify global atmosphere derived
@@ -141,25 +135,15 @@ class TestCreateAssetManifest:
         assert len(prop_assets) == 6
 
         # Verify paths use correct directories
-        assert all(
-            a.output_path.parent == char_dir for a in character_assets
-        )
-        assert all(
-            a.output_path.parent == env_dir for a in environment_assets
-        )
-        assert all(
-            a.output_path.parent == props_dir for a in prop_assets
-        )
+        assert all(a.output_path.parent == char_dir for a in character_assets)
+        assert all(a.output_path.parent == env_dir for a in environment_assets)
+        assert all(a.output_path.parent == props_dir for a in prop_assets)
 
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     def test_global_atmosphere_forest_topic(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, tmp_path: Path
     ):
         """Test global atmosphere derivation for forest topic."""
         # Setup mocks
@@ -168,26 +152,18 @@ class TestCreateAssetManifest:
         mock_props_dir.return_value = tmp_path / "props"
 
         service = AssetGenerationService("poke1", "vid_abc123")
-        manifest = service.create_asset_manifest(
-            "Forest documentary",
-            "Nature exploration"
-        )
+        manifest = service.create_asset_manifest("Forest documentary", "Nature exploration")
 
         # Verify forest-specific atmosphere
         atmosphere = manifest.global_atmosphere.lower()
         assert "forest" in atmosphere or "canopy" in atmosphere
         assert "lighting" in atmosphere
 
-
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     def test_global_atmosphere_underwater_topic(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, tmp_path: Path
     ):
         """Test global atmosphere derivation for underwater topic."""
         mock_char_dir.return_value = tmp_path / "characters"
@@ -196,8 +172,7 @@ class TestCreateAssetManifest:
 
         service = AssetGenerationService("poke1", "vid_abc123")
         manifest = service.create_asset_manifest(
-            "Underwater ocean documentary",
-            "Deep sea exploration"
+            "Underwater ocean documentary", "Deep sea exploration"
         )
 
         atmosphere = manifest.global_atmosphere.lower()
@@ -209,17 +184,12 @@ class TestGenerateAssets:
     """Test generate_assets method."""
 
     @pytest.mark.asyncio
-    @patch('app.services.asset_generation.run_cli_script')
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.run_cli_script")
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     async def test_generate_all_assets_success(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        mock_run_cli,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, mock_run_cli, tmp_path: Path
     ):
         """Test generating all assets successfully."""
         # Setup mocked directories
@@ -245,10 +215,7 @@ class TestGenerateAssets:
         mock_run_cli.side_effect = create_asset_file
 
         service = AssetGenerationService("poke1", "vid_abc123")
-        manifest = service.create_asset_manifest(
-            "Bulbasaur forest",
-            "Nature documentary"
-        )
+        manifest = service.create_asset_manifest("Bulbasaur forest", "Nature documentary")
 
         result = await service.generate_assets(manifest, resume=False)
 
@@ -262,17 +229,12 @@ class TestGenerateAssets:
         assert mock_run_cli.call_count == 22
 
     @pytest.mark.asyncio
-    @patch('app.services.asset_generation.run_cli_script')
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.run_cli_script")
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     async def test_generate_assets_with_resume_skip_existing(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        mock_run_cli,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, mock_run_cli, tmp_path: Path
     ):
         """Test partial resume skips existing assets."""
         # Setup directories
@@ -289,10 +251,7 @@ class TestGenerateAssets:
 
         # Create 12 assets already existing
         service = AssetGenerationService("poke1", "vid_abc123")
-        manifest = service.create_asset_manifest(
-            "Bulbasaur forest",
-            "Nature documentary"
-        )
+        manifest = service.create_asset_manifest("Bulbasaur forest", "Nature documentary")
 
         # Create first 12 assets
         for i in range(12):
@@ -316,17 +275,12 @@ class TestGenerateAssets:
         assert mock_run_cli.call_count == 10
 
     @pytest.mark.asyncio
-    @patch('app.services.asset_generation.run_cli_script')
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.run_cli_script")
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     async def test_generate_assets_cli_script_error(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        mock_run_cli,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, mock_run_cli, tmp_path: Path
     ):
         """Test CLI script error handling."""
         mock_char_dir.return_value = tmp_path / "characters"
@@ -335,16 +289,11 @@ class TestGenerateAssets:
 
         # Mock CLI script to raise error
         mock_run_cli.side_effect = CLIScriptError(
-            "generate_asset.py",
-            1,
-            "Gemini API error: HTTP 500"
+            "generate_asset.py", 1, "Gemini API error: HTTP 500"
         )
 
         service = AssetGenerationService("poke1", "vid_abc123")
-        manifest = service.create_asset_manifest(
-            "Bulbasaur forest",
-            "Nature documentary"
-        )
+        manifest = service.create_asset_manifest("Bulbasaur forest", "Nature documentary")
 
         # Verify CLIScriptError propagates
         with pytest.raises(CLIScriptError) as exc_info:
@@ -355,17 +304,12 @@ class TestGenerateAssets:
         assert "HTTP 500" in exc_info.value.stderr
 
     @pytest.mark.asyncio
-    @patch('app.services.asset_generation.run_cli_script')
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.run_cli_script")
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     async def test_generate_assets_prompt_combination(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        mock_run_cli,
-        tmp_path: Path
+        self, mock_props_dir, mock_env_dir, mock_char_dir, mock_run_cli, tmp_path: Path
     ):
         """Test asset prompt combined with global atmosphere."""
         char_dir = tmp_path / "characters"
@@ -393,10 +337,7 @@ class TestGenerateAssets:
         mock_run_cli.side_effect = capture_prompt
 
         service = AssetGenerationService("poke1", "vid_abc123")
-        manifest = service.create_asset_manifest(
-            "Bulbasaur forest",
-            "Nature documentary"
-        )
+        manifest = service.create_asset_manifest("Bulbasaur forest", "Nature documentary")
 
         await service.generate_assets(manifest, resume=False)
 
@@ -505,18 +446,12 @@ class TestSecurityValidation:
             assert service.project_id == project_id
 
     @pytest.mark.asyncio
-    @patch('app.services.asset_generation.run_cli_script')
-    @patch('app.services.asset_generation.get_character_dir')
-    @patch('app.services.asset_generation.get_environment_dir')
-    @patch('app.services.asset_generation.get_props_dir')
+    @patch("app.services.asset_generation.run_cli_script")
+    @patch("app.services.asset_generation.get_character_dir")
+    @patch("app.services.asset_generation.get_environment_dir")
+    @patch("app.services.asset_generation.get_props_dir")
     async def test_sensitive_data_sanitization_in_logs(
-        self,
-        mock_props_dir,
-        mock_env_dir,
-        mock_char_dir,
-        mock_run_cli,
-        tmp_path: Path,
-        caplog
+        self, mock_props_dir, mock_env_dir, mock_char_dir, mock_run_cli, tmp_path: Path, caplog
     ):
         """Test prompts are truncated in logs to prevent leaking sensitive data."""
         char_dir = tmp_path / "characters"
@@ -528,15 +463,12 @@ class TestSecurityValidation:
 
         # Mock CLI script to fail
         mock_run_cli.side_effect = CLIScriptError(
-            "generate_asset.py",
-            1,
-            "API error with API_KEY=secret123"
+            "generate_asset.py", 1, "API error with API_KEY=secret123"
         )
 
         service = AssetGenerationService("poke1", "vid_abc123")
         manifest = service.create_asset_manifest(
-            "Bulbasaur API_KEY=secret123",
-            "Story with sensitive data"
+            "Bulbasaur API_KEY=secret123", "Story with sensitive data"
         )
 
         # Try to generate (will fail)

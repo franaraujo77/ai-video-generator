@@ -138,7 +138,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             "task_claimed",
             task_id=str(task_id),
             channel_id=channel_id_str,
-            status="generating_video"
+            status="generating_video",
         )
 
     # Step 2: Generate videos (OUTSIDE transaction - DB connection closed)
@@ -150,13 +150,13 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             "video_generation_start",
             task_id=str(task_id),
             clip_count=len(manifest.clips),
-            estimated_time_minutes=18 * 3.5  # 18 clips x 3.5 min average
+            estimated_time_minutes=18 * 3.5,  # 18 clips x 3.5 min average
         )
 
         result = await service.generate_videos(
             manifest,
             resume=False,  # Future enhancement: detect retries and set resume=True
-            max_concurrent=5  # Kling rate limit
+            max_concurrent=5,  # Kling rate limit
         )
 
         log.info(
@@ -165,7 +165,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             generated=result["generated"],
             skipped=result["skipped"],
             failed=result["failed"],
-            total_cost_usd=str(result["total_cost_usd"])
+            total_cost_usd=str(result["total_cost_usd"]),
         )
 
         # Step 3: Track costs (short transaction)
@@ -181,7 +181,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 component="kling_video_clips",
                 cost_usd=result["total_cost_usd"],
                 api_calls=result["generated"],
-                units_consumed=result["generated"]
+                units_consumed=result["generated"],
             )
             await db.commit()
 
@@ -212,7 +212,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             task_id=str(task_id),
             script=e.script,
             exit_code=e.exit_code,
-            stderr=e.stderr[:500]  # Truncate stderr
+            stderr=e.stderr[:500],  # Truncate stderr
         )
 
         async with async_session_factory() as db, db.begin():
@@ -238,7 +238,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             "video_generation_http_error",
             task_id=str(task_id),
             error=str(e),
-            error_type=type(e).__name__
+            error_type=type(e).__name__,
         )
 
         async with async_session_factory() as db, db.begin():

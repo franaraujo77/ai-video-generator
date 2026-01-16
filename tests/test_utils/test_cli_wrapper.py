@@ -38,11 +38,7 @@ class TestRunCLIScript:
     async def test_run_cli_script_success(self, mocker):
         """Test successful script execution returns CompletedProcess."""
         # Mock successful subprocess result
-        mock_result = Mock(
-            returncode=0,
-            stdout="✅ Asset generated: /tmp/test.png",
-            stderr=""
-        )
+        mock_result = Mock(returncode=0, stdout="✅ Asset generated: /tmp/test.png", stderr="")
 
         # Mock asyncio.to_thread to return mock result
         mocker.patch("asyncio.to_thread", return_value=mock_result)
@@ -52,9 +48,7 @@ class TestRunCLIScript:
 
         # Execute
         result = await run_cli_script(
-            "generate_asset.py",
-            ["--output", "/tmp/test.png"],
-            timeout=60
+            "generate_asset.py", ["--output", "/tmp/test.png"], timeout=60
         )
 
         # Verify
@@ -67,9 +61,7 @@ class TestRunCLIScript:
         """Test script failure raises CLIScriptError with stderr."""
         # Mock failed subprocess result
         mock_result = Mock(
-            returncode=1,
-            stdout="",
-            stderr="❌ GEMINI_API_KEY not found in environment"
+            returncode=1, stdout="", stderr="❌ GEMINI_API_KEY not found in environment"
         )
 
         mocker.patch("asyncio.to_thread", return_value=mock_result)
@@ -77,10 +69,7 @@ class TestRunCLIScript:
 
         # Execute and verify exception
         with pytest.raises(CLIScriptError) as exc_info:
-            await run_cli_script(
-                "generate_asset.py",
-                ["--output", "/tmp/test.png"]
-            )
+            await run_cli_script("generate_asset.py", ["--output", "/tmp/test.png"])
 
         # Verify exception attributes
         assert exc_info.value.script == "generate_asset.py"
@@ -94,18 +83,15 @@ class TestRunCLIScript:
         mocker.patch(
             "asyncio.to_thread",
             side_effect=subprocess.TimeoutExpired(
-                cmd=["python", "scripts/generate_video.py"],
-                timeout=5
-            )
+                cmd=["python", "scripts/generate_video.py"], timeout=5
+            ),
         )
         mocker.patch("app.utils.cli_wrapper.log")
 
         # Execute and verify timeout exception
         with pytest.raises(asyncio.TimeoutError) as exc_info:
             await run_cli_script(
-                "generate_video.py",
-                ["--image", "comp.png", "--prompt", "motion"],
-                timeout=5
+                "generate_video.py", ["--image", "comp.png", "--prompt", "motion"], timeout=5
             )
 
         # Verify timeout message includes script name
@@ -114,6 +100,7 @@ class TestRunCLIScript:
     @pytest.mark.asyncio
     async def test_run_cli_script_event_loop_non_blocking(self, mocker):
         """Test concurrent script executions don't block each other."""
+
         # Create mock results with delays to simulate long-running operations
         async def mock_to_thread_with_delay(*args, **kwargs):
             await asyncio.sleep(0.1)  # Simulate 100ms operation
@@ -128,7 +115,7 @@ class TestRunCLIScript:
         results = await asyncio.gather(
             run_cli_script("generate_asset.py", ["--output", "asset1.png"]),
             run_cli_script("generate_asset.py", ["--output", "asset2.png"]),
-            run_cli_script("generate_asset.py", ["--output", "asset3.png"])
+            run_cli_script("generate_asset.py", ["--output", "asset3.png"]),
         )
 
         end_time = asyncio.get_event_loop().time()
@@ -155,15 +142,15 @@ class TestRunCLIScript:
             captured_command = command
             return mock_result
 
-        mocker.patch("asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs))
+        mocker.patch(
+            "asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)
+        )
         mocker.patch("subprocess.run", side_effect=capture_subprocess_run)
         mocker.patch("app.utils.cli_wrapper.log")
 
         # Execute
         await run_cli_script(
-            "generate_asset.py",
-            ["--prompt", "A forest", "--output", "/tmp/asset.png"],
-            timeout=60
+            "generate_asset.py", ["--prompt", "A forest", "--output", "/tmp/asset.png"], timeout=60
         )
 
         # Verify command construction
@@ -186,7 +173,9 @@ class TestRunCLIScript:
             captured_kwargs.update(kwargs)
             return mock_result
 
-        mocker.patch("asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs))
+        mocker.patch(
+            "asyncio.to_thread", side_effect=lambda fn, *args, **kwargs: fn(*args, **kwargs)
+        )
         mocker.patch("subprocess.run", side_effect=capture_subprocess_run)
         mocker.patch("app.utils.cli_wrapper.log")
 
@@ -204,7 +193,7 @@ class TestRunCLIScript:
         mock_result = Mock(
             returncode=0,
             stdout="✅ Video generated successfully",
-            stderr="⚠️ Warning: Low GPU memory"
+            stderr="⚠️ Warning: Low GPU memory",
         )
 
         mocker.patch("asyncio.to_thread", return_value=mock_result)
@@ -264,7 +253,7 @@ class TestRunCLIScript:
         """Test logging events are emitted on timeout."""
         mocker.patch(
             "asyncio.to_thread",
-            side_effect=subprocess.TimeoutExpired(cmd=["python", "script.py"], timeout=5)
+            side_effect=subprocess.TimeoutExpired(cmd=["python", "script.py"], timeout=5),
         )
 
         mock_log = mocker.patch("app.utils.cli_wrapper.log")
@@ -311,9 +300,7 @@ class TestRunCLIScript:
 
         # Execute with sensitive args
         await run_cli_script(
-            "generate_asset.py",
-            ["--api-key", "secret123", "--output", "/tmp/test.png"],
-            timeout=60
+            "generate_asset.py", ["--api-key", "secret123", "--output", "/tmp/test.png"], timeout=60
         )
 
         # Verify log.info called with sanitized args
@@ -328,8 +315,7 @@ class TestRunCLIScript:
     async def test_run_cli_script_timeout_exception_chain(self, mocker):
         """Test timeout exception properly chains subprocess.TimeoutExpired."""
         timeout_exc = subprocess.TimeoutExpired(
-            cmd=["python", "scripts/generate_video.py"],
-            timeout=5
+            cmd=["python", "scripts/generate_video.py"], timeout=5
         )
         mocker.patch("asyncio.to_thread", side_effect=timeout_exc)
         mocker.patch("app.utils.cli_wrapper.log")
@@ -346,11 +332,7 @@ class TestRunCLIScript:
     async def test_run_cli_script_handles_unicode_decode_errors(self, mocker):
         """Test non-UTF-8 output is handled gracefully with replacement chars."""
         # Mock result with replacement characters (simulating errors='replace')
-        mock_result = Mock(
-            returncode=0,
-            stdout="Output with �� replacement chars",
-            stderr=""
-        )
+        mock_result = Mock(returncode=0, stdout="Output with �� replacement chars", stderr="")
         mocker.patch("asyncio.to_thread", return_value=mock_result)
         mocker.patch("app.utils.cli_wrapper.log")
 

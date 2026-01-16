@@ -91,9 +91,7 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch(
-                "app.workers.video_assembly_worker.VideoAssemblyService"
-            ) as MockService:
+            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as MockService:
                 mock_service = MockService.return_value
 
                 # Mock create_assembly_manifest (async)
@@ -165,9 +163,7 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch(
-                "app.workers.video_assembly_worker.VideoAssemblyService"
-            ) as MockService:
+            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as MockService:
                 mock_service = MockService.return_value
 
                 # Mock create_assembly_manifest to raise FileNotFoundError
@@ -216,9 +212,7 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch(
-                "app.workers.video_assembly_worker.VideoAssemblyService"
-            ) as MockService:
+            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as MockService:
                 mock_service = MockService.return_value
 
                 # Mock methods
@@ -231,9 +225,7 @@ class TestProcessVideoAssemblyTask:
                     pass
 
                 async def mock_assemble_video(*args, **kwargs):
-                    raise CLIScriptError(
-                        "assemble_video.py", 1, "FFmpeg error: invalid codec"
-                    )
+                    raise CLIScriptError("assemble_video.py", 1, "FFmpeg error: invalid codec")
 
                 mock_service.create_assembly_manifest = mock_create_manifest
                 mock_service.validate_input_files = mock_validate_files
@@ -279,9 +271,7 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch(
-                "app.workers.video_assembly_worker.VideoAssemblyService"
-            ) as MockService:
+            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as MockService:
                 mock_service = MockService.return_value
 
                 # Mock methods
@@ -336,9 +326,7 @@ class TestProcessVideoAssemblyTask:
             "app.workers.video_assembly_worker.async_session_factory",
             create_mock_session_factory(async_session),
         ):
-            with patch(
-                "app.workers.video_assembly_worker.VideoAssemblyService"
-            ) as MockService:
+            with patch("app.workers.video_assembly_worker.VideoAssemblyService") as MockService:
                 mock_service = MockService.return_value
 
                 # Mock methods

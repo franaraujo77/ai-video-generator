@@ -81,9 +81,7 @@ class TestNarrationManifestDataclass:
             output_path=tmp_path / "clip_02.mp3",
         )
 
-        manifest = NarrationManifest(
-            clips=[clip1, clip2], voice_id="EXAVITQu4vr4xnSDxMaL"
-        )
+        manifest = NarrationManifest(clips=[clip1, clip2], voice_id="EXAVITQu4vr4xnSDxMaL")
 
         assert len(manifest.clips) == 2
         assert manifest.voice_id == "EXAVITQu4vr4xnSDxMaL"
@@ -154,9 +152,7 @@ class TestCreateNarrationManifest:
 
     @patch("app.services.narration_generation.get_audio_dir")
     @pytest.mark.asyncio
-    async def test_create_manifest_with_video_durations(
-        self, mock_get_audio_dir, tmp_path
-    ):
+    async def test_create_manifest_with_video_durations(self, mock_get_audio_dir, tmp_path):
         """Test creating manifest with optional video durations."""
         mock_get_audio_dir.return_value = tmp_path
 
@@ -177,9 +173,7 @@ class TestCreateNarrationManifest:
 
     @patch("app.services.narration_generation.get_audio_dir")
     @pytest.mark.asyncio
-    async def test_create_manifest_rejects_wrong_script_count(
-        self, mock_get_audio_dir, tmp_path
-    ):
+    async def test_create_manifest_rejects_wrong_script_count(self, mock_get_audio_dir, tmp_path):
         """Test manifest creation fails with != 18 scripts."""
         mock_get_audio_dir.return_value = tmp_path
 
@@ -196,9 +190,7 @@ class TestCreateNarrationManifest:
 
     @patch("app.services.narration_generation.get_audio_dir")
     @pytest.mark.asyncio
-    async def test_create_manifest_rejects_invalid_voice_id(
-        self, mock_get_audio_dir, tmp_path
-    ):
+    async def test_create_manifest_rejects_invalid_voice_id(self, mock_get_audio_dir, tmp_path):
         """Test manifest creation fails with invalid voice_id."""
         mock_get_audio_dir.return_value = tmp_path
 

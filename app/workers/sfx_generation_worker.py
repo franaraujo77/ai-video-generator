@@ -110,9 +110,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
         log.info("task_claimed", task_id=str(task_id), status="generating_sfx")
 
         # Load channel for channel_id (SFX doesn't require voice_id)
-        channel_result = await db.execute(
-            select(Channel).where(Channel.id == task.channel_id)
-        )
+        channel_result = await db.execute(select(Channel).where(Channel.id == task.channel_id))
         channel = channel_result.scalar_one_or_none()
         if not channel:
             log.error("channel_not_found", channel_id=str(task.channel_id))
@@ -143,9 +141,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
     try:
         service = SFXGenerationService(channel_business_id, project_id)
 
-        manifest = await service.create_sfx_manifest(
-            sfx_descriptions=sfx_descriptions
-        )
+        manifest = await service.create_sfx_manifest(sfx_descriptions=sfx_descriptions)
 
         log.info(
             "sfx_generation_start",
@@ -191,8 +187,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
                 if hasattr(task, "total_cost_usd") and task.total_cost_usd is not None:
                     # Convert to Decimal for consistent arithmetic
                     task.total_cost_usd = float(
-                        Decimal(str(task.total_cost_usd))
-                        + generation_result["total_cost_usd"]
+                        Decimal(str(task.total_cost_usd)) + generation_result["total_cost_usd"]
                     )
                 elif hasattr(task, "total_cost_usd"):
                     task.total_cost_usd = float(generation_result["total_cost_usd"])
@@ -237,9 +232,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
                 await db.commit()
 
     except Exception as e:
-        log.error(
-            "sfx_generation_unexpected_error", task_id=str(task_id), error=str(e)
-        )
+        log.error("sfx_generation_unexpected_error", task_id=str(task_id), error=str(e))
 
         async with async_session_factory() as db, db.begin():
             result_task = await db.execute(select(Task).where(Task.id == task_id))

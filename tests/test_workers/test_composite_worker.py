@@ -64,10 +64,7 @@ class TestProcessCompositeCreationTask:
         """Test successful composite creation flow."""
         # Create test channel
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -80,7 +77,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest documentary",
             story_direction="Show evolution through seasons",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -89,8 +86,13 @@ class TestProcessCompositeCreationTask:
         task_id = task.id
 
         # Mock composite creation service
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
                 mock_service.create_composite_manifest.return_value = MagicMock(
                     composites=[MagicMock() for _ in range(18)]
@@ -98,11 +100,8 @@ class TestProcessCompositeCreationTask:
 
                 # Make generate_composites async
                 async def mock_generate_composites(*args, **kwargs):
-                    return {
-                        "generated": 18,
-                        "skipped": 0,
-                        "failed": 0
-                    }
+                    return {"generated": 18, "skipped": 0, "failed": 0}
+
                 mock_service.generate_composites = mock_generate_composites
 
                 # Process task
@@ -117,7 +116,10 @@ class TestProcessCompositeCreationTask:
         fake_task_id = str(uuid4())
 
         # Should not raise, just log error
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
             await process_composite_creation_task(fake_task_id)
         # No assertion - just verify it doesn't crash
 
@@ -125,10 +127,7 @@ class TestProcessCompositeCreationTask:
         """Test CLI script error handling."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -140,7 +139,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -149,8 +148,13 @@ class TestProcessCompositeCreationTask:
         task_id = task.id
 
         # Mock composite service to raise CLIScriptError
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
                 mock_service.create_composite_manifest.return_value = MagicMock(
                     composites=[MagicMock() for _ in range(18)]
@@ -159,10 +163,9 @@ class TestProcessCompositeCreationTask:
                 # Make generate_composites raise CLIScriptError
                 async def mock_generate_composites(*args, **kwargs):
                     raise CLIScriptError(
-                        "create_composite.py",
-                        1,
-                        "FileNotFoundError: character.png not found"
+                        "create_composite.py", 1, "FileNotFoundError: character.png not found"
                     )
+
                 mock_service.generate_composites = mock_generate_composites
 
                 # Process task
@@ -177,10 +180,7 @@ class TestProcessCompositeCreationTask:
         """Test timeout error handling."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -192,7 +192,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -201,8 +201,13 @@ class TestProcessCompositeCreationTask:
         task_id = task.id
 
         # Mock composite service to raise TimeoutError
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
                 mock_service.create_composite_manifest.return_value = MagicMock(
                     composites=[MagicMock() for _ in range(18)]
@@ -211,6 +216,7 @@ class TestProcessCompositeCreationTask:
                 # Make generate_composites raise TimeoutError
                 async def mock_generate_composites(*args, **kwargs):
                     raise asyncio.TimeoutError()
+
                 mock_service.generate_composites = mock_generate_composites
 
                 # Process task
@@ -225,10 +231,7 @@ class TestProcessCompositeCreationTask:
         """Test FileNotFoundError handling (missing asset files)."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -240,7 +243,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -249,13 +252,19 @@ class TestProcessCompositeCreationTask:
         task_id = task.id
 
         # Mock composite service to raise FileNotFoundError
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
 
                 # Make create_composite_manifest raise FileNotFoundError
                 def mock_create_manifest(*args, **kwargs):
                     raise FileNotFoundError("No character assets found in /path/to/assets")
+
                 mock_service.create_composite_manifest = mock_create_manifest
 
                 # Process task
@@ -270,10 +279,7 @@ class TestProcessCompositeCreationTask:
         """Test unexpected error handling."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -285,7 +291,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -294,8 +300,13 @@ class TestProcessCompositeCreationTask:
         task_id = task.id
 
         # Mock composite service to raise unexpected error
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
                 mock_service.create_composite_manifest.return_value = MagicMock(
                     composites=[MagicMock() for _ in range(18)]
@@ -304,6 +315,7 @@ class TestProcessCompositeCreationTask:
                 # Make generate_composites raise generic exception
                 async def mock_generate_composites(*args, **kwargs):
                     raise RuntimeError("Unexpected PIL error")
+
                 mock_service.generate_composites = mock_generate_composites
 
                 # Process task
@@ -315,17 +327,12 @@ class TestProcessCompositeCreationTask:
         assert "Unexpected error" in task.error_log
 
     async def test_short_transaction_pattern_database_closed_during_generation(
-        self,
-        async_session,
-        encryption_env
+        self, async_session, encryption_env
     ):
         """Test database connection closed during composite generation."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -337,7 +344,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -355,8 +362,10 @@ class TestProcessCompositeCreationTask:
         mock_factory = MagicMock(side_effect=track_session_factory)
 
         # Mock composite service
-        with patch('app.workers.composite_worker.async_session_factory', mock_factory):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
+        with patch("app.workers.composite_worker.async_session_factory", mock_factory):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
                 mock_service = mock_service_class.return_value
                 mock_service.create_composite_manifest.return_value = MagicMock(
                     composites=[MagicMock() for _ in range(18)]
@@ -385,10 +394,7 @@ class TestProcessCompositeCreationTask:
         """
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -400,7 +406,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -409,9 +415,14 @@ class TestProcessCompositeCreationTask:
         task_id = task.id
 
         # Mock composite service
-        with patch('app.workers.composite_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.composite_worker.CompositeCreationService') as mock_service_class:
-                with patch('app.workers.composite_worker.asyncio.create_task') as mock_create_task:
+        with patch(
+            "app.workers.composite_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch(
+                "app.workers.composite_worker.CompositeCreationService"
+            ) as mock_service_class:
+                with patch("app.workers.composite_worker.asyncio.create_task") as mock_create_task:
                     mock_service = mock_service_class.return_value
                     mock_service.create_composite_manifest.return_value = MagicMock(
                         composites=[MagicMock() for _ in range(18)]
@@ -419,6 +430,7 @@ class TestProcessCompositeCreationTask:
 
                     async def mock_generate_composites(*args, **kwargs):
                         return {"generated": 18, "skipped": 0, "failed": 0}
+
                     mock_service.generate_composites = mock_generate_composites
 
                     # Process task

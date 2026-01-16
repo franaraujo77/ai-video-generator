@@ -497,6 +497,30 @@ class Task(Base):
         nullable=True,
     )
 
+    # Pipeline orchestration metadata (Story 3.9)
+    # Tracks step completion for partial resume and performance monitoring
+    step_completion_metadata: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
+    # Pipeline timing and performance tracking (Story 3.9)
+    # Used for NFR-P1 compliance (≤2 hours target) and cost analysis
+    pipeline_start_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    pipeline_end_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    pipeline_duration_seconds: Mapped[float | None] = mapped_column(
+        nullable=True,
+    )
+    pipeline_cost_usd: Mapped[float | None] = mapped_column(
+        nullable=True,
+    )
+
     # Timestamps (UTC timezone-aware)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

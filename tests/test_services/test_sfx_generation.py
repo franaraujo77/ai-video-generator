@@ -138,9 +138,7 @@ class TestCreateSFXManifest:
             for i in range(1, 19)
         ]
 
-        manifest = await service.create_sfx_manifest(
-            sfx_descriptions=sfx_descriptions
-        )
+        manifest = await service.create_sfx_manifest(sfx_descriptions=sfx_descriptions)
 
         assert len(manifest.clips) == 18
         assert manifest.clips[0].clip_number == 1
@@ -149,9 +147,7 @@ class TestCreateSFXManifest:
 
     @patch("app.services.sfx_generation.get_sfx_dir")
     @pytest.mark.asyncio
-    async def test_create_manifest_with_video_durations(
-        self, mock_get_sfx_dir, tmp_path
-    ):
+    async def test_create_manifest_with_video_durations(self, mock_get_sfx_dir, tmp_path):
         """Test creating manifest with optional video durations."""
         mock_get_sfx_dir.return_value = tmp_path
 
@@ -183,9 +179,7 @@ class TestCreateSFXManifest:
         sfx_descriptions = [f"Description {i}" for i in range(1, 18)]
 
         with pytest.raises(ValueError, match="Expected 18 SFX descriptions, got 17"):
-            await service.create_sfx_manifest(
-                sfx_descriptions=sfx_descriptions
-            )
+            await service.create_sfx_manifest(sfx_descriptions=sfx_descriptions)
 
 
 class TestGenerateSFX:
@@ -194,9 +188,7 @@ class TestGenerateSFX:
     @patch("app.services.sfx_generation.run_cli_script")
     @patch("app.services.sfx_generation.get_sfx_dir")
     @pytest.mark.asyncio
-    async def test_generate_all_sfx_clips(
-        self, mock_get_sfx_dir, mock_run_cli_script, tmp_path
-    ):
+    async def test_generate_all_sfx_clips(self, mock_get_sfx_dir, mock_run_cli_script, tmp_path):
         """Test generating all 18 SFX audio clips."""
         mock_get_sfx_dir.return_value = tmp_path
         mock_run_cli_script.return_value = MagicMock(returncode=0)
@@ -204,10 +196,10 @@ class TestGenerateSFX:
         service = SFXGenerationService("poke1", "vid_abc123")
 
         # Create manifest with 18 clips
-        sfx_descriptions = [f"SFX description {i} with enough length for validation" for i in range(1, 19)]
-        manifest = await service.create_sfx_manifest(
-            sfx_descriptions=sfx_descriptions
-        )
+        sfx_descriptions = [
+            f"SFX description {i} with enough length for validation" for i in range(1, 19)
+        ]
+        manifest = await service.create_sfx_manifest(sfx_descriptions=sfx_descriptions)
 
         # Create dummy audio files (simulate CLI script success)
         for clip in manifest.clips:
@@ -226,9 +218,7 @@ class TestGenerateSFX:
     @patch("app.services.sfx_generation.run_cli_script")
     @patch("app.services.sfx_generation.get_sfx_dir")
     @pytest.mark.asyncio
-    async def test_generate_sfx_with_resume(
-        self, mock_get_sfx_dir, mock_run_cli_script, tmp_path
-    ):
+    async def test_generate_sfx_with_resume(self, mock_get_sfx_dir, mock_run_cli_script, tmp_path):
         """Test resume functionality skips existing SFX clips."""
         mock_get_sfx_dir.return_value = tmp_path
         mock_run_cli_script.return_value = MagicMock(returncode=0)
@@ -236,9 +226,7 @@ class TestGenerateSFX:
         service = SFXGenerationService("poke1", "vid_abc123")
 
         sfx_descriptions = [f"SFX description {i} with enough length" for i in range(1, 19)]
-        manifest = await service.create_sfx_manifest(
-            sfx_descriptions=sfx_descriptions
-        )
+        manifest = await service.create_sfx_manifest(sfx_descriptions=sfx_descriptions)
 
         # Simulate 10 existing clips (clips 1-10)
         for i in range(10):
@@ -284,9 +272,7 @@ class TestGenerateSFX:
         service = SFXGenerationService("poke1", "vid_abc123")
 
         sfx_descriptions = [f"SFX description {i} with enough length" for i in range(1, 19)]
-        manifest = await service.create_sfx_manifest(
-            sfx_descriptions=sfx_descriptions
-        )
+        manifest = await service.create_sfx_manifest(sfx_descriptions=sfx_descriptions)
 
         # Expect CLIScriptError OR ValueError (file not created) to propagate
         # Both are valid outcomes depending on retry logic
@@ -328,9 +314,7 @@ class TestValidateSFXDuration:
 
         # Mock ffprobe to return duration
         with patch("app.services.sfx_generation.subprocess.run") as mock_run:
-            mock_run.return_value = MagicMock(
-                returncode=0, stdout="7.234567\n", stderr=""
-            )
+            mock_run.return_value = MagicMock(returncode=0, stdout="7.234567\n", stderr="")
 
             duration = await service.validate_sfx_duration(sfx_path)
 
@@ -408,9 +392,7 @@ class TestMultiChannelIsolation:
     @patch("app.services.sfx_generation.run_cli_script")
     @patch("app.services.sfx_generation.get_sfx_dir")
     @pytest.mark.asyncio
-    async def test_multi_channel_isolation(
-        self, mock_get_sfx_dir, mock_run_cli_script, tmp_path
-    ):
+    async def test_multi_channel_isolation(self, mock_get_sfx_dir, mock_run_cli_script, tmp_path):
         """Test two channels generate SFX simultaneously without interference."""
         # Setup separate directories for each channel
         channel1_dir = tmp_path / "poke1" / "projects" / "vid_123" / "sfx"
@@ -467,9 +449,7 @@ class TestPartialResumeLogging:
     @patch("app.services.sfx_generation.run_cli_script")
     @patch("app.services.sfx_generation.get_sfx_dir")
     @pytest.mark.asyncio
-    async def test_resume_log_message(
-        self, mock_get_sfx_dir, mock_run_cli_script, tmp_path
-    ):
+    async def test_resume_log_message(self, mock_get_sfx_dir, mock_run_cli_script, tmp_path):
         """Test resume logs 'Skipped X existing clips, generated Y new clips'."""
         mock_get_sfx_dir.return_value = tmp_path
         mock_run_cli_script.return_value = MagicMock(returncode=0)
@@ -503,9 +483,9 @@ class TestPartialResumeLogging:
 
             # Verify skipped log messages (one per skipped clip)
             skipped_logs = [
-                call for call in mock_log.call_args_list
-                if call[1].get("clip_number") is not None
-                and call[0][0] == "sfx_clip_skipped"
+                call
+                for call in mock_log.call_args_list
+                if call[1].get("clip_number") is not None and call[0][0] == "sfx_clip_skipped"
             ]
             assert len(skipped_logs) == 10
 
@@ -516,9 +496,7 @@ class TestRateLimitRetry:
     @patch("app.services.sfx_generation.run_cli_script")
     @patch("app.services.sfx_generation.get_sfx_dir")
     @pytest.mark.asyncio
-    async def test_rate_limit_429_retry(
-        self, mock_get_sfx_dir, mock_run_cli_script, tmp_path
-    ):
+    async def test_rate_limit_429_retry(self, mock_get_sfx_dir, mock_run_cli_script, tmp_path):
         """Test HTTP 429 triggers exponential backoff retry (2s, 4s, 8s)."""
         mock_get_sfx_dir.return_value = tmp_path
 

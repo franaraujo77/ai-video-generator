@@ -68,7 +68,7 @@ def _validate_identifier(value: str, name: str) -> None:
         Prevents path traversal attacks by enforcing alphanumeric, underscore,
         and hyphen characters only. Matches Story 3.2 security patterns.
     """
-    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise ValueError(f"{name} contains invalid characters: {value}")
     if len(value) == 0 or len(value) > 100:
         raise ValueError(f"{name} length must be 1-100 characters")
@@ -148,11 +148,7 @@ class CompositeCreationService:
         self.project_id = project_id
         self.log = get_logger(__name__)
 
-    def create_composite_manifest(
-        self,
-        topic: str,
-        story_direction: str
-    ) -> CompositeManifest:
+    def create_composite_manifest(self, topic: str, story_direction: str) -> CompositeManifest:
         """Create composite manifest by mapping 18 scenes to character+environment assets.
 
         Scene Derivation Strategy:
@@ -174,7 +170,7 @@ class CompositeCreationService:
         Example:
             >>> manifest = service.create_composite_manifest(
             ...     "Bulbasaur forest documentary",
-            ...     "Show evolution through seasons: spring growth, summer activity, autumn rest"
+            ...     "Show evolution through seasons: spring growth, summer activity, autumn rest",
             ... )
             >>> print(len(manifest.composites))
             18
@@ -202,7 +198,7 @@ class CompositeCreationService:
             character_count=len(character_files),
             environment_count=len(environment_files),
             character_dir=str(char_dir),
-            environment_dir=str(env_dir)
+            environment_dir=str(env_dir),
         )
 
         # Generate 18 composites using round-robin asset pairing
@@ -235,7 +231,7 @@ class CompositeCreationService:
                     is_split_screen=True,
                     character_b_path=character_b_path,
                     environment_b_path=environment_b_path,
-                    character_scale=1.0
+                    character_scale=1.0,
                 )
             else:
                 # Standard composite
@@ -247,7 +243,7 @@ class CompositeCreationService:
                     environment_path=environment_path,
                     output_path=output_path,
                     is_split_screen=False,
-                    character_scale=1.0
+                    character_scale=1.0,
                 )
 
             composites.append(composite)
@@ -256,15 +252,13 @@ class CompositeCreationService:
             "composite_manifest_created",
             total_composites=len(composites),
             standard_count=sum(1 for c in composites if not c.is_split_screen),
-            split_screen_count=sum(1 for c in composites if c.is_split_screen)
+            split_screen_count=sum(1 for c in composites if c.is_split_screen),
         )
 
         return CompositeManifest(composites=composites)
 
     async def generate_composites(
-        self,
-        manifest: CompositeManifest,
-        resume: bool = False
+        self, manifest: CompositeManifest, resume: bool = False
     ) -> dict[str, Any]:
         """Generate all composites in manifest by invoking CLI scripts.
 
@@ -305,7 +299,7 @@ class CompositeCreationService:
         self.log.info(
             "composite_generation_start",
             total_composites=len(manifest.composites),
-            resume_mode=resume
+            resume_mode=resume,
         )
 
         for composite in manifest.composites:
@@ -314,7 +308,7 @@ class CompositeCreationService:
                 self.log.info(
                     "composite_skipped_exists",
                     clip_number=composite.clip_number,
-                    output_path=str(composite.output_path)
+                    output_path=str(composite.output_path),
                 )
                 skipped += 1
                 continue
@@ -327,19 +321,23 @@ class CompositeCreationService:
                         composite.environment_path,
                         composite.character_b_path,  # type: ignore
                         composite.environment_b_path,  # type: ignore
-                        composite.output_path
+                        composite.output_path,
                     )
                 else:
                     # Standard composite: Use CLI script
                     await run_cli_script(
                         "create_composite.py",
                         [
-                            "--character", str(composite.character_path),
-                            "--environment", str(composite.environment_path),
-                            "--output", str(composite.output_path),
-                            "--scale", str(composite.character_scale)
+                            "--character",
+                            str(composite.character_path),
+                            "--environment",
+                            str(composite.environment_path),
+                            "--output",
+                            str(composite.output_path),
+                            "--scale",
+                            str(composite.character_scale),
                         ],
-                        timeout=30  # 30 seconds per composite
+                        timeout=30,  # 30 seconds per composite
                     )
 
                 # Verify output exists and is correct dimensions
@@ -357,7 +355,7 @@ class CompositeCreationService:
                     "composite_generated",
                     clip_number=composite.clip_number,
                     output_path=str(composite.output_path),
-                    is_split_screen=composite.is_split_screen
+                    is_split_screen=composite.is_split_screen,
                 )
                 generated += 1
 
@@ -369,7 +367,7 @@ class CompositeCreationService:
                     exit_code=e.exit_code,
                     stderr=e.stderr[:500],  # Truncate stderr
                     character_path=str(composite.character_path),
-                    environment_path=str(composite.environment_path)
+                    environment_path=str(composite.environment_path),
                 )
                 failed += 1
                 # Re-raise to mark task as failed and allow retry
@@ -380,7 +378,7 @@ class CompositeCreationService:
                     "composite_generation_unexpected_error",
                     clip_number=composite.clip_number,
                     error=str(e),
-                    output_path=str(composite.output_path)
+                    output_path=str(composite.output_path),
                 )
                 failed += 1
                 # Re-raise to mark task as failed
@@ -391,14 +389,10 @@ class CompositeCreationService:
             generated=generated,
             skipped=skipped,
             failed=failed,
-            total=len(manifest.composites)
+            total=len(manifest.composites),
         )
 
-        return {
-            "generated": generated,
-            "skipped": skipped,
-            "failed": failed
-        }
+        return {"generated": generated, "skipped": skipped, "failed": failed}
 
     def check_composite_exists(self, composite_path: Path) -> bool:
         """Check if composite file exists on filesystem.
@@ -419,7 +413,7 @@ class CompositeCreationService:
         env_a_path: Path,
         char_b_path: Path,
         env_b_path: Path,
-        output_path: Path
+        output_path: Path,
     ) -> None:
         """Create split-screen composite inline using PIL (generic, not haunter-specific).
 
@@ -457,7 +451,7 @@ class CompositeCreationService:
             env_a=str(env_a_path.name) if env_a_path else None,
             char_b=str(char_b_path.name) if char_b_path else None,
             env_b=str(env_b_path.name) if env_b_path else None,
-            output=str(output_path.name) if output_path else None
+            output=str(output_path.name) if output_path else None,
         )
 
         # Load images
@@ -517,5 +511,5 @@ class CompositeCreationService:
         self.log.info(
             "split_screen_composite_complete",
             output_path=str(output_path),
-            dimensions=f"{target_width}x{target_height}"
+            dimensions=f"{target_width}x{target_height}",
         )

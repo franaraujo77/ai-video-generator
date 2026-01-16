@@ -84,11 +84,7 @@ async def process_composite_creation_task(task_id: str) -> None:
         # Load channel relationship to get business identifier
         await db.refresh(task, ["channel"])
         if not task.channel:
-            log.error(
-                "task_missing_channel",
-                task_id=task_id,
-                channel_id=task.channel_id
-            )
+            log.error("task_missing_channel", task_id=task_id, channel_id=task.channel_id)
             task.status = TaskStatus.ASSET_ERROR
             task.error_log = "Channel not found"
             await db.commit()
@@ -111,7 +107,7 @@ async def process_composite_creation_task(task_id: str) -> None:
             task_id=task_id,
             channel_id=channel_id,
             project_id=project_id,
-            status="processing"
+            status="processing",
         )
 
     # Step 2: Generate composites (OUTSIDE transaction - long-running operation)
@@ -124,7 +120,7 @@ async def process_composite_creation_task(task_id: str) -> None:
             task_id=task_id,
             channel_id=channel_id,
             project_id=project_id,
-            composite_count=len(manifest.composites)
+            composite_count=len(manifest.composites),
         )
 
         result = await service.generate_composites(manifest, resume=False)
@@ -134,7 +130,7 @@ async def process_composite_creation_task(task_id: str) -> None:
             task_id=task_id,
             generated=result["generated"],
             skipped=result["skipped"],
-            failed=result["failed"]
+            failed=result["failed"],
         )
 
         # Step 3: Update task (short transaction)
@@ -166,7 +162,7 @@ async def process_composite_creation_task(task_id: str) -> None:
             task_id=task_id,
             script=e.script,
             exit_code=e.exit_code,
-            stderr=e.stderr[:500]  # Truncate stderr
+            stderr=e.stderr[:500],  # Truncate stderr
         )
 
         if async_session_factory is not None:
@@ -189,11 +185,7 @@ async def process_composite_creation_task(task_id: str) -> None:
                     await db.commit()
 
     except FileNotFoundError as e:
-        log.error(
-            "composite_creation_file_not_found",
-            task_id=task_id,
-            error=str(e)
-        )
+        log.error("composite_creation_file_not_found", task_id=task_id, error=str(e))
 
         if async_session_factory is not None:
             async with async_session_factory() as db, db.begin():
@@ -205,10 +197,7 @@ async def process_composite_creation_task(task_id: str) -> None:
 
     except Exception as e:
         log.error(
-            "composite_creation_unexpected_error",
-            task_id=task_id,
-            error=str(e),
-            exc_info=True
+            "composite_creation_unexpected_error", task_id=task_id, error=str(e), exc_info=True
         )
 
         if async_session_factory is not None:

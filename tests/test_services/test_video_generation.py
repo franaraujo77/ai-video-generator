@@ -78,7 +78,7 @@ class TestVideoGenerationService:
             composite_path=composite_path,
             motion_prompt="Bulbasaur walks forward. Legs move steadily.",
             output_path=output_path,
-            catbox_url=None
+            catbox_url=None,
         )
 
     def test_init_valid_identifiers(self):
@@ -103,9 +103,13 @@ class TestVideoGenerationService:
         story_direction = "Show seasonal evolution through 18 clips"
 
         # Mock filesystem helpers to use tmp_path
-        with patch('app.services.video_generation.get_composite_dir', return_value=tmp_path / "composites"), \
-             patch('app.services.video_generation.get_video_dir', return_value=tmp_path / "videos"):
-
+        with (
+            patch(
+                "app.services.video_generation.get_composite_dir",
+                return_value=tmp_path / "composites",
+            ),
+            patch("app.services.video_generation.get_video_dir", return_value=tmp_path / "videos"),
+        ):
             manifest = service.create_video_manifest(topic, story_direction)
 
             # Verify manifest structure
@@ -123,7 +127,9 @@ class TestVideoGenerationService:
             for clip in manifest.clips:
                 assert clip.motion_prompt  # Non-empty
                 # Motion prompts should NOT start with camera movement
-                assert not clip.motion_prompt.lower().startswith(("slow", "fast", "zoom", "pan", "dolly"))
+                assert not clip.motion_prompt.lower().startswith(
+                    ("slow", "fast", "zoom", "pan", "dolly")
+                )
 
     def test_check_video_exists(self, service, tmp_path):
         """Test video existence check with size validation."""
@@ -163,7 +169,7 @@ class TestVideoGenerationService:
         composite_path.write_bytes(b"fake-png")
         expected_url = "https://files.catbox.moe/abc123.png"
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient:
+        with patch("app.services.video_generation.CatboxClient") as MockClient:
             mock_client = MockClient.return_value
             mock_client.upload_image = AsyncMock(return_value=expected_url)
             mock_client.close = AsyncMock()
@@ -178,7 +184,7 @@ class TestVideoGenerationService:
         """Test catbox upload fails for missing file."""
         nonexistent_path = tmp_path / "missing.png"
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient:
+        with patch("app.services.video_generation.CatboxClient") as MockClient:
             mock_client = MockClient.return_value
             mock_client.upload_image = AsyncMock(side_effect=FileNotFoundError("File not found"))
             mock_client.close = AsyncMock()
@@ -191,9 +197,12 @@ class TestVideoGenerationService:
         """Test generating single video clip."""
         manifest = VideoManifest(clips=[mock_video_clip])
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient, \
-             patch('app.services.video_generation.run_cli_script', new_callable=AsyncMock) as mock_cli:
-
+        with (
+            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch(
+                "app.services.video_generation.run_cli_script", new_callable=AsyncMock
+            ) as mock_cli,
+        ):
             # Mock catbox upload
             mock_client = MockClient.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc123.png")
@@ -227,9 +236,12 @@ class TestVideoGenerationService:
 
         manifest = VideoManifest(clips=[mock_video_clip])
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient, \
-             patch('app.services.video_generation.run_cli_script', new_callable=AsyncMock) as mock_cli:
-
+        with (
+            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch(
+                "app.services.video_generation.run_cli_script", new_callable=AsyncMock
+            ) as mock_cli,
+        ):
             mock_client = MockClient.return_value
             mock_client.close = AsyncMock()
 
@@ -254,13 +266,15 @@ class TestVideoGenerationService:
             composite_path = tmp_path / f"clip_{i:02d}.png"
             composite_path.write_bytes(b"fake-png")
             output_path = tmp_path / "videos" / f"clip_{i:02d}.mp4"
-            clips.append(VideoClip(
-                clip_number=i,
-                composite_path=composite_path,
-                motion_prompt=f"Motion for clip {i}",
-                output_path=output_path,
-                catbox_url=None
-            ))
+            clips.append(
+                VideoClip(
+                    clip_number=i,
+                    composite_path=composite_path,
+                    motion_prompt=f"Motion for clip {i}",
+                    output_path=output_path,
+                    catbox_url=None,
+                )
+            )
 
         manifest = VideoManifest(clips=clips)
 
@@ -276,9 +290,12 @@ class TestVideoGenerationService:
             concurrent_calls.pop()
             return Mock(returncode=0, stdout="Success")
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient, \
-             patch('app.services.video_generation.run_cli_script', new_callable=AsyncMock) as mock_cli:
-
+        with (
+            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch(
+                "app.services.video_generation.run_cli_script", new_callable=AsyncMock
+            ) as mock_cli,
+        ):
             mock_client = MockClient.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc.png")
             mock_client.close = AsyncMock()
@@ -296,18 +313,19 @@ class TestVideoGenerationService:
         """Test handling of CLI script errors - continues with other clips."""
         manifest = VideoManifest(clips=[mock_video_clip])
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient, \
-             patch('app.services.video_generation.run_cli_script', new_callable=AsyncMock) as mock_cli:
-
+        with (
+            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch(
+                "app.services.video_generation.run_cli_script", new_callable=AsyncMock
+            ) as mock_cli,
+        ):
             mock_client = MockClient.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc.png")
             mock_client.close = AsyncMock()
 
             # Mock CLI script failure
             mock_cli.side_effect = CLIScriptError(
-                "generate_video.py",
-                1,
-                "Kling API error: Invalid API key"
+                "generate_video.py", 1, "Kling API error: Invalid API key"
             )
 
             # Generate videos - should NOT raise, returns failed count instead
@@ -323,9 +341,12 @@ class TestVideoGenerationService:
         """Test handling of timeout errors - continues with other clips."""
         manifest = VideoManifest(clips=[mock_video_clip])
 
-        with patch('app.services.video_generation.CatboxClient') as MockClient, \
-             patch('app.services.video_generation.run_cli_script', new_callable=AsyncMock) as mock_cli:
-
+        with (
+            patch("app.services.video_generation.CatboxClient") as MockClient,
+            patch(
+                "app.services.video_generation.run_cli_script", new_callable=AsyncMock
+            ) as mock_cli,
+        ):
             mock_client = MockClient.return_value
             mock_client.upload_image = AsyncMock(return_value="https://files.catbox.moe/abc.png")
             mock_client.close = AsyncMock()

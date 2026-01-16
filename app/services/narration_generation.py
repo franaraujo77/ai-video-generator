@@ -77,7 +77,7 @@ def _validate_identifier(value: str, name: str) -> None:
     # Check length first (before pattern match)
     if len(value) == 0 or len(value) > 100:
         raise ValueError(f"{name} length must be 1-100 characters")
-    if not re.match(r'^[a-zA-Z0-9_-]+$', value):
+    if not re.match(r"^[a-zA-Z0-9_-]+$", value):
         raise ValueError(f"{name} contains invalid characters: {value}")
 
 
@@ -97,7 +97,7 @@ def _validate_voice_id(voice_id: str) -> None:
     if not voice_id or len(voice_id) < 10:
         raise ValueError("Invalid voice_id: must be valid ElevenLabs identifier")
     # ElevenLabs voice IDs are alphanumeric (no special characters)
-    if not re.match(r'^[a-zA-Z0-9]+$', voice_id):
+    if not re.match(r"^[a-zA-Z0-9]+$", voice_id):
         raise ValueError(f"Invalid voice_id format: {voice_id}")
 
 
@@ -229,7 +229,7 @@ class NarrationGenerationService:
             ...         # ... 16 more scripts
             ...     ],
             ...     voice_id="EXAVITQu4vr4xnSDxMaL",
-            ...     video_durations=[7.2, 6.8, 8.1, ...]
+            ...     video_durations=[7.2, 6.8, 8.1, ...],
             ... )
             >>> print(len(manifest.clips))
             18
@@ -238,9 +238,7 @@ class NarrationGenerationService:
         """
         # Validate input parameters
         if len(narration_scripts) != 18:
-            raise ValueError(
-                f"Expected 18 narration scripts, got {len(narration_scripts)}"
-            )
+            raise ValueError(f"Expected 18 narration scripts, got {len(narration_scripts)}")
         _validate_voice_id(voice_id)
 
         # Get audio directory (auto-creates with secure validation)
@@ -471,9 +469,7 @@ class NarrationGenerationService:
         # If any clip fails with non-retriable error, the entire batch fails
         # This ensures we don't mark task as success when clips are missing
         try:
-            await asyncio.gather(
-                *[generate_single_clip(clip) for clip in manifest.clips]
-            )
+            await asyncio.gather(*[generate_single_clip(clip) for clip in manifest.clips])
         except CLIScriptError:
             # If any clip fails after retries, mark entire generation as failed
             # This will propagate to worker which will mark task as AUDIO_ERROR

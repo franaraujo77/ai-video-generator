@@ -64,10 +64,7 @@ class TestProcessAssetGenerationTask:
         """Test successful asset generation flow."""
         # Create test channel
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -80,7 +77,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest documentary",
             story_direction="Show evolution through seasons",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -89,21 +86,20 @@ class TestProcessAssetGenerationTask:
         task_id = task.id
 
         # Mock asset generation service
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
-                    global_atmosphere="Natural lighting",
-                    assets=[]
+                    global_atmosphere="Natural lighting", assets=[]
                 )
+
                 # Make generate_assets async
                 async def mock_generate_assets(*args, **kwargs):
-                    return {
-                        "generated": 22,
-                        "skipped": 0,
-                        "failed": 0,
-                        "total_cost_usd": 1.496
-                    }
+                    return {"generated": 22, "skipped": 0, "failed": 0, "total_cost_usd": 1.496}
+
                 mock_service.generate_assets = mock_generate_assets
 
                 # Process task
@@ -119,7 +115,10 @@ class TestProcessAssetGenerationTask:
         fake_task_id = uuid4()
 
         # Should not raise, just log error
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
             await process_asset_generation_task(fake_task_id)
         # No assertion - just verify it doesn't crash
 
@@ -127,10 +126,7 @@ class TestProcessAssetGenerationTask:
         """Test CLI script error handling."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -142,7 +138,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -151,20 +147,19 @@ class TestProcessAssetGenerationTask:
         task_id = task.id
 
         # Mock service to raise CLIScriptError
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
-                    global_atmosphere="Natural lighting",
-                    assets=[]
+                    global_atmosphere="Natural lighting", assets=[]
                 )
 
                 async def mock_generate_assets(*args, **kwargs):
-                    raise CLIScriptError(
-                        "generate_asset.py",
-                        1,
-                        "Gemini API error: HTTP 500"
-                    )
+                    raise CLIScriptError("generate_asset.py", 1, "Gemini API error: HTTP 500")
+
                 mock_service.generate_assets = mock_generate_assets
 
                 await process_asset_generation_task(task_id)
@@ -179,10 +174,7 @@ class TestProcessAssetGenerationTask:
     async def test_process_task_timeout_error(self, async_session, encryption_env):
         """Test timeout error handling."""
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -194,7 +186,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -203,16 +195,19 @@ class TestProcessAssetGenerationTask:
         task_id = task.id
 
         # Mock service to raise TimeoutError
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
-                    global_atmosphere="Natural lighting",
-                    assets=[]
+                    global_atmosphere="Natural lighting", assets=[]
                 )
 
                 async def mock_generate_assets(*args, **kwargs):
                     raise asyncio.TimeoutError()
+
                 mock_service.generate_assets = mock_generate_assets
 
                 await process_asset_generation_task(task_id)
@@ -226,10 +221,7 @@ class TestProcessAssetGenerationTask:
     async def test_process_task_unexpected_error(self, async_session, encryption_env):
         """Test unexpected error handling."""
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -241,7 +233,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -250,8 +242,11 @@ class TestProcessAssetGenerationTask:
         task_id = task.id
 
         # Mock service to raise unexpected exception
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.side_effect = ValueError("Unexpected error")
 
@@ -267,10 +262,7 @@ class TestProcessAssetGenerationTask:
         """Test short transaction pattern (Architecture Decision 3)."""
         # Create channel and task
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -282,7 +274,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -327,24 +319,18 @@ class TestProcessAssetGenerationTask:
 
         mock_factory = MagicMock(side_effect=create_tracking_factory)
 
-        with patch('app.workers.asset_worker.async_session_factory', mock_factory):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch("app.workers.asset_worker.async_session_factory", mock_factory):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
-                    global_atmosphere="Natural lighting",
-                    assets=[]
+                    global_atmosphere="Natural lighting", assets=[]
                 )
 
                 # Simulate slow asset generation
                 async def slow_generation(*args, **kwargs):
                     await asyncio.sleep(0.1)  # Simulate processing time
                     session_lifecycle.append("generation_complete")
-                    return {
-                        "generated": 22,
-                        "skipped": 0,
-                        "failed": 0,
-                        "total_cost_usd": 1.496
-                    }
+                    return {"generated": 22, "skipped": 0, "failed": 0, "total_cost_usd": 1.496}
 
                 mock_service.generate_assets = slow_generation
 
@@ -369,10 +355,7 @@ class TestProcessAssetGenerationTask:
     async def test_notion_update_non_blocking(self, async_session, encryption_env):
         """Test Notion status update is non-blocking."""
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -384,7 +367,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -393,25 +376,24 @@ class TestProcessAssetGenerationTask:
         task_id = task.id
 
         # Mock service
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
-                    global_atmosphere="Natural lighting",
-                    assets=[]
+                    global_atmosphere="Natural lighting", assets=[]
                 )
 
                 async def mock_generate_assets(*args, **kwargs):
-                    return {
-                        "generated": 22,
-                        "skipped": 0,
-                        "failed": 0,
-                        "total_cost_usd": 1.496
-                    }
+                    return {"generated": 22, "skipped": 0, "failed": 0, "total_cost_usd": 1.496}
+
                 mock_service.generate_assets = mock_generate_assets
 
                 # Mock Notion update with delay
-                with patch('app.workers.asset_worker._update_notion_status_async') as mock_notion:
+                with patch("app.workers.asset_worker._update_notion_status_async") as mock_notion:
+
                     async def slow_notion_update(*args, **kwargs):
                         await asyncio.sleep(5)  # 5 second delay
 
@@ -419,6 +401,7 @@ class TestProcessAssetGenerationTask:
 
                     # Process should complete quickly (not wait for Notion)
                     import time
+
                     start = time.time()
                     await process_asset_generation_task(task_id)
                     duration = time.time() - start
@@ -429,10 +412,7 @@ class TestProcessAssetGenerationTask:
     async def test_correlation_id_logging(self, async_session, encryption_env, caplog):
         """Test all log entries include task_id as correlation ID."""
         channel = Channel(
-            channel_id="poke1",
-            channel_name="Test Channel",
-            voice_id="test_voice",
-            max_concurrent=2
+            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
         )
         async_session.add(channel)
         await async_session.commit()
@@ -444,7 +424,7 @@ class TestProcessAssetGenerationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED
+            status=TaskStatus.QUEUED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -452,21 +432,19 @@ class TestProcessAssetGenerationTask:
 
         task_id_str = str(task.id)
 
-        with patch('app.workers.asset_worker.async_session_factory', create_mock_session_factory(async_session)):
-            with patch('app.workers.asset_worker.AssetGenerationService') as MockService:
+        with patch(
+            "app.workers.asset_worker.async_session_factory",
+            create_mock_session_factory(async_session),
+        ):
+            with patch("app.workers.asset_worker.AssetGenerationService") as MockService:
                 mock_service = MockService.return_value
                 mock_service.create_asset_manifest.return_value = MagicMock(
-                    global_atmosphere="Natural lighting",
-                    assets=[]
+                    global_atmosphere="Natural lighting", assets=[]
                 )
 
                 async def mock_generate_assets(*args, **kwargs):
-                    return {
-                        "generated": 22,
-                        "skipped": 0,
-                        "failed": 0,
-                        "total_cost_usd": 1.496
-                    }
+                    return {"generated": 22, "skipped": 0, "failed": 0, "total_cost_usd": 1.496}
+
                 mock_service.generate_assets = mock_generate_assets
 
                 await process_asset_generation_task(task.id)
