@@ -18,9 +18,7 @@ async def check_all_tasks() -> None:
     try:
         async with async_session_factory() as session:
             # Query for all tasks
-            result = await session.execute(
-                select(Task).order_by(Task.created_at.desc()).limit(10)
-            )
+            result = await session.execute(select(Task).order_by(Task.created_at.desc()).limit(10))
             tasks = result.scalars().all()
 
             if tasks:
@@ -36,7 +34,9 @@ async def check_all_tasks() -> None:
                     print()
             else:
                 print("❌ No tasks found in database")
-                print("   The sync loop may not have run yet or there are no Queued tasks in Notion")
+                print(
+                    "   The sync loop may not have run yet or there are no Queued tasks in Notion"
+                )
 
     except Exception as e:
         print(f"ERROR: Failed to query database: {e}")

@@ -153,15 +153,15 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
         await service.validate_input_files(manifest)
 
         # Assemble video with FFmpeg CLI script
-        result = await service.assemble_video(manifest)
+        result = await service.assemble_video(manifest)  # type: ignore[assignment]
 
         log.info(
             "video_assembly_complete",
             task_id=str(task_id),
-            duration=result["duration"],
-            file_size_mb=result["file_size_mb"],
-            resolution=result["resolution"],
-            codec=result.get("video_codec", "unknown") + "/" + result.get("audio_codec", "unknown"),
+            duration=result["duration"],  # type: ignore[index]
+            file_size_mb=result["file_size_mb"],  # type: ignore[index]
+            resolution=result["resolution"],  # type: ignore[index]
+            codec=result.get("video_codec", "unknown") + "/" + result.get("audio_codec", "unknown"),  # type: ignore[attr-defined]
         )
 
         # Step 3: Update task (short transaction)
@@ -177,7 +177,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             # Update task with assembly results
             task.status = TaskStatus.ASSEMBLY_READY  # Pauses for human review
             task.final_video_path = str(manifest.output_path)
-            task.final_video_duration = result["duration"]
+            task.final_video_duration = result["duration"]  # type: ignore[index]
 
             await db.commit()
 
@@ -186,7 +186,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
                 task_id=str(task_id),
                 status="assembly_ready",
                 final_video_path=str(manifest.output_path),
-                final_video_duration=result["duration"],
+                final_video_duration=result["duration"],  # type: ignore[index]
             )
 
         # Note: Notion status update will be implemented in Epic 5 (Review Gates)

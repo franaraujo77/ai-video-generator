@@ -40,12 +40,16 @@ async def recreate_columns():
             # Step 3: Recreate columns with enum types
             print("3️⃣  Creating new columns with enum types...")
             await session.execute(
-                text("ALTER TABLE tasks ADD COLUMN status taskstatus NOT NULL DEFAULT 'QUEUED'::taskstatus;")
+                text(
+                    "ALTER TABLE tasks ADD COLUMN status taskstatus NOT NULL DEFAULT 'QUEUED'::taskstatus;"
+                )
             )
             print("   ✅ status column created with taskstatus type")
 
             await session.execute(
-                text("ALTER TABLE tasks ADD COLUMN priority prioritylevel NOT NULL DEFAULT 'NORMAL'::prioritylevel;")
+                text(
+                    "ALTER TABLE tasks ADD COLUMN priority prioritylevel NOT NULL DEFAULT 'NORMAL'::prioritylevel;"
+                )
             )
             print("   ✅ priority column created with prioritylevel type\n")
 
@@ -88,6 +92,7 @@ async def recreate_columns():
     except Exception as e:
         print(f"❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 

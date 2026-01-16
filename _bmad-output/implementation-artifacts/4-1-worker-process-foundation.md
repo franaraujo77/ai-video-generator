@@ -1185,4 +1185,3 @@ _To be filled during implementation_
 **Status:** ready-for-dev
 **Created:** 2026-01-16 via BMad Method workflow
 **Ready for Implementation:** YES - All context gathered, comprehensive story document complete
-

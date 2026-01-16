@@ -141,6 +141,7 @@ async def debug_sync():
                 except Exception as e:
                     print(f"      ❌ Error: {e}")
                     import traceback
+
                     traceback.print_exc()
 
             print("\n✅ Debug sync completed")
@@ -148,6 +149,7 @@ async def debug_sync():
         except Exception as e:
             print(f"❌ Error querying database: {e}")
             import traceback
+
             traceback.print_exc()
 
 

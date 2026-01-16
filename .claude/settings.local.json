@@ -49,7 +49,8 @@
       "Bash(python scripts/create_split_screen.py:*)",
       "WebSearch",
       "Bash(python:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

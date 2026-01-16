@@ -40,9 +40,7 @@ async def fix_column_types():
             # Alter status column
             print("2️⃣  Altering status column to use taskstatus enum...")
             print("   - Dropping default...")
-            await session.execute(
-                text("ALTER TABLE tasks ALTER COLUMN status DROP DEFAULT;")
-            )
+            await session.execute(text("ALTER TABLE tasks ALTER COLUMN status DROP DEFAULT;"))
             print("   - Changing column type...")
             await session.execute(
                 text(
@@ -58,9 +56,7 @@ async def fix_column_types():
             # Alter priority column
             print("3️⃣  Altering priority column to use prioritylevel enum...")
             print("   - Dropping default...")
-            await session.execute(
-                text("ALTER TABLE tasks ALTER COLUMN priority DROP DEFAULT;")
-            )
+            await session.execute(text("ALTER TABLE tasks ALTER COLUMN priority DROP DEFAULT;"))
             print("   - Changing column type...")
             await session.execute(
                 text(
@@ -98,6 +94,7 @@ async def fix_column_types():
     except Exception as e:
         print(f"❌ ERROR: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
 
