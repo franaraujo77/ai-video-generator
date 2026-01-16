@@ -65,10 +65,10 @@ development_status:
   3-1-cli-script-wrapper-async-execution: done
   3-2-filesystem-organization-path-helpers: done
   3-3-asset-generation-step-gemini: done
-  3-4-composite-creation-step: backlog
-  3-5-video-clip-generation-step-kling: backlog
-  3-6-narration-generation-step-elevenlabs: backlog
-  3-7-sound-effects-generation-step: backlog
+  3-4-composite-creation-step: done
+  3-5-video-clip-generation-step-kling: done
+  3-6-narration-generation-step-elevenlabs: done
+  3-7-sound-effects-generation-step: ready-for-dev
   3-8-video-assembly-step-ffmpeg: backlog
   3-9-end-to-end-pipeline-orchestration: backlog
   epic-3-retrospective: optional

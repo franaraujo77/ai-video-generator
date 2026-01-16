@@ -42,7 +42,8 @@ class CLIScriptError(Exception):
 async def run_cli_script(
     script: str,
     args: list[str],
-    timeout: int = 600
+    timeout: int = 600,
+    env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
     """Run CLI script without blocking async event loop.
 
@@ -54,6 +55,9 @@ async def run_cli_script(
         script: Script name (e.g., "generate_asset.py")
         args: List of command-line arguments
         timeout: Timeout in seconds (default: 600 = 10 min for Kling videos)
+        env: Optional environment variables to pass to script (isolated per-call).
+             If None, inherits parent process environment. If provided, extends
+             parent environment with given variables (prevents global pollution).
 
     Returns:
         CompletedProcess with stdout, stderr, returncode
@@ -72,6 +76,14 @@ async def run_cli_script(
         ... )
         >>> print(result.stdout)
         "✅ Asset generated: /path/to/asset.png"
+
+        >>> # Example with isolated environment variable (multi-channel support)
+        >>> result = await run_cli_script(
+        ...     "generate_audio.py",
+        ...     ["--text", "narration", "--output", "audio.mp3"],
+        ...     timeout=60,
+        ...     env={"ELEVENLABS_VOICE_ID": "voice123"}
+        ... )
     """
     # Security: Validate script is within scripts directory (prevent path traversal)
     scripts_dir = Path("scripts").resolve()
@@ -107,6 +119,14 @@ async def run_cli_script(
 
     log.info("cli_script_start", script=script, args=sanitized_args, timeout=timeout)
 
+    # Prepare environment variables for subprocess
+    # If env provided, extend parent environment (don't replace entirely)
+    # This ensures subprocess inherits system PATH, PYTHON_PATH, etc.
+    import os
+    process_env = os.environ.copy()
+    if env:
+        process_env.update(env)
+
     try:
         # Use asyncio.to_thread to avoid blocking event loop
         result = await asyncio.to_thread(
@@ -115,7 +135,8 @@ async def run_cli_script(
             capture_output=True,  # Capture stdout/stderr
             text=True,            # Decode as UTF-8 strings
             errors='replace',     # Replace invalid UTF-8 with replacement character
-            timeout=timeout       # Enforce timeout
+            timeout=timeout,      # Enforce timeout
+            env=process_env       # Pass isolated environment (prevents global pollution)
         )
 
         if result.returncode != 0:
