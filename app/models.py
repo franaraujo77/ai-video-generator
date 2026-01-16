@@ -412,6 +412,15 @@ class Task(Base):
         nullable=False,
     )
 
+    # Narration scripts (Story 3.6)
+    # List of 18 narration text strings, one per video clip
+    # Stored as JSONB for structured querying in PostgreSQL
+    # SQLite (for tests) will use JSON TEXT type
+    narration_scripts: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+
     # Workflow state (26-status enum)
     # Uses PostgreSQL native enum type with lowercase values matching Python enum .value
     # values_callable tells SQLAlchemy to use enum.value (lowercase) not enum.name (UPPERCASE)
