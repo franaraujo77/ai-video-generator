@@ -7,13 +7,15 @@ This module tests the queue infrastructure including:
     - Error handling for missing configuration
     - Priority-aware task selection (Story 4.3)
     - FIFO ordering within priority levels (Story 4.3)
+    - Round-robin channel scheduling (Story 4.4)
+    - Query pattern extraction for logging (Story 4.4)
 """
 
 import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import asyncpg
-from app.queue import initialize_pgqueuer, PRIORITY_QUERY
+from app.queue import initialize_pgqueuer, PRIORITY_QUERY, ROUND_ROBIN_QUERY, extract_query_ordering
 
 
 @pytest.mark.asyncio
@@ -148,8 +150,8 @@ async def test_initialize_pgqueuer_driver_and_pgqueuer_creation():
         # Verify driver created with pool
         mock_driver.assert_called_once_with(mock_pool)
 
-        # Verify PgQueuer created with driver and priority query (Story 4.3)
-        mock_pgqueuer.assert_called_once_with(mock_driver_instance, query=PRIORITY_QUERY)
+        # Verify PgQueuer created with driver and round-robin query (Story 4.4)
+        mock_pgqueuer.assert_called_once_with(mock_driver_instance, query=ROUND_ROBIN_QUERY)
 
         # Verify return values
         assert pgq == mock_pgqueuer_instance
@@ -183,8 +185,8 @@ async def test_initialize_pgqueuer_return_values():
 
 
 @pytest.mark.asyncio
-async def test_priority_query_passed_to_pgqueuer():
-    """Test PgQueuer is initialized with priority-aware query (Story 4.3)."""
+async def test_round_robin_query_passed_to_pgqueuer():
+    """Test PgQueuer is initialized with round-robin query (Story 4.4)."""
     mock_pool = MagicMock(spec=asyncpg.Pool)
     mock_qm = MagicMock()
     mock_qm.queries.install = AsyncMock()
@@ -201,8 +203,8 @@ async def test_priority_query_passed_to_pgqueuer():
 
         await initialize_pgqueuer()
 
-        # Verify PgQueuer created with driver AND custom query
-        mock_pgqueuer.assert_called_once_with(mock_driver_instance, query=PRIORITY_QUERY)
+        # Verify PgQueuer created with driver AND custom round-robin query
+        mock_pgqueuer.assert_called_once_with(mock_driver_instance, query=ROUND_ROBIN_QUERY)
 
 
 def test_priority_query_structure():
@@ -247,3 +249,130 @@ def test_priority_query_only_pending_tasks():
     """Test PRIORITY_QUERY only selects pending tasks."""
     # Verify query filters by pending status
     assert "status = 'pending'" in PRIORITY_QUERY
+
+
+# Story 4.4: Round-Robin Channel Scheduling Tests
+
+
+def test_round_robin_query_structure():
+    """Test ROUND_ROBIN_QUERY has correct SQL structure for round-robin scheduling."""
+    # Verify query contains essential priority ordering logic (preserved from Story 4.3)
+    assert "CASE priority" in ROUND_ROBIN_QUERY
+    assert "WHEN 'high' THEN 1" in ROUND_ROBIN_QUERY
+    assert "WHEN 'normal' THEN 2" in ROUND_ROBIN_QUERY
+    assert "WHEN 'low' THEN 3" in ROUND_ROBIN_QUERY
+
+    # Verify query contains channel_id for round-robin (NEW in Story 4.4)
+    assert "channel_id ASC" in ROUND_ROBIN_QUERY
+
+    # Verify query contains FIFO ordering (preserved from Story 4.3)
+    assert "created_at ASC" in ROUND_ROBIN_QUERY
+
+    # Verify atomic claiming and limit (preserved from Story 4.2)
+    assert "FOR UPDATE SKIP LOCKED" in ROUND_ROBIN_QUERY
+    assert "LIMIT 1" in ROUND_ROBIN_QUERY
+
+    # Verify pending filter (preserved from Story 4.2)
+    assert "status = 'pending'" in ROUND_ROBIN_QUERY
+
+
+def test_round_robin_query_ordering():
+    """Test ROUND_ROBIN_QUERY enforces priority → channel → FIFO ordering."""
+    # Parse query lines
+    query_lines = [line.strip() for line in ROUND_ROBIN_QUERY.split('\n') if line.strip()]
+
+    # Find ORDER BY clause
+    order_by_index = next(i for i, line in enumerate(query_lines) if "ORDER BY" in line)
+
+    # Find ordering column positions
+    case_index = next(i for i, line in enumerate(query_lines) if "CASE priority" in line)
+    channel_index = next(i for i, line in enumerate(query_lines) if "channel_id ASC" in line)
+    created_at_index = next(i for i, line in enumerate(query_lines) if "created_at ASC" in line)
+
+    # Verify ordering: priority THEN channel THEN created_at
+    assert order_by_index < case_index < channel_index < created_at_index, \
+        "Query must order by priority THEN channel_id THEN created_at"
+
+
+def test_round_robin_query_atomic_claiming():
+    """Test ROUND_ROBIN_QUERY preserves atomic claiming with FOR UPDATE SKIP LOCKED."""
+    # Verify FOR UPDATE SKIP LOCKED is present for atomic claiming
+    assert "FOR UPDATE SKIP LOCKED" in ROUND_ROBIN_QUERY
+
+    # Verify LIMIT 1 ensures exactly one task claimed
+    assert "LIMIT 1" in ROUND_ROBIN_QUERY
+
+
+def test_round_robin_query_only_pending_tasks():
+    """Test ROUND_ROBIN_QUERY only selects pending tasks."""
+    # Verify query filters by pending status
+    assert "status = 'pending'" in ROUND_ROBIN_QUERY
+
+
+def test_extract_query_ordering_priority_channel_fifo():
+    """Test extract_query_ordering detects priority → channel → FIFO pattern."""
+    pattern = extract_query_ordering(ROUND_ROBIN_QUERY)
+    assert pattern == "priority → channel → FIFO"
+
+
+def test_extract_query_ordering_priority_fifo():
+    """Test extract_query_ordering detects priority → FIFO pattern (Story 4.3)."""
+    pattern = extract_query_ordering(PRIORITY_QUERY)
+    assert pattern == "priority → FIFO"
+
+
+def test_extract_query_ordering_unknown():
+    """Test extract_query_ordering returns 'unknown' for unexpected patterns."""
+    # Query with no recognizable ordering
+    query = "SELECT * FROM tasks WHERE status = 'pending'"
+    pattern = extract_query_ordering(query)
+    assert pattern == "unknown"
+
+
+def test_extract_query_ordering_fifo_only():
+    """Test extract_query_ordering detects FIFO-only pattern."""
+    query = """
+        SELECT * FROM tasks
+        WHERE status = 'pending'
+        ORDER BY created_at ASC
+    """
+    pattern = extract_query_ordering(query)
+    assert pattern == "FIFO"
+
+
+def test_extract_query_ordering_channel_fifo():
+    """Test extract_query_ordering detects channel → FIFO pattern."""
+    query = """
+        SELECT * FROM tasks
+        WHERE status = 'pending'
+        ORDER BY channel_id ASC, created_at ASC
+    """
+    pattern = extract_query_ordering(query)
+    assert pattern == "channel → FIFO"
+
+
+def test_round_robin_extends_priority_query():
+    """Test ROUND_ROBIN_QUERY is an extension of PRIORITY_QUERY, not a replacement."""
+    # ROUND_ROBIN_QUERY should contain all priority logic from PRIORITY_QUERY
+    assert "CASE priority" in ROUND_ROBIN_QUERY
+    assert "WHEN 'high' THEN 1" in ROUND_ROBIN_QUERY
+    assert "WHEN 'normal' THEN 2" in ROUND_ROBIN_QUERY
+    assert "WHEN 'low' THEN 3" in ROUND_ROBIN_QUERY
+
+    # ROUND_ROBIN_QUERY should ADD channel_id (not replace anything)
+    assert "channel_id ASC" in ROUND_ROBIN_QUERY
+    assert "created_at ASC" in ROUND_ROBIN_QUERY
+
+    # Both queries should preserve atomic claiming
+    assert "FOR UPDATE SKIP LOCKED" in PRIORITY_QUERY
+    assert "FOR UPDATE SKIP LOCKED" in ROUND_ROBIN_QUERY
+
+
+def test_round_robin_query_comments():
+    """Test ROUND_ROBIN_QUERY has inline comments explaining new round-robin logic."""
+    # Verify inline SQL comments document the round-robin change
+    assert "--" in ROUND_ROBIN_QUERY  # SQL comment syntax
+    # Verify comment mentions "round-robin" or "channel"
+    lines_with_channel = [line for line in ROUND_ROBIN_QUERY.split('\n') if 'channel_id' in line]
+    assert any('--' in line for line in lines_with_channel), \
+        "channel_id line should have inline comment explaining round-robin"

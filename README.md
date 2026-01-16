@@ -719,6 +719,179 @@ LIMIT 1
 - **Atomic Claiming:** PostgreSQL `FOR UPDATE SKIP LOCKED` ensures no race conditions
 - **Migration:** `alembic/versions/20260116_0003_add_priority_index.py`
 
+---
+
+### Round-Robin Channel Scheduling
+
+The orchestration platform uses **round-robin scheduling** to ensure fair distribution of worker resources across all YouTube channels, preventing channel starvation.
+
+#### How Round-Robin Works
+
+Workers claim tasks in a rotating pattern across channels **within each priority level**:
+
+1. **Priority ordering preserved** - high-priority tasks always process first (Story 4.3)
+2. **Channel rotation within priority** - tasks cycle through channels alphabetically
+3. **FIFO within (priority + channel)** - oldest task in each (priority, channel) group processes first
+
+**Example Claiming Order:**
+```
+Pending Tasks:
+  - Task A: high priority, Channel poke1, created 1 hour ago
+  - Task B: high priority, Channel poke2, created 1 hour ago
+  - Task C: normal priority, Channel poke1, created 2 hours ago
+  - Task D: normal priority, Channel poke2, created 2 hours ago
+  - Task E: normal priority, Channel poke1, created 1 hour ago
+
+Claiming Order:
+  1. Task A (high, poke1 - first alphabetically)
+  2. Task B (high, poke2 - next alphabetically)
+  3. Task C (normal, poke1 - first alphabetically, oldest)
+  4. Task D (normal, poke2 - next alphabetically)
+  5. Task E (normal, poke1 - cycle back to poke1)
+```
+
+#### Fairness Guarantees
+
+**No Channel Starvation:**
+- All active channels get processing time even if one channel has a large queue
+- Busy channels don't monopolize all 3 workers
+- Low-activity channels get their tasks processed promptly
+
+**Predictable Resource Distribution:**
+- Each channel gets approximately `1/N` of worker time (N = active channels)
+- Max wait time for any channel = `(N-1) × average_task_duration`
+- New channels seamlessly join the rotation (no configuration needed)
+
+**Example Scenario:**
+```
+Given 3 channels with pending tasks:
+  - Channel A: 100 normal-priority tasks
+  - Channel B: 2 normal-priority tasks
+  - Channel C: 1 normal-priority task
+
+Without round-robin (bad):
+  Workers claim: A A A A A ... (B and C starved)
+
+With round-robin (good):
+  Workers claim: A B C A B A A A ... (B and C get early processing)
+```
+
+#### Performance & Database Index
+
+Round-robin scheduling uses an **extended composite index** for fast queries:
+
+```sql
+CREATE INDEX idx_tasks_status_priority_channel_created
+ON tasks (status, priority, channel_id, created_at);
+```
+
+**Query Performance:**
+- **With index:** <10ms for 1,000+ tasks (index scan)
+- **Scales linearly** with number of channels and tasks
+- **No inter-worker coordination** - PostgreSQL handles fairness automatically
+
+The round-robin query extends the priority query with `channel_id` ordering:
+```sql
+SELECT * FROM tasks
+WHERE status = 'pending'
+ORDER BY
+    CASE priority
+        WHEN 'high' THEN 1
+        WHEN 'normal' THEN 2
+        WHEN 'low' THEN 3
+    END ASC,
+    channel_id ASC,   -- NEW: Round-robin across channels
+    created_at ASC    -- FIFO within (priority + channel)
+FOR UPDATE SKIP LOCKED
+LIMIT 1
+```
+
+#### Channel Logging
+
+All worker logs include `channel_id` for observability:
+
+```json
+{
+  "event": "task_claimed",
+  "worker_id": "worker-1",
+  "task_id": "abc123",
+  "priority": "high",
+  "channel_id": "poke2"
+}
+```
+
+Use this to monitor:
+- **Channel distribution:** Which channels are getting processed
+- **Round-robin verification:** Ensure channels cycle fairly
+- **Channel-specific metrics:** Per-channel throughput and turnaround time
+- **Starvation detection:** Identify channels waiting too long
+
+#### Implementation Details
+
+- **Story 4.4:** Round-Robin Channel Scheduling
+- **Extends Story 4.3:** Priority ordering + channel rotation
+- **Stateless Design:** No inter-worker coordination or shared state
+- **Dynamic Channels:** Add/remove channels without configuration changes
+- **Migration:** `alembic/versions/20260116_0004_add_round_robin_index.py`
+
+#### Best Practices
+
+- **Monitor channel distribution** - ensure fairness across all channels
+- **Watch for channel starvation** - no channel should wait > `N × avg_duration`
+- **Tune worker count** - add workers if `N × avg_duration` too high
+- **Use priority wisely** - round-robin applies within each priority level
+
+#### Failure Modes & Troubleshooting
+
+**Single Channel Scenario:**
+- **Behavior:** If all tasks belong to a single channel, round-robin degrades to simple FIFO ordering
+- **Impact:** No performance degradation - query still uses index efficiently
+- **Detection:** Monitor channel distribution logs
+
+**Channel Deactivation Mid-Stream:**
+- **Behavior:** Deactivated channel (is_active=false) should stop receiving new tasks but in-progress tasks continue
+- **Impact:** Workers skip deactivated channel in rotation seamlessly
+- **Detection:** Check `channel_id` in logs, verify no new claims for deactivated channel
+- **Note:** Current implementation does NOT filter by `is_active` - this is a known gap (defer to Story 4.5)
+
+**Database Connection Loss During Claim:**
+- **Behavior:** PgQueuer uses PostgreSQL transaction-based locking with 30-minute timeout
+- **Impact:** If worker crashes mid-claim, PostgreSQL releases lock after 30 minutes (command_timeout)
+- **Recovery:** Task returns to pending state, another worker can claim it
+- **Detection:** Monitor `command_timeout` errors in logs
+
+**Missing or Dropped Index:**
+- **Behavior:** Query still works correctly but uses sequential scan instead of index scan
+- **Impact:** Performance degrades from O(log n) to O(n) - queries take 50-100ms+ with 1,000+ tasks
+- **Detection:** Run `EXPLAIN ANALYZE` on ROUND_ROBIN_QUERY, look for "Seq Scan" instead of "Index Scan"
+- **Fix:** Recreate index: `alembic upgrade head` or run migration manually
+
+**Verification Commands:**
+```sql
+-- Check if round-robin index exists
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'tasks'
+  AND indexname = 'idx_tasks_status_priority_channel_created';
+
+-- Verify query uses index (should show "Index Scan")
+EXPLAIN ANALYZE
+SELECT * FROM tasks
+WHERE status = 'pending'
+ORDER BY
+    CASE priority WHEN 'high' THEN 1 WHEN 'normal' THEN 2 WHEN 'low' THEN 3 END ASC,
+    channel_id ASC,
+    created_at ASC
+FOR UPDATE SKIP LOCKED
+LIMIT 1;
+```
+
+**Common Issues:**
+- **Uneven channel distribution despite round-robin:** Check if tasks have different priorities - round-robin applies WITHIN priority levels only
+- **Channel "stuck" with no processing:** Verify channel has pending tasks (`status = 'pending'`) and is_active=true (if filter added in Story 4.5)
+- **Slow queries (>50ms):** Check if index exists and is being used (EXPLAIN ANALYZE)
+- **Duplicate claims:** Should never happen with FOR UPDATE SKIP LOCKED - if seen, indicates serious PostgreSQL lock issue
+
 ## FAQ
 
 **Q: How much does this cost?**

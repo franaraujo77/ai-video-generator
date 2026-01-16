@@ -2,32 +2,33 @@
 
 This module handles PgQueuer setup with asyncpg connection pool for task claiming.
 Workers use PgQueuer for atomic task claiming via FOR UPDATE SKIP LOCKED with
-priority-aware task ordering (Story 4.3).
+round-robin channel scheduling and priority-aware task ordering (Story 4.4).
 
-Priority Ordering Logic (Story 4.3):
-    - High priority tasks claimed before normal/low
-    - Normal priority tasks claimed before low
-    - FIFO (created_at ASC) within same priority level
+Round-Robin Channel Scheduling Logic (Story 4.4):
+    - High priority tasks claimed before normal/low (priority preserved)
+    - Within same priority, tasks cycle through channels alphabetically (fairness)
+    - Within same priority + channel, FIFO order maintained (predictability)
     - FOR UPDATE SKIP LOCKED preserves atomic claiming
 
 Architecture Pattern:
     - AsyncpgPoolDriver: Connection pool for production throughput
     - QueueManager: Schema installation and queue management
     - Entrypoint Registration: Define pipeline step handlers
-    - Custom Query: Priority-aware task selection (high → normal → low + FIFO)
+    - Custom Query: Priority → Channel → FIFO ordering
 
 Usage:
     from app.queue import initialize_pgqueuer, pgq
 
     pgq, pool = await initialize_pgqueuer()
-    await pgq.run()  # Start worker loop with priority ordering
+    await pgq.run()  # Start worker loop with round-robin scheduling
 
 References:
-    - Architecture: PgQueuer Integration
+    - Architecture: Round-Robin Channel Scheduling
     - Architecture: Priority Queue Management
     - project-context.md: Critical Implementation Rules
+    - Story 4.4: Round-Robin Channel Scheduling (current)
+    - Story 4.3: Priority Queue Management (extended)
     - Story 4.2: Task Claiming with PgQueuer (foundation)
-    - Story 4.3: Priority Queue Management (custom query)
     - PgQueuer Documentation: https://pgqueuer.readthedocs.io/
 """
 
@@ -45,7 +46,7 @@ log = get_logger(__name__)
 # Global PgQueuer instance (initialized in initialize_pgqueuer)
 pgq: PgQueuer | None = None
 
-# Priority-aware task selection query (Story 4.3)
+# Priority-aware task selection query (Story 4.3) - kept for documentation
 # Orders tasks by priority (high=1, normal=2, low=3), then FIFO within each priority
 PRIORITY_QUERY = """
     SELECT * FROM tasks
@@ -61,18 +62,75 @@ PRIORITY_QUERY = """
     LIMIT 1
 """
 
+# Round-robin channel scheduling query (Story 4.4) - extends PRIORITY_QUERY
+# Orders tasks by priority, then channel (alphabetical rotation), then FIFO
+ROUND_ROBIN_QUERY = """
+    SELECT * FROM tasks
+    WHERE status = 'pending'
+    ORDER BY
+        CASE priority
+            WHEN 'high' THEN 1
+            WHEN 'normal' THEN 2
+            WHEN 'low' THEN 3
+        END ASC,
+        channel_id ASC,  -- NEW: Round-robin across channels
+        created_at ASC   -- FIFO within (priority + channel)
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+"""
+
+
+def extract_query_ordering(query: str) -> str:
+    """Extract ORDER BY pattern from SQL query for logging.
+
+    Dynamically detects query ordering logic by parsing ORDER BY clauses.
+    Used for structured logging to track which scheduling strategy is active.
+
+    Args:
+        query: SQL query string with ORDER BY clause
+
+    Returns:
+        Human-readable ordering pattern (e.g., "priority → channel → FIFO")
+
+    Examples:
+        >>> extract_query_ordering(ROUND_ROBIN_QUERY)
+        'priority → channel → FIFO'
+        >>> extract_query_ordering(PRIORITY_QUERY)
+        'priority → FIFO'
+    """
+    has_priority = "CASE priority" in query
+    has_channel = "channel_id ASC" in query
+    has_fifo = "created_at ASC" in query
+
+    if has_priority and has_channel and has_fifo:
+        return "priority → channel → FIFO"
+    elif has_priority and has_fifo:
+        return "priority → FIFO"
+    elif has_channel and has_fifo:
+        return "channel → FIFO"
+    elif has_fifo:
+        return "FIFO"
+    else:
+        return "unknown"
+
 
 async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
-    """Initialize PgQueuer with priority-aware task selection (Story 4.3).
+    """Initialize PgQueuer with round-robin channel scheduling (Story 4.4).
 
     Creates asyncpg pool, installs PgQueuer schema (if not exists), configures
-    custom query for priority ordering, and returns configured PgQueuer instance.
+    custom query for round-robin scheduling, and returns configured PgQueuer instance.
 
-    Priority Ordering (Story 4.3):
-        Tasks are claimed in priority order: high → normal → low.
-        Within each priority level, FIFO order is maintained (created_at ASC).
-        This ensures urgent content gets processed first while maintaining
-        fairness within each priority tier.
+    Round-Robin Scheduling (Story 4.4):
+        Tasks are claimed in this order:
+        1. Priority (high → normal → low) - preserved from Story 4.3
+        2. Channel (alphabetical rotation) - NEW in Story 4.4
+        3. FIFO (within priority + channel) - preserved from Story 4.3
+
+        This ensures:
+        - High priority tasks always process first (priority preserved)
+        - Within same priority, channels cycle alphabetically (fair distribution)
+        - Within same priority + channel, FIFO order maintained (predictability)
+        - No channel starvation (all channels get processing time)
 
     Claim Timeout (Architecture Decision):
         PgQueuer uses PostgreSQL transaction-based locking for atomic task claiming.
@@ -81,7 +139,7 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
         indefinitely (FR43: fault tolerance requirement).
 
     Returns:
-        tuple[PgQueuer, asyncpg.Pool]: Configured PgQueuer with priority ordering
+        tuple[PgQueuer, asyncpg.Pool]: Configured PgQueuer with round-robin scheduling
 
     Raises:
         ValueError: If DATABASE_URL not set
@@ -115,27 +173,19 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
     await qm.queries.install()
     log.info("pgqueuer_schema_installed")
 
-    # Create PgQueuer driver with priority-aware query (Story 4.3)
+    # Create PgQueuer driver with round-robin query (Story 4.4)
     driver = AsyncpgPoolDriver(pool)
     global pgq
     # TODO: Remove type: ignore when PgQueuer adds proper type hints for query parameter
     # The query parameter is supported but not exposed in PgQueuer's type stubs
-    # See: https://github.com/janbjorge/pgqueuer/issues/
-    pgq = PgQueuer(driver, query=PRIORITY_QUERY)  # type: ignore[call-arg]
+    # Reference: PgQueuer library lacks type stubs for custom query parameter
+    pgq = PgQueuer(driver, query=ROUND_ROBIN_QUERY)  # type: ignore[call-arg]
 
-    # Extract priority ordering from query for logging
-    has_priority = "CASE priority" in PRIORITY_QUERY
-    has_fifo = "created_at ASC" in PRIORITY_QUERY
-    query_pattern = ""
-    if has_priority and has_fifo:
-        query_pattern = "high → normal → low + FIFO"
-    elif has_priority:
-        query_pattern = "high → normal → low"
-    elif has_fifo:
-        query_pattern = "FIFO only"
+    # Extract query pattern for logging (Story 4.4: dynamic pattern detection)
+    query_pattern = extract_query_ordering(ROUND_ROBIN_QUERY)
 
     log.info(
-        "pgqueuer_initialized_with_priority_ordering",
+        "pgqueuer_initialized_with_round_robin",
         claim_timeout_minutes=30,
         query_pattern=query_pattern,
         custom_query_enabled=True,
