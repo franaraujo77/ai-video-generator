@@ -90,6 +90,9 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.track_api_cost", new_callable=AsyncMock
             ) as mock_track_cost,
+            patch(
+                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
+            ),
         ):
             # Mock service
             mock_service = mock_service_class.return_value
@@ -248,6 +251,9 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
+            ),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
@@ -307,6 +313,9 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
+            patch(
+                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
+            ),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))

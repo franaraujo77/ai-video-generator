@@ -141,11 +141,20 @@ class TestClaimNextTask:
         with patch("app.workers.pipeline_worker.async_session_factory") as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
-            mock_session_class.return_value.__aexit__.return_value = AsyncMock()
+            mock_session_class.return_value.__aexit__.return_value = None
+
+            # Mock begin() to return an async context manager
+            def mock_begin():
+                mock_transaction = AsyncMock()
+                mock_transaction.__aenter__ = AsyncMock(return_value=mock_transaction)
+                mock_transaction.__aexit__ = AsyncMock(return_value=None)
+                return mock_transaction
+
+            mock_session.begin = mock_begin
 
             # Mock execute to return no rows
             mock_result = Mock()
-            mock_result.fetchone.return_value = None
+            mock_result.scalar_one_or_none.return_value = None
             mock_session.execute = AsyncMock(return_value=mock_result)
 
             claimed_task_id = await pipeline_worker.claim_next_task()
