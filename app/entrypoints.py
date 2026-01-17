@@ -56,7 +56,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
         pgq: Initialized PgQueuer instance
     """
 
-    @pgq.entrypoint("process_video")  # type: ignore[misc]
+    @pgq.entrypoint("process_video")
     async def process_video(job: Job) -> None:
         """Process video generation task with priority awareness (Story 4.3).
 
@@ -230,7 +230,18 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 if task:
                     # Classify error: retriable vs non-retriable (AC10)
                     is_retriable = _is_retriable_error(e)
-                    task.status = "retry" if is_retriable else "failed"
+                    # Determine appropriate error status based on current processing phase
+                    if is_retriable:
+                        task.status = TaskStatus.QUEUED  # Retry from beginning
+                    else:
+                        # Map current status to appropriate error status
+                        error_status_map = {
+                            TaskStatus.GENERATING_ASSETS: TaskStatus.ASSET_ERROR,
+                            TaskStatus.GENERATING_VIDEO: TaskStatus.VIDEO_ERROR,
+                            TaskStatus.GENERATING_AUDIO: TaskStatus.AUDIO_ERROR,
+                            TaskStatus.UPLOADING: TaskStatus.UPLOAD_ERROR,
+                        }
+                        task.status = error_status_map.get(task.status, TaskStatus.ASSET_ERROR)
                     await db.commit()
 
                     # Log failure with priority context (Story 4.3)
@@ -254,12 +265,14 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 worker_state.decrement_audio_tasks()
 
         # Step 3b: Update status to completed (short transaction)
+        # NOTE: This is placeholder code - in production, workers handle status transitions
         async with AsyncSessionLocal() as db:  # type: ignore[misc]
             task = await db.get(Task, task_id)
             if not task:
                 raise ValueError(f"Task disappeared during processing: {task_id}")
 
-            task.status = "completed"
+            # Mark as published (terminal success state) for placeholder testing
+            task.status = TaskStatus.PUBLISHED
             await db.commit()
 
             # Log completion with priority context (Story 4.3)

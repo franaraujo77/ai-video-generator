@@ -636,8 +636,11 @@ class ReviewService:
 
         # Step 1: Fetch all tasks in single query
         # Use populate_existing to ensure all attributes are loaded (avoid lazy loads in validator)
+        # Filter by channel_id to enforce multi-tenant isolation (security requirement)
         result = await db.execute(
-            select(Task).where(Task.id.in_(task_ids)).execution_options(populate_existing=True)
+            select(Task)
+            .where(Task.id.in_(task_ids), Task.channel_id == channel_id)
+            .execution_options(populate_existing=True)
         )
         tasks = list(result.scalars().all())
 
