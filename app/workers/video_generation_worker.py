@@ -170,7 +170,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 estimated_time_minutes=len(failed_clip_numbers) * 3.5,
             )
             # Filter manifest to only include failed clips
-            manifest.clips = [c for c in manifest.clips if c["clip_number"] in failed_clip_numbers]
+            manifest.clips = [c for c in manifest.clips if c.clip_number in failed_clip_numbers]
         else:
             log.info(
                 "video_generation_start",
