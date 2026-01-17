@@ -493,11 +493,12 @@ class TestErrorClassification:
 class TestStatusUpdates:
     """Test task status update functionality."""
 
-    @pytest.mark.skip(reason="Test needs refactoring after Story 5.2 changes - covered by test_update_task_status_triggers_notion_sync")
+    @pytest.mark.skip(
+        reason="Test needs refactoring after Story 5.2 changes - covered by test_update_task_status_triggers_notion_sync"
+    )
     @pytest.mark.asyncio
     async def test_update_task_status_success(self, async_session, async_engine):
         """Test status update succeeds with no error."""
-        from sqlalchemy.ext.asyncio import async_sessionmaker
 
         from app.models import Channel, Task
 
@@ -1047,7 +1048,9 @@ class TestReviewGateEnforcement:
                         step=PipelineStep.VIDEO_GENERATION, completed=True, duration_seconds=60.0
                     ),
                     PipelineStep.NARRATION_GENERATION: StepCompletion(
-                        step=PipelineStep.NARRATION_GENERATION, completed=True, duration_seconds=30.0
+                        step=PipelineStep.NARRATION_GENERATION,
+                        completed=True,
+                        duration_seconds=30.0,
                     ),
                     PipelineStep.SFX_GENERATION: StepCompletion(
                         step=PipelineStep.SFX_GENERATION, completed=True, duration_seconds=15.0
@@ -1115,7 +1118,9 @@ class TestReviewTimestampTracking:
         orchestrator = PipelineOrchestrator(task_id=task.id)
 
         # Mock session to return our task
-        with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+        with patch(
+            "app.services.pipeline_orchestrator.async_session_factory"
+        ) as mock_session_class:
             mock_session = AsyncMock()
             mock_session_class.return_value.__aenter__.return_value = mock_session
             mock_session_class.return_value.__aexit__.return_value = AsyncMock()
@@ -1134,7 +1139,9 @@ class TestReviewTimestampTracking:
             assert task.status == TaskStatus.ASSETS_READY
 
             # Verify timestamp is recent (within last 5 seconds)
-            time_diff = (datetime.now(task.review_started_at.tzinfo) - task.review_started_at).total_seconds()
+            time_diff = (
+                datetime.now(task.review_started_at.tzinfo) - task.review_started_at
+            ).total_seconds()
             assert time_diff < 5
 
     @pytest.mark.asyncio
@@ -1166,7 +1173,9 @@ class TestReviewTimestampTracking:
             orchestrator = PipelineOrchestrator(task_id=task.id)
 
             # Mock session
-            with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+            with patch(
+                "app.services.pipeline_orchestrator.async_session_factory"
+            ) as mock_session_class:
                 mock_session = AsyncMock()
                 mock_session_class.return_value.__aenter__.return_value = mock_session
                 mock_session_class.return_value.__aexit__.return_value = AsyncMock()
@@ -1180,7 +1189,9 @@ class TestReviewTimestampTracking:
                 await orchestrator.update_task_status(to_status)
 
                 # Verify timestamp was set
-                assert task.review_started_at is not None, f"review_started_at not set for {to_status.value}"
+                assert (
+                    task.review_started_at is not None
+                ), f"review_started_at not set for {to_status.value}"
                 assert task.status == to_status
 
     @pytest.mark.asyncio
@@ -1212,7 +1223,9 @@ class TestReviewTimestampTracking:
             orchestrator = PipelineOrchestrator(task_id=task.id)
 
             # Mock session
-            with patch("app.services.pipeline_orchestrator.async_session_factory") as mock_session_class:
+            with patch(
+                "app.services.pipeline_orchestrator.async_session_factory"
+            ) as mock_session_class:
                 mock_session = AsyncMock()
                 mock_session_class.return_value.__aenter__.return_value = mock_session
                 mock_session_class.return_value.__aexit__.return_value = AsyncMock()
@@ -1226,5 +1239,7 @@ class TestReviewTimestampTracking:
                 await orchestrator.update_task_status(to_status)
 
                 # Verify timestamp was NOT set
-                assert task.review_started_at is None, f"review_started_at incorrectly set for {to_status.value}"
+                assert (
+                    task.review_started_at is None
+                ), f"review_started_at incorrectly set for {to_status.value}"
                 assert task.status == to_status

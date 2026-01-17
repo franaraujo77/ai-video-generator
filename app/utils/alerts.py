@@ -23,13 +23,8 @@ from app.utils.logging import get_logger
 log = get_logger(__name__)
 
 
-async def send_alert(
-    level: str,
-    message: str,
-    details: dict | None = None
-) -> None:
-    """
-    Send alert to Discord webhook.
+async def send_alert(level: str, message: str, details: dict | None = None) -> None:
+    """Send alert to Discord webhook.
 
     Args:
         level: Alert level ("CRITICAL", "WARNING", "INFO")
@@ -43,7 +38,7 @@ async def send_alert(
         >>> await send_alert(
         ...     level="WARNING",
         ...     message="YouTube quota at 85%",
-        ...     details={"channel": "poke1", "usage": 8500, "limit": 10000}
+        ...     details={"channel": "poke1", "usage": 8500, "limit": 10000},
         ... )
     """
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
@@ -57,9 +52,9 @@ async def send_alert(
     # Color mapping
     colors = {
         "CRITICAL": 0xFF0000,  # Red
-        "WARNING": 0xFFA500,   # Orange
-        "INFO": 0x0000FF,      # Blue
-        "SUCCESS": 0x00FF00    # Green
+        "WARNING": 0xFFA500,  # Orange
+        "INFO": 0x0000FF,  # Blue
+        "SUCCESS": 0x00FF00,  # Green
     }
 
     payload = {
@@ -72,24 +67,20 @@ async def send_alert(
                     {"name": key, "value": str(value)[:1024], "inline": True}
                     for key, value in (details or {}).items()
                 ],
-                "color": colors.get(level, 0x808080)  # Default gray
+                "color": colors.get(level, 0x808080),  # Default gray
             }
-        ]
+        ],
     }
 
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
-                webhook_url,
-                json=payload,
-                timeout=5.0
-            )
+            response = await client.post(webhook_url, json=payload, timeout=5.0)
             response.raise_for_status()
 
             log.info(
                 "discord_alert_sent",
                 level=level,
-                message=message[:100]  # Truncate for log
+                message=message[:100],  # Truncate for log
             )
     except httpx.TimeoutException:
         log.error("discord_webhook_timeout", webhook_url=webhook_url[:50])
@@ -97,7 +88,7 @@ async def send_alert(
         log.error(
             "discord_webhook_http_error",
             status_code=e.response.status_code,
-            response=e.response.text[:500]
+            response=e.response.text[:500],
         )
     except Exception as e:
         log.error("discord_webhook_failed", error=str(e))

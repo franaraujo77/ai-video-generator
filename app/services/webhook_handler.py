@@ -15,14 +15,13 @@ Architecture:
 import hashlib
 import hmac
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from datetime import datetime, timezone
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
@@ -57,7 +56,7 @@ def _extract_clip_numbers(text: str) -> list[int]:
     import re
 
     # Find all numbers in the text
-    numbers = re.findall(r'\b(\d+)\b', text)
+    numbers = re.findall(r"\b(\d+)\b", text)
 
     # Convert to integers and filter to valid clip range (1-18)
     clip_numbers = []
@@ -215,9 +214,7 @@ async def _handle_approval_status_change(
 
     async with async_session_factory() as session, session.begin():
         # Find task by notion_page_id
-        result = await session.execute(
-            select(Task).where(Task.notion_page_id == page_id)
-        )
+        result = await session.execute(select(Task).where(Task.notion_page_id == page_id))
         task = result.scalar_one_or_none()
 
         if not task:
@@ -315,9 +312,7 @@ async def _handle_rejection_status_change(
 
     async with async_session_factory() as session, session.begin():
         # Find task by notion_page_id
-        result = await session.execute(
-            select(Task).where(Task.notion_page_id == page_id)
-        )
+        result = await session.execute(select(Task).where(Task.notion_page_id == page_id))
         task = result.scalar_one_or_none()
 
         if not task:
@@ -375,7 +370,9 @@ async def _handle_rejection_status_change(
             old_status=old_status.value,
             new_status=internal_status.value,
             review_duration_seconds=duration,
-            rejection_reason=rejection_reason[:200] if rejection_reason else None,  # Truncate for logging
+            rejection_reason=rejection_reason[:200]
+            if rejection_reason
+            else None,  # Truncate for logging
         )
 
 

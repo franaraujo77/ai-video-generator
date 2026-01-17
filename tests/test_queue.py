@@ -28,12 +28,13 @@ async def test_initialize_pgqueuer_success():
     mock_qm = MagicMock()
     mock_qm.queries.install = AsyncMock()
 
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch("app.queue.QueueManager", return_value=mock_qm), \
-         patch("app.queue.AsyncpgPoolDriver") as mock_driver, \
-         patch("app.queue.PgQueuer") as mock_pgqueuer, \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch("app.queue.QueueManager", return_value=mock_qm),
+        patch("app.queue.AsyncpgPoolDriver") as mock_driver,
+        patch("app.queue.PgQueuer") as mock_pgqueuer,
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}),
+    ):
         mock_create_pool.return_value = mock_pool
 
         # Call initialize_pgqueuer
@@ -72,9 +73,10 @@ async def test_initialize_pgqueuer_missing_database_url():
 @pytest.mark.asyncio
 async def test_initialize_pgqueuer_connection_failure():
     """Test PgQueuer initialization handles database connection failures."""
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}),
+    ):
         # Simulate connection failure
         mock_create_pool.side_effect = asyncpg.PostgresError("Connection refused")
 
@@ -89,12 +91,13 @@ async def test_initialize_pgqueuer_schema_installation():
     mock_qm = MagicMock()
     mock_qm.queries.install = AsyncMock()
 
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch("app.queue.QueueManager", return_value=mock_qm), \
-         patch("app.queue.AsyncpgPoolDriver"), \
-         patch("app.queue.PgQueuer"), \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch("app.queue.QueueManager", return_value=mock_qm),
+        patch("app.queue.AsyncpgPoolDriver"),
+        patch("app.queue.PgQueuer"),
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}),
+    ):
         mock_create_pool.return_value = mock_pool
 
         await initialize_pgqueuer()
@@ -110,12 +113,13 @@ async def test_initialize_pgqueuer_pool_configuration():
     mock_qm = MagicMock()
     mock_qm.queries.install = AsyncMock()
 
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch("app.queue.QueueManager", return_value=mock_qm), \
-         patch("app.queue.AsyncpgPoolDriver"), \
-         patch("app.queue.PgQueuer"), \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://user:pass@host:5432/db"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch("app.queue.QueueManager", return_value=mock_qm),
+        patch("app.queue.AsyncpgPoolDriver"),
+        patch("app.queue.PgQueuer"),
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://user:pass@host:5432/db"}),
+    ):
         mock_create_pool.return_value = mock_pool
 
         await initialize_pgqueuer()
@@ -137,12 +141,13 @@ async def test_initialize_pgqueuer_driver_and_pgqueuer_creation():
     mock_driver_instance = MagicMock()
     mock_pgqueuer_instance = MagicMock()
 
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch("app.queue.QueueManager", return_value=mock_qm), \
-         patch("app.queue.AsyncpgPoolDriver", return_value=mock_driver_instance) as mock_driver, \
-         patch("app.queue.PgQueuer", return_value=mock_pgqueuer_instance) as mock_pgqueuer, \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch("app.queue.QueueManager", return_value=mock_qm),
+        patch("app.queue.AsyncpgPoolDriver", return_value=mock_driver_instance) as mock_driver,
+        patch("app.queue.PgQueuer", return_value=mock_pgqueuer_instance) as mock_pgqueuer,
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}),
+    ):
         mock_create_pool.return_value = mock_pool
 
         pgq, pool = await initialize_pgqueuer()
@@ -166,12 +171,13 @@ async def test_initialize_pgqueuer_return_values():
     mock_qm.queries.install = AsyncMock()
     mock_pgqueuer_instance = MagicMock()
 
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch("app.queue.QueueManager", return_value=mock_qm), \
-         patch("app.queue.AsyncpgPoolDriver"), \
-         patch("app.queue.PgQueuer", return_value=mock_pgqueuer_instance), \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch("app.queue.QueueManager", return_value=mock_qm),
+        patch("app.queue.AsyncpgPoolDriver"),
+        patch("app.queue.PgQueuer", return_value=mock_pgqueuer_instance),
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}),
+    ):
         mock_create_pool.return_value = mock_pool
 
         pgq, pool = await initialize_pgqueuer()
@@ -193,12 +199,13 @@ async def test_round_robin_query_passed_to_pgqueuer():
     mock_driver_instance = MagicMock()
     mock_pgqueuer_instance = MagicMock()
 
-    with patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool, \
-         patch("app.queue.QueueManager", return_value=mock_qm), \
-         patch("app.queue.AsyncpgPoolDriver", return_value=mock_driver_instance) as mock_driver, \
-         patch("app.queue.PgQueuer", return_value=mock_pgqueuer_instance) as mock_pgqueuer, \
-         patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}):
-
+    with (
+        patch("app.queue.asyncpg.create_pool", new_callable=AsyncMock) as mock_create_pool,
+        patch("app.queue.QueueManager", return_value=mock_qm),
+        patch("app.queue.AsyncpgPoolDriver", return_value=mock_driver_instance) as mock_driver,
+        patch("app.queue.PgQueuer", return_value=mock_pgqueuer_instance) as mock_pgqueuer,
+        patch.dict(os.environ, {"DATABASE_URL": "postgresql://test:test@localhost/test"}),
+    ):
         mock_create_pool.return_value = mock_pool
 
         await initialize_pgqueuer()
@@ -223,7 +230,7 @@ def test_priority_query_structure():
 def test_priority_query_fifo_within_priority():
     """Test PRIORITY_QUERY enforces FIFO within each priority level."""
     # Verify query orders by priority first, then created_at (FIFO)
-    query_lines = [line.strip() for line in PRIORITY_QUERY.split('\n') if line.strip()]
+    query_lines = [line.strip() for line in PRIORITY_QUERY.split("\n") if line.strip()]
 
     # Find ORDER BY clause
     order_by_index = next(i for i, line in enumerate(query_lines) if "ORDER BY" in line)
@@ -232,8 +239,9 @@ def test_priority_query_fifo_within_priority():
     case_index = next(i for i, line in enumerate(query_lines) if "CASE priority" in line)
     created_at_index = next(i for i, line in enumerate(query_lines) if "created_at ASC" in line)
 
-    assert order_by_index < case_index < created_at_index, \
-        "Query must order by priority THEN created_at (FIFO within priority)"
+    assert (
+        order_by_index < case_index < created_at_index
+    ), "Query must order by priority THEN created_at (FIFO within priority)"
 
 
 def test_priority_query_atomic_claiming():
@@ -279,7 +287,7 @@ def test_round_robin_query_structure():
 def test_round_robin_query_ordering():
     """Test ROUND_ROBIN_QUERY enforces priority → channel → FIFO ordering."""
     # Parse query lines
-    query_lines = [line.strip() for line in ROUND_ROBIN_QUERY.split('\n') if line.strip()]
+    query_lines = [line.strip() for line in ROUND_ROBIN_QUERY.split("\n") if line.strip()]
 
     # Find ORDER BY clause
     order_by_index = next(i for i, line in enumerate(query_lines) if "ORDER BY" in line)
@@ -290,8 +298,9 @@ def test_round_robin_query_ordering():
     created_at_index = next(i for i, line in enumerate(query_lines) if "created_at ASC" in line)
 
     # Verify ordering: priority THEN channel THEN created_at
-    assert order_by_index < case_index < channel_index < created_at_index, \
-        "Query must order by priority THEN channel_id THEN created_at"
+    assert (
+        order_by_index < case_index < channel_index < created_at_index
+    ), "Query must order by priority THEN channel_id THEN created_at"
 
 
 def test_round_robin_query_atomic_claiming():
@@ -373,6 +382,7 @@ def test_round_robin_query_comments():
     # Verify inline SQL comments document the round-robin change
     assert "--" in ROUND_ROBIN_QUERY  # SQL comment syntax
     # Verify comment mentions "round-robin" or "channel"
-    lines_with_channel = [line for line in ROUND_ROBIN_QUERY.split('\n') if 'channel_id' in line]
-    assert any('--' in line for line in lines_with_channel), \
-        "channel_id line should have inline comment explaining round-robin"
+    lines_with_channel = [line for line in ROUND_ROBIN_QUERY.split("\n") if "channel_id" in line]
+    assert any(
+        "--" in line for line in lines_with_channel
+    ), "channel_id line should have inline comment explaining round-robin"

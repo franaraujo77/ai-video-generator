@@ -41,7 +41,7 @@ References:
 import asyncio
 from pathlib import Path
 
-from app.utils.cli_wrapper import CLIScriptError, run_cli_script
+from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -78,14 +78,17 @@ async def is_video_optimized(video_path: Path) -> bool:
             result = subprocess.run(
                 [
                     "ffprobe",
-                    "-v", "error",
-                    "-show_entries", "format=start_time",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(video_path)
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=start_time",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    str(video_path),
                 ],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
             if result.returncode != 0:
                 raise CLIScriptError("ffprobe", result.returncode, result.stderr)
@@ -117,10 +120,7 @@ async def is_video_optimized(video_path: Path) -> bool:
         return False
 
 
-async def optimize_video_for_streaming(
-    video_path: Path,
-    force: bool = False
-) -> bool:
+async def optimize_video_for_streaming(video_path: Path, force: bool = False) -> bool:
     """Optimize MP4 video for streaming by adding faststart flag.
 
     Re-encodes video with `-movflags faststart` to move MOOV atom to
@@ -179,15 +179,18 @@ async def optimize_video_for_streaming(
             result = subprocess.run(
                 [
                     "ffmpeg",
-                    "-i", str(video_path),
-                    "-movflags", "faststart",
-                    "-c", "copy",  # Copy codecs, no re-encoding (fast)
+                    "-i",
+                    str(video_path),
+                    "-movflags",
+                    "faststart",
+                    "-c",
+                    "copy",  # Copy codecs, no re-encoding (fast)
                     "-y",  # Overwrite temp file if exists
-                    str(temp_path)
+                    str(temp_path),
                 ],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
             )
             if result.returncode != 0:
                 raise CLIScriptError("ffmpeg", result.returncode, result.stderr)
@@ -247,14 +250,17 @@ async def get_video_duration(video_path: Path) -> float:
             result = subprocess.run(
                 [
                     "ffprobe",
-                    "-v", "error",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(video_path)
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    str(video_path),
                 ],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
             if result.returncode != 0:
                 raise CLIScriptError("ffprobe", result.returncode, result.stderr)

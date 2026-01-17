@@ -127,16 +127,16 @@ class NotionAudioService:
             ...         {
             ...             "clip_number": 1,
             ...             "output_path": Path("/workspace/audio/narration_01.mp3"),
-            ...             "duration": 7.2
+            ...             "duration": 7.2,
             ...         }
             ...     ],
             ...     sfx_files=[
             ...         {
             ...             "clip_number": 1,
             ...             "output_path": Path("/workspace/sfx/sfx_01.wav"),
-            ...             "duration": 7.2
+            ...             "duration": 7.2,
             ...         }
-            ...     ]
+            ...     ],
             ... )
             >>> print(result)
             {"created": 2, "failed": 0, "narration_count": 1, "sfx_count": 1, "storage_strategy": "r2"}
@@ -291,26 +291,14 @@ class NotionAudioService:
         current_date = datetime.now(timezone.utc).isoformat()
 
         properties: dict[str, Any] = {
-            "Clip Number": {
-                "number": clip_number
-            },
+            "Clip Number": {"number": clip_number},
             "Type": {
                 "select": {"name": audio_type}  # "narration" or "sfx"
             },
-            "Duration": {
-                "number": duration
-            },
-            "Status": {
-                "select": {"name": "generated"}
-            },
-            "Generated Date": {
-                "date": {"start": current_date}
-            },
-            "Task": {
-                "relation": [
-                    {"id": notion_page_id}
-                ]
-            }
+            "Duration": {"number": duration},
+            "Status": {"select": {"name": "generated"}},
+            "Generated Date": {"date": {"start": current_date}},
+            "Task": {"relation": [{"id": notion_page_id}]},
         }
 
         # Handle file storage based on strategy
@@ -344,9 +332,7 @@ class NotionAudioService:
             }
         else:
             # Set to empty array - shows property exists but needs implementation
-            properties["File"] = {
-                "files": []
-            }
+            properties["File"] = {"files": []}
 
         # Create page in Audio database using NotionClient method (rate limited, auto-retry)
         try:

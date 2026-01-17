@@ -363,21 +363,40 @@ async def test_taskstatus_enum_has_26_values():
     # AC1: Verify all 27 statuses exist (updated in code review)
     expected_statuses = {
         # Initial states (4 - added CANCELLED)
-        "draft", "queued", "claimed", "cancelled",
+        "draft",
+        "queued",
+        "claimed",
+        "cancelled",
         # Asset phase (4)
-        "generating_assets", "assets_ready", "assets_approved", "asset_error",
+        "generating_assets",
+        "assets_ready",
+        "assets_approved",
+        "asset_error",
         # Composite phase (2)
-        "generating_composites", "composites_ready",
+        "generating_composites",
+        "composites_ready",
         # Video phase (4)
-        "generating_video", "video_ready", "video_approved", "video_error",
+        "generating_video",
+        "video_ready",
+        "video_approved",
+        "video_error",
         # Audio phase (4)
-        "generating_audio", "audio_ready", "audio_approved", "audio_error",
+        "generating_audio",
+        "audio_ready",
+        "audio_approved",
+        "audio_error",
         # SFX phase (2)
-        "generating_sfx", "sfx_ready",
+        "generating_sfx",
+        "sfx_ready",
         # Assembly phase (2)
-        "assembling", "assembly_ready",
+        "assembling",
+        "assembly_ready",
         # Final phase (5)
-        "final_review", "approved", "uploading", "published", "upload_error",
+        "final_review",
+        "approved",
+        "uploading",
+        "published",
+        "upload_error",
     }
 
     # Get all enum values
@@ -503,7 +522,9 @@ async def test_invalid_status_transition_draft_to_published(async_session):
         (TaskStatus.CLAIMED, TaskStatus.ASSETS_APPROVED, False),
     ],
 )
-async def test_status_transitions_comprehensive(async_session, from_status, to_status, should_succeed):
+async def test_status_transitions_comprehensive(
+    async_session, from_status, to_status, should_succeed
+):
     """Test comprehensive status transition validation matrix."""
     # AC2: Validate state transitions
     # AC3: State machine progression matches UX flow

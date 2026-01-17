@@ -385,9 +385,7 @@ class NotionClient:
             last_error or Exception("Unknown error"),
         )
 
-    async def create_page(
-        self, database_id: str, properties: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def create_page(self, database_id: str, properties: dict[str, Any]) -> dict[str, Any]:
         """Create a new page in a Notion database (rate limited, auto-retry).
 
         Args:
@@ -405,7 +403,7 @@ class NotionClient:
         Example:
             >>> properties = {
             ...     "Name": {"title": [{"text": {"content": "My Page"}}]},
-            ...     "Status": {"select": {"name": "Active"}}
+            ...     "Status": {"select": {"name": "Active"}},
             ... }
             >>> page = await client.create_page("abc123", properties)
         """
@@ -469,9 +467,7 @@ class NotionClient:
             last_error or Exception("Unknown error"),
         )
 
-    async def upload_file(
-        self, file_path: Path
-    ) -> str:
+    async def upload_file(self, file_path: Path) -> str:
         """Upload a file to Notion and return the file URL.
 
         Note: Notion API currently only supports external file URLs, not direct uploads.
