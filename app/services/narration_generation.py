@@ -279,6 +279,7 @@ class NarrationGenerationService:
         manifest: NarrationManifest,
         resume: bool = False,
         max_concurrent: int = 10,
+        clips_to_regenerate: list[int] | None = None,
     ) -> dict[str, Any]:
         """Generate all narration audio clips in manifest by invoking CLI script.
 
@@ -300,11 +301,14 @@ class NarrationGenerationService:
             manifest: NarrationManifest with 18 clip definitions
             resume: If True, skip clips that already exist on filesystem
             max_concurrent: Maximum concurrent ElevenLabs API requests (default 10)
+            clips_to_regenerate: Optional list of clip numbers (1-18) to regenerate.
+                If provided, only these clips will be generated (partial regeneration for Story 5.5).
+                If None, all clips in manifest will be generated.
 
         Returns:
             Summary dict with keys:
                 - generated: Number of newly generated audio clips
-                - skipped: Number of existing audio clips (if resume=True)
+                - skipped: Number of existing audio clips (if resume=True or not in clips_to_regenerate)
                 - failed: Number of failed audio clips
                 - total_cost_usd: Total ElevenLabs API cost (Decimal)
 
@@ -316,9 +320,30 @@ class NarrationGenerationService:
             >>> result = await service.generate_narration(manifest, resume=False, max_concurrent=10)
             >>> print(result)
             {"generated": 18, "skipped": 0, "failed": 0, "total_cost_usd": Decimal("0.72")}
+
+            >>> # Partial regeneration (Story 5.5)
+            >>> result = await service.generate_narration(manifest, clips_to_regenerate=[3, 7, 12])
+            >>> print(result)
+            {"generated": 3, "skipped": 15, "failed": 0, "total_cost_usd": Decimal("0.12")}
         """
         # Validate voice_id before starting
         _validate_voice_id(manifest.voice_id)
+
+        # Filter clips for partial regeneration (Story 5.5)
+        clips_to_generate = manifest.clips
+        if clips_to_regenerate is not None:
+            clips_to_generate = [
+                clip for clip in manifest.clips
+                if clip.clip_number in clips_to_regenerate
+            ]
+            self.log.info(
+                "partial_narration_regeneration",
+                channel_id=self.channel_id,
+                project_id=self.project_id,
+                clips_to_regenerate=clips_to_regenerate,
+                filtered_count=len(clips_to_generate),
+                total_clips=len(manifest.clips),
+            )
 
         # Prepare isolated environment variables for CLI script
         # CRITICAL: Pass as subprocess env (NOT os.environ) to prevent multi-channel pollution
@@ -468,8 +493,9 @@ class NarrationGenerationService:
         # Generate all clips with controlled parallelism
         # If any clip fails with non-retriable error, the entire batch fails
         # This ensures we don't mark task as success when clips are missing
+        # Story 5.5: clips_to_generate may be filtered for partial regeneration
         try:
-            await asyncio.gather(*[generate_single_clip(clip) for clip in manifest.clips])
+            await asyncio.gather(*[generate_single_clip(clip) for clip in clips_to_generate])
         except CLIScriptError:
             # If any clip fails after retries, mark entire generation as failed
             # This will propagate to worker which will mark task as AUDIO_ERROR

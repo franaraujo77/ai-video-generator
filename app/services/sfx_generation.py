@@ -13,7 +13,7 @@ Key Responsibilities:
 
 Architecture Pattern:
     Service (Smart): Maps descriptions to clips, manages retry
-    CLI Script (Dumb): Calls ElevenLabs API, downloads WAV
+    CLI Script (Dumb): Calls ElevenLabs API, downloads MP3 (web-optimized)
 
 Dependencies:
     - Story 3.1: CLI wrapper (run_cli_script, CLIScriptError)
@@ -119,13 +119,13 @@ class SFXClip:
     Attributes:
         clip_number: Clip number (1-18)
         sfx_description: SFX description (environmental ambience, NOT narration)
-        output_path: Path where WAV audio will be saved
+        output_path: Path where MP3 audio will be saved (web-optimized format)
         target_duration_seconds: Optional target duration from video clip (for logging)
     """
 
     clip_number: int
     sfx_description: str
-    output_path: Path
+    output_path: Path  # MP3 format for web playback (not WAV)
     target_duration_seconds: float | None = None
 
 
@@ -223,11 +223,11 @@ class SFXGenerationService:
             if video_durations and len(video_durations) >= i:
                 target_duration = video_durations[i - 1]
 
-            # Create clip with output path
+            # Create clip with output path (MP3 format for web playback)
             clip = SFXClip(
                 clip_number=i,
                 sfx_description=sfx_description,
-                output_path=sfx_dir / f"sfx_{i:02d}.wav",
+                output_path=sfx_dir / f"sfx_{i:02d}.mp3",  # MP3, not WAV
                 target_duration_seconds=target_duration,
             )
             clips.append(clip)
@@ -246,6 +246,7 @@ class SFXGenerationService:
         manifest: SFXManifest,
         resume: bool = False,
         max_concurrent: int = 10,
+        clips_to_regenerate: list[int] | None = None,
     ) -> dict[str, Any]:
         """Generate all SFX audio clips in manifest by invoking CLI script.
 
@@ -256,7 +257,7 @@ class SFXGenerationService:
               - Pass SFX description, output path
               - Wait 5-20 seconds (typical), up to 60 seconds max
            c. Wait for completion (CLI script handles API call)
-           d. Verify WAV file exists and is valid audio
+           d. Verify MP3 file exists and is valid audio
            e. Optionally probe audio duration with ffprobe for validation
            f. Log success/failure with clip number, generation time, duration
         2. Respect max_concurrent limit (10 parallel ElevenLabs requests)
@@ -266,11 +267,14 @@ class SFXGenerationService:
             manifest: SFXManifest with 18 clip definitions
             resume: If True, skip clips that already exist on filesystem
             max_concurrent: Maximum concurrent ElevenLabs API requests (default 10)
+            clips_to_regenerate: Optional list of clip numbers (1-18) to regenerate.
+                If provided, only these clips will be generated (partial regeneration for Story 5.5).
+                If None, all clips in manifest will be generated.
 
         Returns:
             Summary dict with keys:
                 - generated: Number of newly generated SFX clips
-                - skipped: Number of existing SFX clips (if resume=True)
+                - skipped: Number of existing SFX clips (if resume=True or not in clips_to_regenerate)
                 - failed: Number of failed SFX clips
                 - total_cost_usd: Total ElevenLabs API cost (Decimal)
 
@@ -281,7 +285,28 @@ class SFXGenerationService:
             >>> result = await service.generate_sfx(manifest, resume=False, max_concurrent=10)
             >>> print(result)
             {"generated": 18, "skipped": 0, "failed": 0, "total_cost_usd": Decimal("0.72")}
+
+            >>> # Partial regeneration (Story 5.5)
+            >>> result = await service.generate_sfx(manifest, clips_to_regenerate=[3, 7, 12])
+            >>> print(result)
+            {"generated": 3, "skipped": 15, "failed": 0, "total_cost_usd": Decimal("0.12")}
         """
+        # Filter clips for partial regeneration (Story 5.5)
+        clips_to_generate = manifest.clips
+        if clips_to_regenerate is not None:
+            clips_to_generate = [
+                clip for clip in manifest.clips
+                if clip.clip_number in clips_to_regenerate
+            ]
+            self.log.info(
+                "partial_sfx_regeneration",
+                channel_id=self.channel_id,
+                project_id=self.project_id,
+                clips_to_regenerate=clips_to_regenerate,
+                filtered_count=len(clips_to_generate),
+                total_clips=len(manifest.clips),
+            )
+
         # Track results
         generated = 0
         skipped = 0
@@ -311,7 +336,11 @@ class SFXGenerationService:
             try:
                 await run_cli_script(
                     "generate_sound_effects.py",
-                    ["--prompt", clip.sfx_description, "--output", str(clip.output_path)],
+                    [
+                        "--text", clip.sfx_description,
+                        "--output", str(clip.output_path),
+                        "--format", "mp3_44100_128",  # MP3 format for web playback
+                    ],
                     timeout=60,  # 1 minute max per clip
                 )
             except CLIScriptError as e:
@@ -424,8 +453,9 @@ class SFXGenerationService:
         # Generate all clips with controlled parallelism
         # If any clip fails with non-retriable error, the entire batch fails
         # This ensures we don't mark task as success when clips are missing
+        # Story 5.5: clips_to_generate may be filtered for partial regeneration
         try:
-            await asyncio.gather(*[generate_single_clip(clip) for clip in manifest.clips])
+            await asyncio.gather(*[generate_single_clip(clip) for clip in clips_to_generate])
         except CLIScriptError:
             # If any clip fails after retries, mark entire generation as failed
             # This will propagate to worker which will mark task as AUDIO_ERROR
