@@ -75,8 +75,8 @@ async def is_video_optimized(video_path: Path) -> bool:
         import subprocess
 
         def check_probe() -> str:
-            result = subprocess.run(  # noqa: S603, S607
-                [
+            result = subprocess.run(
+                [  # noqa: S603, S607
                     "ffprobe",
                     "-v",
                     "error",
@@ -175,8 +175,8 @@ async def optimize_video_for_streaming(video_path: Path, force: bool = False) ->
         import subprocess
 
         def run_ffmpeg() -> None:
-            result = subprocess.run(  # noqa: S603, S607
-                [
+            result = subprocess.run(
+                [  # noqa: S603, S607
                     "ffmpeg",
                     "-i",
                     str(video_path),
@@ -246,8 +246,8 @@ async def get_video_duration(video_path: Path) -> float:
         import subprocess
 
         def probe_duration() -> str:
-            result = subprocess.run(  # noqa: S603, S607
-                [
+            result = subprocess.run(
+                [  # noqa: S603, S607
                     "ffprobe",
                     "-v",
                     "error",
