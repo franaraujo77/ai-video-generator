@@ -272,7 +272,6 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                     else:
                         log.error("task_not_found_for_notion_population", task_id=str(task_id))
                         channel = None
-                        channel_storage_strategy = None
                 # DB connection closed - build video files list outside transaction
 
                 if channel:
@@ -325,7 +324,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                         failed=populate_result["failed"],
                         storage_strategy=populate_result["storage_strategy"],
                     )
-                    notion_populated_successfully = True
+                    # Notion population successful
                 else:
                     log.warning(
                         "channel_not_found_for_notion_population",
@@ -352,7 +351,11 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 task = await db.get(Task, task_id)
                 if task:
                     task.status = TaskStatus.VIDEO_ERROR
-                    task.error_log = f"{task.error_log or ''}\n[{datetime.now(timezone.utc).isoformat()}] Notion video population failed: {e!s}".strip()
+                    timestamp = datetime.now(timezone.utc).isoformat()
+                    task.error_log = (
+                        f"{task.error_log or ''}\n[{timestamp}] "
+                        f"Notion video population failed: {e!s}"
+                    ).strip()
                     await db.commit()
             return
 

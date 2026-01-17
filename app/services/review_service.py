@@ -93,7 +93,7 @@ class ReviewService:
     - Logs all review decisions for audit trail
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ReviewService with shared NotionClient for rate limiting."""
         self._notion_client: NotionClient | None = None
 
@@ -247,7 +247,8 @@ class ReviewService:
             ...         notion_page_id="abc123...",
             ...     )
             >>> print(result)
-            {"status": "rejected", "previous_status": "video_ready", "new_status": "video_error", "reason": "..."}
+            {"status": "rejected", "previous_status": "video_ready",
+             "new_status": "video_error", "reason": "..."}
         """
         if not reason or not reason.strip():
             raise ValueError("Rejection reason is required")
@@ -466,7 +467,9 @@ class ReviewService:
             ...         notion_page_id="abc123...",
             ...     )
             >>> print(result)
-            {"status": "rejected", "previous_status": "audio_ready", "new_status": "audio_error", "reason": "...", "failed_clip_numbers": [3, 7, 12]}
+            {"status": "rejected", "previous_status": "audio_ready",
+             "new_status": "audio_error", "reason": "...",
+             "failed_clip_numbers": [3, 7, 12]}
 
         Story: 5.5 - Audio Review Interface (Task 5: Rejection Flow with Partial Regeneration)
         """
@@ -584,7 +587,8 @@ class ReviewService:
             BulkOperationResult with success/failure counts and error details
 
         Raises:
-            InvalidStateTransitionError: If ANY task has invalid transition (rolls back entire operation)
+            InvalidStateTransitionError: If ANY task has invalid transition
+                (rolls back entire operation)
             ValueError: If more than 100 tasks or channel_id mismatch
 
         Transaction Pattern:
@@ -605,7 +609,8 @@ class ReviewService:
             ...     channel_id="test-channel",
             ... )
             >>> print(
-            ...     f"Updated {result.success_count} tasks, {result.notion_failure_count} Notion failures"
+            ...     f"Updated {result.success_count} tasks, "
+            ...     f"{result.notion_failure_count} Notion failures"
             ... )
         """
         total_count = len(task_ids)
@@ -753,7 +758,8 @@ class ReviewService:
             BulkOperationResult with success/failure counts and error details
 
         Raises:
-            InvalidStateTransitionError: If ANY task has invalid transition (rolls back entire operation)
+            InvalidStateTransitionError: If ANY task has invalid transition
+                (rolls back entire operation)
             ValueError: If reason is empty or more than 100 tasks
 
         Transaction Pattern:
