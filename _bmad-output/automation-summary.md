@@ -239,7 +239,7 @@ Tests expecting old constant formats:
 # Old expectation
 assert PENDING_STATUSES == ("pending",)
 
-# New implementation  
+# New implementation
 PENDING_STATUSES = [TaskStatus.QUEUED]
 ```
 
