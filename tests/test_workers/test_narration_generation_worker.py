@@ -83,7 +83,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=narration_scripts,
             total_cost_usd=0.0,
         )
@@ -160,7 +160,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Test",
             story_direction="Test",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=narration_scripts,
             total_cost_usd=0.0,
         )
@@ -203,7 +203,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Test",
             story_direction="Test",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=narration_scripts,
             total_cost_usd=0.0,
         )
@@ -243,7 +243,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Test",
             story_direction="Test",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=None,  # Missing scripts
             total_cost_usd=0.0,
         )
@@ -284,7 +284,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Test",
             story_direction="Test",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=narration_scripts,
             total_cost_usd=0.0,
         )
@@ -346,7 +346,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Test",
             story_direction="Test",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=narration_scripts,
             total_cost_usd=0.0,
         )
@@ -398,7 +398,7 @@ class TestProcessNarrationGenerationTask:
             title="Test Video",
             topic="Test",
             story_direction="Test",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.VIDEO_APPROVED,
             narration_scripts=narration_scripts,
             total_cost_usd=0.0,
         )

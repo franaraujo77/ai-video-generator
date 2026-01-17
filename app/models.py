@@ -428,7 +428,7 @@ class Task(Base):
         TaskStatus.ASSETS_READY: [TaskStatus.ASSETS_APPROVED, TaskStatus.ASSET_ERROR],
         TaskStatus.ASSETS_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_COMPOSITES],
         # Composite creation phase (OPTIONAL review - auto-proceeds)
-        TaskStatus.GENERATING_COMPOSITES: [TaskStatus.COMPOSITES_READY],
+        TaskStatus.GENERATING_COMPOSITES: [TaskStatus.COMPOSITES_READY, TaskStatus.ASSET_ERROR],
         TaskStatus.COMPOSITES_READY: [TaskStatus.GENERATING_VIDEO],
         # Video generation phase (MANDATORY review gate - expensive step)
         TaskStatus.GENERATING_VIDEO: [TaskStatus.VIDEO_READY, TaskStatus.VIDEO_ERROR],
@@ -439,10 +439,10 @@ class Task(Base):
         TaskStatus.AUDIO_READY: [TaskStatus.AUDIO_APPROVED, TaskStatus.AUDIO_ERROR],
         TaskStatus.AUDIO_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_SFX],
         # Sound effects phase (OPTIONAL review - auto-proceeds)
-        TaskStatus.GENERATING_SFX: [TaskStatus.SFX_READY],
+        TaskStatus.GENERATING_SFX: [TaskStatus.SFX_READY, TaskStatus.AUDIO_ERROR],
         TaskStatus.SFX_READY: [TaskStatus.ASSEMBLING],
         # Assembly phase (OPTIONAL review - auto-proceeds)
-        TaskStatus.ASSEMBLING: [TaskStatus.ASSEMBLY_READY],
+        TaskStatus.ASSEMBLING: [TaskStatus.ASSEMBLY_READY, TaskStatus.VIDEO_ERROR],
         TaskStatus.ASSEMBLY_READY: [TaskStatus.FINAL_REVIEW],
         # Final review and upload phase (MANDATORY review gate - YouTube compliance)
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],

@@ -53,7 +53,7 @@ async def mock_task(async_session, mock_channel):
         title="Test Video",
         topic="Testing",
         story_direction="Test story",
-        status=TaskStatus.AUDIO_READY,  # Previous step complete
+        status=TaskStatus.AUDIO_APPROVED,  # Previous step complete
         sfx_descriptions=[
             f"SFX description {i} with sufficient length for validation" for i in range(1, 19)
         ],
@@ -304,7 +304,7 @@ class TestProcessSFXGenerationTaskEdgeCases:
             title="Test Video",
             topic="Testing",
             story_direction="Test story",
-            status=TaskStatus.AUDIO_READY,
+            status=TaskStatus.AUDIO_APPROVED,
             sfx_descriptions=[f"SFX {i}" for i in range(1, 19)],
         )
         async_session.add(task)
@@ -333,7 +333,7 @@ class TestProcessSFXGenerationTaskEdgeCases:
             title="Test Video",
             topic="Testing",
             story_direction="Test story",
-            status=TaskStatus.AUDIO_READY,
+            status=TaskStatus.AUDIO_APPROVED,
             sfx_descriptions=None,  # Missing descriptions
         )
         async_session.add(task)
