@@ -86,7 +86,7 @@ class WorkerState:
         Gemini/Kling/ElevenLabs limits are worker-local (transient API limits).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize worker state with rate limit and concurrency tracking."""
         from app.config import (
             get_max_concurrent_asset_gen,

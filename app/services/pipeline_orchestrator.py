@@ -606,33 +606,11 @@ class PipelineOrchestrator:
                 voice_id=voice_id,
             )
 
-            # Story 5.5: Support partial regeneration for failed audio clips
-            # Extract failed clip numbers from task metadata (populated by reject_audio)
-            failed_narration_clips = None
-            if (
-                task.step_completion_metadata
-                and "failed_audio_clip_numbers" in task.step_completion_metadata
-            ):
-                failed_narration_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
-                self.log.info(
-                    "partial_narration_regeneration_requested",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                    failed_clips=failed_narration_clips,
-                )
-
+            # TODO Story 5.5: Support partial regeneration for failed audio clips
+            # Requires task object in execute_step signature
             result = await narration_service.generate_narration(
-                narration_manifest, resume=True, clips_to_regenerate=failed_narration_clips
+                narration_manifest, resume=True
             )
-
-            # Clear failed clips from metadata after successful regeneration
-            if failed_narration_clips and task.step_completion_metadata:
-                task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
-                self.log.info(
-                    "cleared_failed_audio_clip_numbers",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                )
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build narration file list from audio directory
@@ -702,33 +680,11 @@ class PipelineOrchestrator:
                 sfx_descriptions=sfx_descriptions,
             )
 
-            # Story 5.5: Support partial regeneration for failed SFX clips
-            # Extract failed clip numbers from task metadata (populated by reject_audio)
-            failed_sfx_clips = None
-            if (
-                task.step_completion_metadata
-                and "failed_audio_clip_numbers" in task.step_completion_metadata
-            ):
-                failed_sfx_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
-                self.log.info(
-                    "partial_sfx_regeneration_requested",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                    failed_clips=failed_sfx_clips,
-                )
-
+            # TODO Story 5.5: Support partial regeneration for failed SFX clips
+            # Requires task object in execute_step signature
             result = await sfx_service.generate_sfx(
-                sfx_manifest, resume=True, clips_to_regenerate=failed_sfx_clips
+                sfx_manifest, resume=True
             )
-
-            # Clear failed clips from metadata after successful regeneration
-            if failed_sfx_clips and task.step_completion_metadata:
-                task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
-                self.log.info(
-                    "cleared_failed_audio_clip_numbers",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                )
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build SFX file list from SFX directory
@@ -993,6 +949,14 @@ class PipelineOrchestrator:
 
             # Create Notion client and asset service outside DB transaction
             notion_token = get_notion_api_token()
+            if not notion_token:
+                self.log.warning(
+                    "notion_token_missing",
+                    correlation_id=self.correlation_id,
+                    message="Skipping Notion asset population - no API token configured",
+                )
+                return
+
             notion_client = NotionClient(notion_token)
             asset_service = NotionAssetService(notion_client, channel)
 

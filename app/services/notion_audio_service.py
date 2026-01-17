@@ -139,7 +139,8 @@ class NotionAudioService:
             ...     ],
             ... )
             >>> print(result)
-            {"created": 2, "failed": 0, "narration_count": 1, "sfx_count": 1, "storage_strategy": "r2"}
+            {"created": 2, "failed": 0, "narration_count": 1, "sfx_count": 1,
+             "storage_strategy": "r2"}
         """
         created = 0
         failed = 0
