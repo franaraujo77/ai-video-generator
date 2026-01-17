@@ -129,17 +129,43 @@ IN_PROGRESS_STATUSES = [
     TaskStatus.CLAIMED,
     TaskStatus.GENERATING_ASSETS,
     TaskStatus.ASSETS_READY,
+    TaskStatus.ASSETS_APPROVED,
     TaskStatus.GENERATING_COMPOSITES,
     TaskStatus.COMPOSITES_READY,
     TaskStatus.GENERATING_VIDEO,
     TaskStatus.VIDEO_READY,
+    TaskStatus.VIDEO_APPROVED,
     TaskStatus.GENERATING_AUDIO,
     TaskStatus.AUDIO_READY,
+    TaskStatus.AUDIO_APPROVED,
     TaskStatus.GENERATING_SFX,
     TaskStatus.SFX_READY,
     TaskStatus.ASSEMBLING,
     TaskStatus.ASSEMBLY_READY,
     TaskStatus.FINAL_REVIEW,
+    TaskStatus.APPROVED,
+]
+
+# Review gate statuses - tasks awaiting user approval (FR54)
+REVIEW_GATE_STATUSES = [
+    TaskStatus.ASSETS_READY,
+    TaskStatus.VIDEO_READY,
+    TaskStatus.AUDIO_READY,
+    TaskStatus.FINAL_REVIEW,
+]
+
+# Error statuses - tasks requiring troubleshooting (FR54)
+ERROR_STATUSES = [
+    TaskStatus.ASSET_ERROR,
+    TaskStatus.VIDEO_ERROR,
+    TaskStatus.AUDIO_ERROR,
+    TaskStatus.UPLOAD_ERROR,
+]
+
+# Terminal statuses - no further processing (FR54)
+TERMINAL_STATUSES = [
+    TaskStatus.PUBLISHED,
+    TaskStatus.CANCELLED,
 ]
 
 

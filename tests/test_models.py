@@ -892,3 +892,116 @@ async def test_review_duration_seconds_returns_none_when_not_started(async_sessi
 
     # Verify property returns None
     assert task.review_duration_seconds is None
+
+
+# Story 5.7: Status Grouping Constants Tests
+
+
+def test_review_gate_statuses_count():
+    """Verify REVIEW_GATE_STATUSES contains exactly 4 statuses."""
+    from app.models import REVIEW_GATE_STATUSES
+
+    assert len(REVIEW_GATE_STATUSES) == 4
+
+
+def test_review_gate_statuses_values():
+    """Verify REVIEW_GATE_STATUSES contains correct enum values."""
+    from app.models import REVIEW_GATE_STATUSES, TaskStatus
+
+    expected = [
+        TaskStatus.ASSETS_READY,
+        TaskStatus.VIDEO_READY,
+        TaskStatus.AUDIO_READY,
+        TaskStatus.FINAL_REVIEW,
+    ]
+    assert set(REVIEW_GATE_STATUSES) == set(expected)
+
+
+def test_error_statuses_count():
+    """Verify ERROR_STATUSES contains exactly 4 statuses."""
+    from app.models import ERROR_STATUSES
+
+    assert len(ERROR_STATUSES) == 4
+
+
+def test_error_statuses_values():
+    """Verify ERROR_STATUSES contains correct enum values."""
+    from app.models import ERROR_STATUSES, TaskStatus
+
+    expected = [
+        TaskStatus.ASSET_ERROR,
+        TaskStatus.VIDEO_ERROR,
+        TaskStatus.AUDIO_ERROR,
+        TaskStatus.UPLOAD_ERROR,
+    ]
+    assert set(ERROR_STATUSES) == set(expected)
+
+
+def test_terminal_statuses_count():
+    """Verify TERMINAL_STATUSES contains exactly 2 statuses."""
+    from app.models import TERMINAL_STATUSES
+
+    assert len(TERMINAL_STATUSES) == 2
+
+
+def test_terminal_statuses_values():
+    """Verify TERMINAL_STATUSES contains correct enum values."""
+    from app.models import TERMINAL_STATUSES, TaskStatus
+
+    expected = [
+        TaskStatus.PUBLISHED,
+        TaskStatus.CANCELLED,
+    ]
+    assert set(TERMINAL_STATUSES) == set(expected)
+
+
+def test_in_progress_statuses_count():
+    """Verify IN_PROGRESS_STATUSES contains exactly 18 statuses."""
+    from app.models import IN_PROGRESS_STATUSES
+
+    assert len(IN_PROGRESS_STATUSES) == 18
+
+
+def test_in_progress_statuses_includes_approved_statuses():
+    """Verify IN_PROGRESS_STATUSES includes approved states from Story 5.7."""
+    from app.models import IN_PROGRESS_STATUSES, TaskStatus
+
+    # Story 5.7 added approved statuses to IN_PROGRESS
+    assert TaskStatus.ASSETS_APPROVED in IN_PROGRESS_STATUSES
+    assert TaskStatus.VIDEO_APPROVED in IN_PROGRESS_STATUSES
+    assert TaskStatus.AUDIO_APPROVED in IN_PROGRESS_STATUSES
+    assert TaskStatus.APPROVED in IN_PROGRESS_STATUSES
+
+
+def test_no_overlap_review_gates_and_errors():
+    """Verify no status is both a review gate and an error state."""
+    from app.models import ERROR_STATUSES, REVIEW_GATE_STATUSES
+
+    overlap = set(REVIEW_GATE_STATUSES) & set(ERROR_STATUSES)
+    assert len(overlap) == 0, f"Unexpected overlap: {overlap}"
+
+
+def test_no_overlap_review_gates_and_terminal():
+    """Verify no status is both a review gate and a terminal state."""
+    from app.models import REVIEW_GATE_STATUSES, TERMINAL_STATUSES
+
+    overlap = set(REVIEW_GATE_STATUSES) & set(TERMINAL_STATUSES)
+    assert len(overlap) == 0, f"Unexpected overlap: {overlap}"
+
+
+def test_all_status_groupings_use_valid_enums():
+    """Verify all status grouping constants use valid TaskStatus enum values."""
+    from app.models import (
+        ERROR_STATUSES,
+        IN_PROGRESS_STATUSES,
+        REVIEW_GATE_STATUSES,
+        TERMINAL_STATUSES,
+        TaskStatus,
+    )
+
+    all_defined_statuses = (
+        REVIEW_GATE_STATUSES + ERROR_STATUSES + TERMINAL_STATUSES + IN_PROGRESS_STATUSES
+    )
+
+    for status in all_defined_statuses:
+        assert isinstance(status, TaskStatus), f"{status} is not a TaskStatus enum member"

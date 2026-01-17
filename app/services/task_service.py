@@ -425,3 +425,144 @@ async def enqueue_task_from_notion_page(
     )
 
     return task
+
+
+# Dashboard query helper functions (Story 5.7)
+
+
+async def get_tasks_needing_review(session: AsyncSession) -> list[Task]:
+    """Fetch tasks at review gates for dashboard view.
+
+    Returns tasks in ASSETS_READY, VIDEO_READY, AUDIO_READY, FINAL_REVIEW statuses,
+    sorted by priority (high first) and created_at (FIFO within priority).
+
+    Uses ix_tasks_status index for optimal performance.
+
+    Args:
+        session: Database session
+
+    Returns:
+        List of Task instances at review gates, ordered by priority desc, created_at asc
+
+    Example:
+        async with AsyncSessionLocal() as db:
+            review_tasks = await get_tasks_needing_review(db)
+            for task in review_tasks:
+                print(f"{task.title}: {task.status.value}")
+    """
+    from sqlalchemy import case
+
+    from app.models import REVIEW_GATE_STATUSES
+
+    # Map priority enum to sortable integer (high=10, normal=5, low=1)
+    priority_order = case(
+        (Task.priority == PriorityLevel.HIGH, 10),
+        (Task.priority == PriorityLevel.NORMAL, 5),
+        (Task.priority == PriorityLevel.LOW, 1),
+        else_=5,
+    )
+
+    stmt = (
+        select(Task)
+        .where(Task.status.in_(REVIEW_GATE_STATUSES))
+        .order_by(
+            priority_order.desc(),  # High priority first (10 > 5 > 1)
+            Task.created_at.asc(),  # FIFO within priority
+        )
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_tasks_with_errors(session: AsyncSession) -> list[Task]:
+    """Fetch tasks in error states for troubleshooting dashboard.
+
+    Returns tasks in ASSET_ERROR, VIDEO_ERROR, AUDIO_ERROR, UPLOAD_ERROR statuses,
+    sorted by updated_at (newest errors first).
+
+    Uses ix_tasks_status index for optimal performance.
+
+    Args:
+        session: Database session
+
+    Returns:
+        List of Task instances in error states, ordered by updated_at desc
+
+    Example:
+        async with AsyncSessionLocal() as db:
+            error_tasks = await get_tasks_with_errors(db)
+            for task in error_tasks:
+                print(f"{task.title}: {task.status.value} - {task.error_log}")
+    """
+    from app.models import ERROR_STATUSES
+
+    stmt = (
+        select(Task)
+        .where(Task.status.in_(ERROR_STATUSES))
+        .order_by(Task.updated_at.desc())  # Recent errors first
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_published_tasks(session: AsyncSession, limit: int = 100) -> list[Task]:
+    """Fetch published tasks with YouTube URLs.
+
+    Returns tasks in PUBLISHED status, sorted by updated_at (newest first).
+    Limited to recent 100 by default to avoid loading entire archive.
+
+    Uses ix_tasks_status index for optimal performance.
+
+    Args:
+        session: Database session
+        limit: Maximum number of tasks to return (default: 100)
+
+    Returns:
+        List of Task instances in PUBLISHED status, ordered by updated_at desc
+
+    Example:
+        async with AsyncSessionLocal() as db:
+            published = await get_published_tasks(db, limit=50)
+            for task in published:
+                print(f"{task.title}: {task.youtube_url}")
+    """
+    stmt = (
+        select(Task)
+        .where(Task.status == TaskStatus.PUBLISHED)
+        .order_by(Task.updated_at.desc())
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_tasks_in_progress(session: AsyncSession) -> list[Task]:
+    """Fetch tasks currently being processed.
+
+    Returns tasks in IN_PROGRESS_STATUSES (18 statuses), sorted by time in status
+    (calculated as now - updated_at) descending to surface stuck tasks.
+
+    Uses ix_tasks_status index for optimal performance.
+
+    Args:
+        session: Database session
+
+    Returns:
+        List of Task instances in progress, ordered by updated_at asc (stuck longest first)
+
+    Example:
+        async with AsyncSessionLocal() as db:
+            in_progress = await get_tasks_in_progress(db)
+            for task in in_progress:
+                duration = datetime.now(timezone.utc) - task.updated_at
+                print(f"{task.title}: {duration.total_seconds() / 60:.0f} minutes in {task.status.value}")
+    """
+    from app.models import IN_PROGRESS_STATUSES
+
+    stmt = (
+        select(Task)
+        .where(Task.status.in_(IN_PROGRESS_STATUSES))
+        .order_by(Task.updated_at.asc())  # Oldest updates first = stuck longest
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())

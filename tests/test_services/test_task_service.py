@@ -572,3 +572,289 @@ async def test_all_task_statuses_categorized():
         # Status must be in exactly one category (not both, not neither)
         assert is_active or is_terminal, f"Status {status.value} not categorized"
         assert not (is_active and is_terminal), f"Status {status.value} in both categories"
+
+
+# Story 5.7: Dashboard Query Helper Function Tests
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_needing_review_returns_only_review_gates(async_session, test_channel):
+    """Verify get_tasks_needing_review() returns only review gate tasks."""
+    from app.services.task_service import get_tasks_needing_review
+
+    # Create tasks in various states
+    task1 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_1",
+        title="Queued Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.QUEUED,
+        priority=PriorityLevel.NORMAL,
+    )
+    task2 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_2",
+        title="Assets Ready Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.ASSETS_READY,
+        priority=PriorityLevel.HIGH,
+    )
+    task3 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_3",
+        title="Video Ready Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.VIDEO_READY,
+        priority=PriorityLevel.NORMAL,
+    )
+    task4 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_4",
+        title="Published Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.PUBLISHED,
+        priority=PriorityLevel.NORMAL,
+    )
+
+    async_session.add_all([task1, task2, task3, task4])
+    await async_session.commit()
+
+    # Query for review gates
+    tasks = await get_tasks_needing_review(async_session)
+
+    assert len(tasks) == 2
+    assert task2 in tasks
+    assert task3 in tasks
+    assert task2 == tasks[0]  # High priority first
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_needing_review_empty_result(async_session):
+    """Verify get_tasks_needing_review() handles empty results gracefully."""
+    from app.services.task_service import get_tasks_needing_review
+
+    # No tasks in review gates
+    tasks = await get_tasks_needing_review(async_session)
+
+    assert len(tasks) == 0
+    assert isinstance(tasks, list)
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_with_errors_returns_only_error_states(async_session, test_channel):
+    """Verify get_tasks_with_errors() returns only error state tasks."""
+    from app.services.task_service import get_tasks_with_errors
+
+    # Create tasks
+    task1 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_1",
+        title="Asset Error Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.ASSET_ERROR,
+        priority=PriorityLevel.NORMAL,
+    )
+    task2 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_2",
+        title="Video Error Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.VIDEO_ERROR,
+        priority=PriorityLevel.NORMAL,
+    )
+    task3 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_3",
+        title="Published Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.PUBLISHED,
+        priority=PriorityLevel.NORMAL,
+    )
+
+    async_session.add_all([task1, task2, task3])
+    await async_session.commit()
+
+    # Query for errors
+    error_tasks = await get_tasks_with_errors(async_session)
+
+    assert len(error_tasks) == 2
+    assert task1 in error_tasks
+    assert task2 in error_tasks
+
+
+@pytest.mark.asyncio
+async def test_get_published_tasks_returns_only_published(async_session, test_channel):
+    """Verify get_published_tasks() returns only published tasks."""
+    from app.services.task_service import get_published_tasks
+
+    # Create tasks
+    task1 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_1",
+        title="Published Task 1",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.PUBLISHED,
+        priority=PriorityLevel.NORMAL,
+    )
+    task2 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_2",
+        title="Published Task 2",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.PUBLISHED,
+        priority=PriorityLevel.NORMAL,
+    )
+    task3 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_3",
+        title="Queued Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.QUEUED,
+        priority=PriorityLevel.NORMAL,
+    )
+
+    async_session.add_all([task1, task2, task3])
+    await async_session.commit()
+
+    # Query for published
+    published = await get_published_tasks(async_session)
+
+    assert len(published) == 2
+    assert task1 in published
+    assert task2 in published
+
+
+@pytest.mark.asyncio
+async def test_get_published_tasks_respects_limit(async_session, test_channel):
+    """Verify get_published_tasks() respects limit parameter."""
+    from app.services.task_service import get_published_tasks
+
+    # Create 5 published tasks
+    tasks = [
+        Task(
+            channel_id=test_channel.id,
+            notion_page_id=f"page_{i}",
+            title=f"Published Task {i}",
+            topic="Testing",
+            story_direction="Test",
+            status=TaskStatus.PUBLISHED,
+            priority=PriorityLevel.NORMAL,
+        )
+        for i in range(5)
+    ]
+
+    async_session.add_all(tasks)
+    await async_session.commit()
+
+    # Query with limit
+    published = await get_published_tasks(async_session, limit=3)
+
+    assert len(published) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_in_progress_returns_in_progress_statuses(async_session, test_channel):
+    """Verify get_tasks_in_progress() returns only in-progress tasks."""
+    from app.services.task_service import get_tasks_in_progress
+
+    # Create tasks
+    task1 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_1",
+        title="Generating Assets",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.GENERATING_ASSETS,
+        priority=PriorityLevel.NORMAL,
+    )
+    task2 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_2",
+        title="Generating Video",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.GENERATING_VIDEO,
+        priority=PriorityLevel.NORMAL,
+    )
+    task3 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_3",
+        title="Published Task",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.PUBLISHED,
+        priority=PriorityLevel.NORMAL,
+    )
+
+    async_session.add_all([task1, task2, task3])
+    await async_session.commit()
+
+    # Query for in progress
+    in_progress = await get_tasks_in_progress(async_session)
+
+    assert len(in_progress) == 2
+    assert task1 in in_progress
+    assert task2 in in_progress
+
+
+@pytest.mark.asyncio
+async def test_get_tasks_needing_review_fifo_within_priority(async_session, test_channel):
+    """Verify get_tasks_needing_review() sorts by priority desc, then created_at asc (FIFO)."""
+    from app.services.task_service import get_tasks_needing_review
+    from datetime import datetime, timezone, timedelta
+
+    # Create tasks with different priorities and creation times
+    base_time = datetime.now(timezone.utc)
+    
+    task1 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_1",
+        title="Normal Priority - Created First",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.ASSETS_READY,
+        priority=PriorityLevel.NORMAL,
+        created_at=base_time,
+    )
+    task2 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_2",
+        title="High Priority - Created Second",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.VIDEO_READY,
+        priority=PriorityLevel.HIGH,
+        created_at=base_time + timedelta(seconds=1),
+    )
+    task3 = Task(
+        channel_id=test_channel.id,
+        notion_page_id="page_3",
+        title="High Priority - Created First",
+        topic="Testing",
+        story_direction="Test",
+        status=TaskStatus.AUDIO_READY,
+        priority=PriorityLevel.HIGH,
+        created_at=base_time,
+    )
+
+    async_session.add_all([task1, task2, task3])
+    await async_session.commit()
+
+    # Query for review gates
+    tasks = await get_tasks_needing_review(async_session)
+
+    # High priority first, then FIFO within high priority
+    assert len(tasks) == 3
+    assert tasks[0] == task3  # High priority, created first
+    assert tasks[1] == task2  # High priority, created second
+    assert tasks[2] == task1  # Normal priority
