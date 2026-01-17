@@ -9,7 +9,7 @@ Key Responsibilities:
 - Reject videos: VIDEO_READY → VIDEO_ERROR (with rejection reason)
 - Validate state transitions using Task.validate_status_change()
 - Update Notion status to reflect review decisions
-- Support batch operations for future enhancements
+- Support bulk operations (Story 5.8: Bulk Approve/Reject Operations)
 
 Architecture Pattern:
     Service (Smart): Validates transitions, updates database, syncs Notion
@@ -20,18 +20,25 @@ Dependencies:
     - Story 5.1: 27-status workflow state machine with review gates
     - Story 5.2: Review gate enforcement (VIDEO_READY → VIDEO_APPROVED transition)
     - Story 5.4: Video review interface in Notion
+    - Story 5.8: Bulk approve/reject operations
     - Epic 2: NotionClient for status synchronization
 
 Usage:
-    from app.services.review_service import ReviewService
+    from app.services.review_service import ReviewService, BulkOperationResult
 
     service = ReviewService()
     await service.approve_videos(task_id=task_id, notion_page_id=page_id)
     await service.reject_videos(task_id=task_id, reason="Quality issues", notion_page_id=page_id)
+
+    # Bulk operations
+    result = await service.bulk_approve_tasks(db, task_ids, TaskStatus.VIDEO_APPROVED)
+    result = await service.bulk_reject_tasks(db, task_ids, "Reason", TaskStatus.VIDEO_ERROR)
 """
 
+from dataclasses import dataclass, field
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.notion import NotionClient
@@ -42,6 +49,30 @@ from app.models import Task, TaskStatus
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
+
+
+@dataclass
+class BulkOperationResult:
+    """Result of bulk approve/reject operation.
+
+    This dataclass contains detailed results of a bulk review operation,
+    including success/failure counts and error details.
+
+    Attributes:
+        total_count: Total number of tasks in the bulk operation
+        success_count: Number of tasks successfully updated in database
+        notion_success_count: Number of tasks successfully synced to Notion
+        notion_failure_count: Number of tasks that failed Notion sync
+        errors: List of detailed error messages
+        failed_task_ids: List of task UUIDs that failed (validation or Notion sync)
+    """
+
+    total_count: int
+    success_count: int
+    notion_success_count: int
+    notion_failure_count: int
+    errors: list[str] = field(default_factory=list)
+    failed_task_ids: list[UUID] = field(default_factory=list)
 
 
 class ReviewService:
@@ -513,6 +544,310 @@ class ReviewService:
                 error=str(e),
             )
             raise
+
+    async def bulk_approve_tasks(
+        self,
+        db: AsyncSession,
+        task_ids: list[UUID],
+        target_status: TaskStatus,
+        correlation_id: str | None = None,
+    ) -> BulkOperationResult:
+        """Approve multiple tasks in a single transaction.
+
+        This method implements bulk approval workflow for Story 5.8.
+        All tasks are validated and updated in a single database transaction.
+        Notion sync happens after commit (non-blocking, graceful partial failure).
+
+        Args:
+            db: Active database session (transaction managed by this method)
+            task_ids: List of task UUIDs to approve (max 100)
+            target_status: Target status (VIDEO_APPROVED, AUDIO_APPROVED, etc.)
+            correlation_id: Correlation ID for logging (optional)
+
+        Returns:
+            BulkOperationResult with success/failure counts and error details
+
+        Raises:
+            InvalidStateTransitionError: If ANY task has invalid transition (rolls back entire operation)
+
+        Transaction Pattern:
+            1. Fetch all tasks in single query
+            2. Validate ALL transitions before ANY update (fail fast)
+            3. Update all task statuses in single transaction
+            4. Commit database changes
+            5. Close database connection
+            6. Loop through tasks and update Notion (async, rate-limited)
+            7. Return success/failure counts
+
+        Example:
+            >>> task_ids = [uuid1, uuid2, uuid3, ...]
+            >>> result = await service.bulk_approve_tasks(
+            ...     db=db,
+            ...     task_ids=task_ids,
+            ...     target_status=TaskStatus.VIDEO_APPROVED
+            ... )
+            >>> print(f"Updated {result.success_count} tasks, {result.notion_failure_count} Notion failures")
+        """
+        total_count = len(task_ids)
+
+        if total_count == 0:
+            return BulkOperationResult(
+                total_count=0,
+                success_count=0,
+                notion_success_count=0,
+                notion_failure_count=0,
+            )
+
+        log.info(
+            "bulk_approve_started",
+            correlation_id=correlation_id,
+            total_count=total_count,
+            target_status=target_status.value,
+        )
+
+        # Step 1: Fetch all tasks in single query
+        result = await db.execute(select(Task).where(Task.id.in_(task_ids)))
+        tasks = list(result.scalars().all())
+
+        if len(tasks) != total_count:
+            log.warning(
+                "bulk_approve_task_count_mismatch",
+                correlation_id=correlation_id,
+                requested=total_count,
+                found=len(tasks),
+            )
+
+        # Step 2: Validate ALL transitions BEFORE any update (fail fast)
+        for task in tasks:
+            previous_status = task.status
+            try:
+                # Set status (triggers validation via Task.status setter)
+                task.status = target_status
+            except (InvalidStateTransitionError, ValueError) as e:
+                # Rollback entire operation if any validation fails
+                log.error(
+                    "bulk_approve_validation_failed",
+                    correlation_id=correlation_id,
+                    task_id=str(task.id),
+                    current_status=previous_status.value,
+                    target_status=target_status.value,
+                    error=str(e),
+                )
+                raise InvalidStateTransitionError(
+                    f"Validation failed for task {task.id}: {e}",
+                    from_status=previous_status,
+                    to_status=target_status,
+                )
+
+        # Step 3: Flush to validate (early error detection)
+        await db.flush()
+
+        log.info(
+            "bulk_approve_database_updated",
+            correlation_id=correlation_id,
+            total_count=len(tasks),
+            target_status=target_status.value,
+        )
+
+        # Step 4: Caller is responsible for committing the transaction
+        # This allows caller to batch operations or rollback if needed
+
+        # Step 5: Loop through tasks and update Notion (async, non-blocking)
+        notion_failures: list[tuple[UUID, str]] = []
+        for task in tasks:
+            if task.notion_page_id:
+                try:
+                    await self._update_notion_status_async(
+                        notion_page_id=task.notion_page_id,
+                        status=target_status,
+                        correlation_id=correlation_id,
+                    )
+                except Exception as e:
+                    notion_failures.append((task.id, str(e)))
+                    log.warning(
+                        "bulk_approve_notion_sync_failed",
+                        correlation_id=correlation_id,
+                        task_id=str(task.id),
+                        error=str(e),
+                    )
+
+        # Step 6: Return results
+        notion_success_count = len(tasks) - len(notion_failures)
+        result_obj = BulkOperationResult(
+            total_count=len(tasks),
+            success_count=len(tasks),
+            notion_success_count=notion_success_count,
+            notion_failure_count=len(notion_failures),
+            errors=[f"Task {tid}: {err}" for tid, err in notion_failures],
+            failed_task_ids=[tid for tid, _ in notion_failures],
+        )
+
+        log.info(
+            "bulk_approve_completed",
+            correlation_id=correlation_id,
+            total_count=result_obj.total_count,
+            success_count=result_obj.success_count,
+            notion_success_count=result_obj.notion_success_count,
+            notion_failure_count=result_obj.notion_failure_count,
+        )
+
+        return result_obj
+
+    async def bulk_reject_tasks(
+        self,
+        db: AsyncSession,
+        task_ids: list[UUID],
+        reason: str,
+        target_status: TaskStatus,
+        correlation_id: str | None = None,
+    ) -> BulkOperationResult:
+        """Reject multiple tasks with common reason in a single transaction.
+
+        This method implements bulk rejection workflow for Story 5.8.
+        All tasks are validated, updated, and have rejection reason appended
+        to their error logs in a single database transaction.
+
+        Args:
+            db: Active database session (transaction managed by this method)
+            task_ids: List of task UUIDs to reject (max 100)
+            reason: Human-readable rejection reason (appended to all error logs)
+            target_status: Target error status (VIDEO_ERROR, AUDIO_ERROR, etc.)
+            correlation_id: Correlation ID for logging (optional)
+
+        Returns:
+            BulkOperationResult with success/failure counts and error details
+
+        Raises:
+            InvalidStateTransitionError: If ANY task has invalid transition (rolls back entire operation)
+            ValueError: If reason is empty
+
+        Transaction Pattern:
+            Same as bulk_approve_tasks, but also appends rejection reason to error logs
+
+        Example:
+            >>> task_ids = [uuid1, uuid2, uuid3, ...]
+            >>> result = await service.bulk_reject_tasks(
+            ...     db=db,
+            ...     task_ids=task_ids,
+            ...     reason="Poor video quality in clips 5, 12",
+            ...     target_status=TaskStatus.VIDEO_ERROR
+            ... )
+        """
+        if not reason or not reason.strip():
+            raise ValueError("Rejection reason is required")
+
+        total_count = len(task_ids)
+
+        if total_count == 0:
+            return BulkOperationResult(
+                total_count=0,
+                success_count=0,
+                notion_success_count=0,
+                notion_failure_count=0,
+            )
+
+        log.info(
+            "bulk_reject_started",
+            correlation_id=correlation_id,
+            total_count=total_count,
+            target_status=target_status.value,
+            reason=reason,
+        )
+
+        # Step 1: Fetch all tasks in single query
+        result = await db.execute(select(Task).where(Task.id.in_(task_ids)))
+        tasks = list(result.scalars().all())
+
+        if len(tasks) != total_count:
+            log.warning(
+                "bulk_reject_task_count_mismatch",
+                correlation_id=correlation_id,
+                requested=total_count,
+                found=len(tasks),
+            )
+
+        # Step 2: Validate ALL transitions BEFORE any update (fail fast)
+        for task in tasks:
+            previous_status = task.status
+            try:
+                # Set status (triggers validation via Task.status setter)
+                task.status = target_status
+
+                # Append rejection reason to error log (preserves history)
+                if task.error_log:
+                    task.error_log += f"\n\nBulk rejection: {reason}"
+                else:
+                    task.error_log = f"Bulk rejection: {reason}"
+
+            except (InvalidStateTransitionError, ValueError) as e:
+                # Rollback entire operation if any validation fails
+                log.error(
+                    "bulk_reject_validation_failed",
+                    correlation_id=correlation_id,
+                    task_id=str(task.id),
+                    current_status=previous_status.value,
+                    target_status=target_status.value,
+                    error=str(e),
+                )
+                raise InvalidStateTransitionError(
+                    f"Validation failed for task {task.id}: {e}",
+                    from_status=previous_status,
+                    to_status=target_status,
+                )
+
+        # Step 3: Flush to validate (early error detection)
+        await db.flush()
+
+        log.info(
+            "bulk_reject_database_updated",
+            correlation_id=correlation_id,
+            total_count=len(tasks),
+            target_status=target_status.value,
+        )
+
+        # Step 4: Caller is responsible for committing the transaction
+        # This allows caller to batch operations or rollback if needed
+
+        # Step 5: Loop through tasks and update Notion (async, non-blocking)
+        notion_failures: list[tuple[UUID, str]] = []
+        for task in tasks:
+            if task.notion_page_id:
+                try:
+                    await self._update_notion_status_async(
+                        notion_page_id=task.notion_page_id,
+                        status=target_status,
+                        correlation_id=correlation_id,
+                    )
+                except Exception as e:
+                    notion_failures.append((task.id, str(e)))
+                    log.warning(
+                        "bulk_reject_notion_sync_failed",
+                        correlation_id=correlation_id,
+                        task_id=str(task.id),
+                        error=str(e),
+                    )
+
+        # Step 6: Return results
+        notion_success_count = len(tasks) - len(notion_failures)
+        result_obj = BulkOperationResult(
+            total_count=len(tasks),
+            success_count=len(tasks),
+            notion_success_count=notion_success_count,
+            notion_failure_count=len(notion_failures),
+            errors=[f"Task {tid}: {err}" for tid, err in notion_failures],
+            failed_task_ids=[tid for tid, _ in notion_failures],
+        )
+
+        log.info(
+            "bulk_reject_completed",
+            correlation_id=correlation_id,
+            total_count=result_obj.total_count,
+            success_count=result_obj.success_count,
+            notion_success_count=result_obj.notion_success_count,
+            notion_failure_count=result_obj.notion_failure_count,
+        )
+
+        return result_obj
 
     async def _update_notion_status_async(
         self,
