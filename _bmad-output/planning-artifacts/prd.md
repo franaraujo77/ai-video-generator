@@ -351,7 +351,7 @@ Francis opens Notion and navigates to his "Video Production Queue" database. He'
 He starts adding entries, typing quickly:
 
 **Row 1:**
-- Title: "Stoicism and Modern Anxiety"  
+- Title: "Stoicism and Modern Anxiety"
 - Channel: Philosophy Matters
 - Topic: "Exploring how Marcus Aurelius's teachings on controlling what you can control apply to modern workplace stress"
 - Story Direction: "Use Meditations quotes, contrast ancient Rome with modern offices, calming tone"
@@ -362,9 +362,9 @@ He continues through all 10 videos - each takes about 5 minutes to flesh out the
 **The moment of activation:** Francis reviews his 10 entries one last time, then batch-selects them all and changes Status from "Draft" to "Queued". He hits save and closes his laptop.
 
 **Tuesday afternoon.** Francis opens Notion to check progress. The status columns are alive:
-- 3 videos show "Assets Ready" 
+- 3 videos show "Assets Ready"
 - 4 videos show "Generating Assets"
-- 2 videos show "Generating Video" 
+- 2 videos show "Generating Video"
 - 1 video shows "Video Ready"
 
 He clicks into "Stoicism and Modern Anxiety" - status is "Assets Ready". The system has generated 22 images (Marcus Aurelius character, Roman settings, modern office environments). He reviews them quickly in the linked asset folder. They look great. He changes the status to "Approved - Assets" and the system immediately shifts to "Generating Video".
@@ -477,7 +477,7 @@ He restarts the orchestration service. The retries start succeeding again.
 
 **Thursday, steady progress.** Francis checks Notion throughout the day:
 - 45 videos "Published"
-- 30 videos in various generation stages  
+- 30 videos in various generation stages
 - 20 videos still "Queued"
 - 5 videos in "Ready" states waiting for his approval
 
@@ -598,7 +598,7 @@ The ai-video-generator system extends its existing CLI automation toolkit with S
   intro_template: "assets/branding/philosophy-intro.mp4"
   outro_template: "assets/branding/philosophy-outro.mp4"
   storage_strategy: "r2"  # or "notion"
-  
+
 - channel_id: "daily-stoic"
   youtube_channel: "UC_DailyStoicXYZ"
   elevenlabs_voice_id: "different_voice_id"
@@ -715,7 +715,7 @@ workflow_config:
       auto_proceed: true       # Skip review gate (cheap step)
       retry_on_failure: true
       max_retries: 3
-    
+
     - id: video_generation
       auto_proceed: false      # Review gate (expensive step)
       clip_count: 18           # Configurable quality

@@ -401,4 +401,3 @@ None
 - `app/services/channel_config_loader.py` - Added sync_to_database(), validate_branding_files() methods
 - `scripts/.env.example` - Added DEFAULT_VOICE_ID, DATABASE_URL, FERNET_KEY documentation
 - `scripts/create_composite.py` - Added output directory creation
-
