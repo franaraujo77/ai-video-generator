@@ -59,10 +59,11 @@ from typing import Any
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
 from app.database import async_session_factory
-from app.models import Task, TaskStatus
+from app.models import Channel, Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
 from app.services.composite_creation import CompositeCreationService
 from app.services.narration_generation import NarrationGenerationService
+from app.services.notion_asset_service import NotionAssetService
 from app.services.notion_sync import TaskSyncData, push_task_to_notion
 from app.services.sfx_generation import SFXGenerationService
 from app.services.video_assembly import VideoAssemblyService
@@ -375,6 +376,26 @@ class PipelineOrchestrator:
                         duration_seconds=completion.duration_seconds,
                     )
 
+                    # Story 5.3: Populate assets in Notion after asset generation
+                    if step == PipelineStep.ASSET_GENERATION and completion.partial_progress:
+                        asset_files = completion.partial_progress.get("asset_files", [])
+                        if asset_files:
+                            try:
+                                await self._populate_assets_in_notion(asset_files)
+                                self.log.info(
+                                    "assets_populated_in_notion",
+                                    task_id=self.task_id,
+                                    asset_count=len(asset_files),
+                                )
+                            except Exception as e:
+                                # Log error but don't fail pipeline - assets are already generated
+                                self.log.error(
+                                    "notion_asset_population_failed",
+                                    task_id=self.task_id,
+                                    error=str(e),
+                                    exc_info=True,
+                                )
+
                     # Story 5.2: Check for review gate after step completion
                     # Update status to "ready" state (e.g., ASSETS_READY, VIDEO_READY)
                     ready_status = STEP_READY_STATUS_MAP.get(step)
@@ -512,6 +533,16 @@ class PipelineOrchestrator:
             manifest = asset_service.create_asset_manifest(topic, story_direction)
             result = await asset_service.generate_assets(manifest, resume=True)
 
+            # Store asset files for Notion population (Story 5.3)
+            asset_files = [
+                {
+                    "asset_type": asset.asset_type,
+                    "name": asset.name,
+                    "output_path": asset.output_path,
+                }
+                for asset in manifest.assets
+            ]
+
             return StepCompletion(
                 step=step,
                 completed=True,
@@ -519,6 +550,7 @@ class PipelineOrchestrator:
                     "generated": result.get("generated", 0),
                     "skipped": result.get("skipped", 0),
                     "total": len(manifest.assets),
+                    "asset_files": asset_files,  # Store for Notion population
                 },
                 duration_seconds=time.time() - step_start,
                 error_message=None,
@@ -686,6 +718,92 @@ class PipelineOrchestrator:
                     continue
 
             return completions
+
+    async def _populate_assets_in_notion(self, asset_files: list[dict[str, Any]]) -> None:
+        """Populate asset entries in Notion after asset generation.
+
+        This method creates Asset database entries in Notion for each generated asset,
+        linking them to the parent task via bidirectional relation property.
+
+        Args:
+            asset_files: List of asset file dicts with keys: asset_type, name, output_path
+
+        Raises:
+            Exception: If Notion population fails (logged but doesn't stop pipeline)
+
+        Integration Point (Story 5.3):
+            Called after ASSET_GENERATION step completes but before ASSETS_READY status
+        """
+        from sqlalchemy.exc import DatabaseError
+
+        try:
+            async with async_session_factory() as db, db.begin():  # type: ignore[misc]
+                task = await db.get(Task, self.task_id)
+                if not task:
+                    self.log.error(
+                        "task_not_found_for_notion_population",
+                        task_id=self.task_id,
+                        correlation_id=self.correlation_id,
+                    )
+                    return
+
+                if not task.notion_page_id:
+                    self.log.warning(
+                        "task_missing_notion_page_id",
+                        task_id=self.task_id,
+                        correlation_id=self.correlation_id,
+                        message="Cannot populate assets in Notion without notion_page_id",
+                    )
+                    return
+
+                # Get channel for storage_strategy
+                channel = await db.get(Channel, task.channel_id)
+                if not channel:
+                    self.log.error(
+                        "channel_not_found",
+                        channel_id=task.channel_id,
+                        correlation_id=self.correlation_id,
+                    )
+                    return
+
+                # Store task data before closing DB connection
+                task_id = task.id
+                notion_page_id = task.notion_page_id
+
+            # Database connection closed here - short transaction pattern
+
+            # Create Notion client and asset service outside DB transaction
+            notion_token = get_notion_api_token()
+            notion_client = NotionClient(notion_token)
+            asset_service = NotionAssetService(notion_client, channel)
+
+            # Populate assets in Notion (no DB connection held during API calls)
+            result = await asset_service.populate_assets(
+                task_id=task_id,
+                notion_page_id=notion_page_id,
+                asset_files=asset_files,
+                correlation_id=self.correlation_id,
+            )
+
+            self.log.info(
+                "notion_assets_created",
+                task_id=self.task_id,
+                correlation_id=self.correlation_id,
+                created=result.get("created", 0),
+                failed=result.get("failed", 0),
+                storage_strategy=result.get("storage_strategy"),
+            )
+
+        except DatabaseError as e:
+            self.log.error(
+                "database_error_during_asset_population",
+                task_id=self.task_id,
+                correlation_id=self.correlation_id,
+                error=str(e),
+                exc_info=True,
+            )
+            # Asset files are already generated, so continue pipeline
+            # Notion population can be retried manually if needed
 
     async def update_task_status(
         self,

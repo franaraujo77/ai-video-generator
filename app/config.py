@@ -151,6 +151,63 @@ def get_notion_database_ids() -> list[str]:
     return [db_id.strip() for db_id in ids_str.split(",") if db_id.strip()]
 
 
+def get_notion_assets_database_id() -> str:
+    """Get Notion Assets database ID from environment.
+
+    Environment Variable:
+        NOTION_ASSETS_DATABASE_ID: Notion Assets database ID for Story 5.3
+        Example: "d8503431f040432eb91c3b033460fbbd"
+
+    Returns:
+        Assets database ID string.
+
+    Raises:
+        ValueError: If NOTION_ASSETS_DATABASE_ID not set.
+
+    Note:
+        This database stores asset file metadata (characters, environments, props)
+        created by the asset generation step. It links to the Tasks database via
+        relation property.
+
+    Story: 5.3 - Asset Review Interface
+    """
+    db_id = os.getenv("NOTION_ASSETS_DATABASE_ID")
+    if not db_id:
+        raise ValueError(
+            "NOTION_ASSETS_DATABASE_ID environment variable is required. "
+            "Set this to your Notion Assets database ID."
+        )
+    return db_id.strip()
+
+
+def get_notion_tasks_collection_id() -> str:
+    """Get Notion Tasks collection ID from environment.
+
+    Environment Variable:
+        NOTION_TASKS_COLLECTION_ID: Notion Tasks collection ID (includes "collection://" prefix)
+        Example: "collection://1b4bdba3-2e09-4cc7-be3b-f6475d49298a"
+
+    Returns:
+        Tasks collection ID string (with collection:// prefix).
+
+    Raises:
+        ValueError: If NOTION_TASKS_COLLECTION_ID not set.
+
+    Note:
+        This is the collection (data source) ID for the Tasks database, used when
+        creating asset entries that need to link back to parent tasks.
+
+    Story: 5.3 - Asset Review Interface
+    """
+    collection_id = os.getenv("NOTION_TASKS_COLLECTION_ID")
+    if not collection_id:
+        raise ValueError(
+            "NOTION_TASKS_COLLECTION_ID environment variable is required. "
+            "Set this to your Notion Tasks collection ID (with 'collection://' prefix)."
+        )
+    return collection_id.strip()
+
+
 def get_notion_sync_interval() -> int:
     """Get Notion sync interval in seconds from environment.
 

@@ -13,6 +13,7 @@ Usage:
 """
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -382,6 +383,120 @@ class NotionClient:
             "Notion API rate limit exceeded after retries",
             attempt_count,
             last_error or Exception("Unknown error"),
+        )
+
+    async def create_page(
+        self, database_id: str, properties: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Create a new page in a Notion database (rate limited, auto-retry).
+
+        Args:
+            database_id: Notion database ID (32-36 chars, with or without dashes)
+            properties: Dictionary of properties for the new page
+
+        Returns:
+            Created page object from Notion API
+
+        Raises:
+            NotionRateLimitError: After 3 failed retry attempts
+            NotionAPIError: On non-retriable errors (401, 403, 400)
+            ValueError: If database_id format is invalid
+
+        Example:
+            >>> properties = {
+            ...     "Name": {"title": [{"text": {"content": "My Page"}}]},
+            ...     "Status": {"select": {"name": "Active"}}
+            ... }
+            >>> page = await client.create_page("abc123", properties)
+        """
+        # Normalize database ID to UUID format (with dashes)
+        normalized_id = self._normalize_database_id(database_id)
+
+        attempt_count = 0
+        last_error: Exception | None = None
+
+        for attempt in range(3):
+            attempt_count = attempt + 1
+            try:
+                async with self.rate_limiter:  # Enforce 3 req/sec limit
+                    response = await self.client.post(
+                        f"{self.base_url}/pages",
+                        headers=self._get_headers(),
+                        json={
+                            "parent": {"database_id": normalized_id},
+                            "properties": properties,
+                        },
+                    )
+
+                    # Check for Retry-After header on 429
+                    if response.status_code == 429:
+                        await self._handle_retry_after(response)
+
+                    # Classify error type for retry logic
+                    if response.status_code in [401, 403, 400]:
+                        # Non-retriable: Fail fast with detailed error
+                        try:
+                            error_body = response.json()
+                            error_message = error_body.get("message", response.text)
+                        except Exception:
+                            error_message = response.text
+
+                        raise NotionAPIError(
+                            f"Non-retriable error: {response.status_code} - {error_message}",
+                            response,
+                        )
+
+                    response.raise_for_status()
+                    return response.json()  # type: ignore[no-any-return]
+
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                if not self._is_retriable_error(e):
+                    raise
+                if attempt < 2:
+                    wait_time = 2**attempt
+                    await asyncio.sleep(wait_time)
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                last_error = e
+                if attempt < 2:
+                    wait_time = 2**attempt
+                    await asyncio.sleep(wait_time)
+
+        # All retries exhausted
+        raise NotionRateLimitError(
+            "Notion API rate limit exceeded after retries",
+            attempt_count,
+            last_error or Exception("Unknown error"),
+        )
+
+    async def upload_file(
+        self, file_path: Path
+    ) -> str:
+        """Upload a file to Notion and return the file URL.
+
+        Note: Notion API currently only supports external file URLs, not direct uploads.
+        This method will need to be implemented using a two-step process:
+        1. Upload file to external storage (e.g., Cloudflare R2, AWS S3)
+        2. Return the public URL
+
+        For now, this is a placeholder that raises NotImplementedError.
+
+        Args:
+            file_path: Path to the file to upload
+
+        Returns:
+            Public URL of the uploaded file
+
+        Raises:
+            NotImplementedError: File upload not yet implemented
+
+        TODO: Implement file upload via:
+        - Option A: Upload to Cloudflare R2, return public URL
+        - Option B: Use Notion's file property with external URL
+        """
+        raise NotImplementedError(
+            "Notion file upload requires external storage. "
+            "Implement R2 upload or use Notion's external file URL property."
         )
 
     async def close(self) -> None:

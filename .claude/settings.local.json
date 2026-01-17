@@ -56,7 +56,18 @@
       "mcp__github__list_pull_requests",
       "mcp__github__get_pull_request_comments",
       "mcp__github__get_pull_request_reviews",
-      "mcp__github__get_pull_request"
+      "mcp__github__get_pull_request",
+      "Bash(echo:*)",
+      "Bash(.env.test <<'EOF'\n# Local testing environment variables\nDATABASE_URL=sqlite+aiosqlite:///./test_local.db\nFERNET_KEY=AAvZyluBzoXWRVErGpk1-CSqmycvPwx3Y1Gdcfe3h_Q=\nEOF)",
+      "Bash(cat:*)",
+      "Bash(__NEW_LINE_6b9feaa88171f99b__ cat <<'EOF'\n\n✅ Test 2: Workers ran independently \\(different iteration counts\\)\nEOF)",
+      "Bash(__NEW_LINE_6b9feaa88171f99b__ cat <<'EOF'\n\n✅ Test 3: All workers received shutdown signal \\(SIGINT\\)\nEOF)",
+      "Bash(__NEW_LINE_2d1cdc4c10241c3a__ cat <<'EOF'\n\n✅ Test 4: All workers shut down gracefully\nEOF)",
+      "Bash(__NEW_LINE_2d1cdc4c10241c3a__ cat <<'EOF'\n\n✅ Test 5: All workers closed database connections\nEOF)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pgqueuer.readthedocs.io)",
+      "WebFetch(domain:pypi.org)",
+      "Bash(pytest:*)"
     ],
     "deny": [],
     "ask": []
