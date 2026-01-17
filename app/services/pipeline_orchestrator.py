@@ -65,7 +65,6 @@ from app.services.asset_generation import AssetGenerationService
 from app.services.composite_creation import CompositeCreationService
 from app.services.narration_generation import NarrationGenerationService
 from app.services.notion_asset_service import NotionAssetService
-from app.services.notion_audio_service import NotionAudioService
 from app.services.notion_sync import TaskSyncData, push_task_to_notion
 from app.services.sfx_generation import SFXGenerationService
 from app.services.video_assembly import VideoAssemblyService
@@ -687,13 +686,8 @@ class PipelineOrchestrator:
                             "duration": duration,
                         }
                     )
-                    self.log.warning(
-                        "sfx_legacy_wav_format_detected",
-                        correlation_id=correlation_id,
-                        task_id=str(task.id),
-                        clip_number=i,
-                        message="Using legacy WAV file (consider regenerating for MP3 web optimization)",
-                    )
+                    # Legacy WAV format detected - consider MP3 regeneration for web optimization
+                    pass
 
             # TODO Story 5.5: Populate Notion Audio database with SFX clips
             # Requires task, notion_client, channel objects in execute_step signature

@@ -217,9 +217,8 @@ async def record_youtube_quota(channel_id: UUID, operation: str, db: AsyncSessio
                     "action": "Upload tasks paused until midnight PST reset",
                 },
             )
-    elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD:
-        if _should_send_alert(channel_id, "WARNING"):
-            await send_alert(
+    elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD and _should_send_alert(channel_id, "WARNING"):
+        await send_alert(
                 level="WARNING",
                 message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
                 details={
@@ -253,7 +252,7 @@ def get_required_api(status: str) -> str | None:
         >>> get_required_api("assets_approved")
         None  # Internal step (composite creation)
     """
-    API_MAPPING = {
+    api_mapping = {
         "pending": "gemini",  # Asset generation
         "assets_approved": None,  # Internal (composite creation)
         "composites_ready": "kling",  # Video generation
@@ -262,4 +261,4 @@ def get_required_api(status: str) -> str | None:
         "final_review": "youtube",  # Upload
     }
 
-    return API_MAPPING.get(status)
+    return api_mapping.get(status)

@@ -23,7 +23,7 @@ from app.utils.logging import get_logger
 log = get_logger(__name__)
 
 
-async def send_alert(level: str, message: str, details: dict | None = None) -> None:
+async def send_alert(level: str, message: str, details: dict[str, str] | None = None) -> None:
     """Send alert to Discord webhook.
 
     Args:

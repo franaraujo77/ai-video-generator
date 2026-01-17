@@ -336,9 +336,7 @@ class TestGetVideoDuration:
         # GIVEN: ffprobe times out after 10 seconds
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ffprobe", 10)):
             # WHEN/THEN: Getting duration raises exception
-            with pytest.raises(
-                Exception
-            ):  # Could be TimeoutError or CLIScriptError depending on implementation
+            with pytest.raises((TimeoutError, CLIScriptError)):
                 await get_video_duration(mock_video_path)
 
     @pytest.mark.asyncio
