@@ -15,12 +15,15 @@ NOTION_TO_INTERNAL_STATUS: dict[str, str] = {
     "Processing": "claimed",
     "Assets Generating": "generating_assets",
     "Assets Ready": "assets_ready",
+    "Assets Approved": "assets_approved",  # Story 5.2: Review gate approval
     "Composites Creating": "generating_composites",
     "Composites Ready": "composites_ready",
     "Videos Generating": "generating_video",
     "Videos Ready": "video_ready",
+    "Videos Approved": "video_approved",  # Story 5.2: Review gate approval
     "Audio Generating": "generating_audio",
     "Audio Ready": "audio_ready",
+    "Audio Approved": "audio_approved",  # Story 5.2: Review gate approval
     "SFX Generating": "generating_sfx",
     "SFX Ready": "sfx_ready",
     "Assembling Video": "assembling",
@@ -33,6 +36,10 @@ NOTION_TO_INTERNAL_STATUS: dict[str, str] = {
     "Uploading": "uploading",
     "Upload Complete": "published",
     # Error states
+    "Asset Error": "asset_error",  # Story 5.2: Assets review rejection
+    "Video Error": "video_error",  # Story 5.2: Video review rejection
+    "Audio Error": "audio_error",  # Story 5.2: Audio review rejection
+    "Upload Error": "upload_error",  # Story 5.2: Final review rejection
     "Error: Invalid Input": "draft",  # Go back to draft for correction
     "Error: API Failure": "asset_error",  # Generic API error
     "Error: Retriable": "asset_error",  # Retriable error
@@ -75,11 +82,11 @@ INTERNAL_TO_NOTION_STATUS: dict[str, str] = {
     # YouTube upload phase
     "uploading": "Uploading",
     "published": "Upload Complete",
-    # Error states
-    "asset_error": "Error: API Failure",
-    "video_error": "Error: API Failure",
-    "audio_error": "Error: API Failure",
-    "upload_error": "Error: API Failure",
+    # Error states (Story 5.2: Review gate rejections)
+    "asset_error": "Asset Error",
+    "video_error": "Video Error",
+    "audio_error": "Audio Error",
+    "upload_error": "Upload Error",
 }
 
 # Valid Notion priority options

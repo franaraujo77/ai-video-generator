@@ -820,3 +820,75 @@ async def test_exception_str_includes_transition_details():
     assert "Invalid transition: draft → published" in error_str
     assert "from=draft" in error_str
     assert "to=published" in error_str
+
+
+@pytest.mark.asyncio
+async def test_review_duration_seconds_property_calculates_correctly(async_session):
+    """Test Task.review_duration_seconds property calculates time spent at review gate."""
+    # Create task with review timestamps
+    task = Task(
+        notion_page_id="test-review-duration-123",
+        channel_id=uuid.uuid4(),
+        title="Test Review Duration",
+        topic="Testing",
+        story_direction="Test story direction",
+        status=TaskStatus.ASSETS_READY,
+    )
+
+    # Set review timestamps (5 minutes 30 seconds apart)
+    start_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    end_time = datetime(2024, 1, 1, 12, 5, 30, tzinfo=timezone.utc)
+    task.review_started_at = start_time
+    task.review_completed_at = end_time
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Verify property calculates correct duration (330 seconds = 5 min 30 sec)
+    assert task.review_duration_seconds == 330
+
+
+@pytest.mark.asyncio
+async def test_review_duration_seconds_returns_none_when_incomplete(async_session):
+    """Test Task.review_duration_seconds returns None if review not completed."""
+    task = Task(
+        notion_page_id="test-incomplete-review-456",
+        channel_id=uuid.uuid4(),
+        title="Test Incomplete Review",
+        topic="Testing",
+        story_direction="Test story direction",
+        status=TaskStatus.ASSETS_READY,
+    )
+
+    # Set only review_started_at (review still in progress)
+    task.review_started_at = datetime.now(timezone.utc)
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Verify property returns None
+    assert task.review_duration_seconds is None
+
+
+@pytest.mark.asyncio
+async def test_review_duration_seconds_returns_none_when_not_started(async_session):
+    """Test Task.review_duration_seconds returns None if review not started."""
+    task = Task(
+        notion_page_id="test-no-review-789",
+        channel_id=uuid.uuid4(),
+        title="Test No Review",
+        topic="Testing",
+        story_direction="Test story direction",
+        status=TaskStatus.GENERATING_ASSETS,
+    )
+
+    # No review timestamps set
+    task.review_started_at = None
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Verify property returns None
+    assert task.review_duration_seconds is None

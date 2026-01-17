@@ -29,6 +29,7 @@ from app.services.notion_sync import (
     extract_date,
     extract_rich_text,
     extract_select,
+    is_approval_transition,
     map_internal_status_to_notion,
     map_notion_priority_to_internal,
     map_notion_status_to_internal,
@@ -854,3 +855,501 @@ async def test_batch_enqueue_20_videos_within_60_seconds(
 
     # Log actual time for monitoring (should be much faster in practice)
     print(f"\n✓ Batch processed 20 videos in {elapsed_time:.3f} seconds")
+
+
+# Tests for approval transition detection (Story 5.2)
+
+
+def test_is_approval_transition_assets_ready_to_approved():
+    """Test ASSETS_READY → ASSETS_APPROVED is detected as approval transition."""
+    assert is_approval_transition(TaskStatus.ASSETS_READY, TaskStatus.ASSETS_APPROVED) is True
+
+
+def test_is_approval_transition_video_ready_to_approved():
+    """Test VIDEO_READY → VIDEO_APPROVED is detected as approval transition."""
+    assert is_approval_transition(TaskStatus.VIDEO_READY, TaskStatus.VIDEO_APPROVED) is True
+
+
+def test_is_approval_transition_audio_ready_to_approved():
+    """Test AUDIO_READY → AUDIO_APPROVED is detected as approval transition."""
+    assert is_approval_transition(TaskStatus.AUDIO_READY, TaskStatus.AUDIO_APPROVED) is True
+
+
+def test_is_approval_transition_final_review_to_approved():
+    """Test FINAL_REVIEW → APPROVED is detected as approval transition."""
+    assert is_approval_transition(TaskStatus.FINAL_REVIEW, TaskStatus.APPROVED) is True
+
+
+def test_is_approval_transition_queued_to_claimed_not_approval():
+    """Test QUEUED → CLAIMED is NOT an approval transition."""
+    assert is_approval_transition(TaskStatus.QUEUED, TaskStatus.CLAIMED) is False
+
+
+def test_is_approval_transition_assets_ready_to_asset_error_not_approval():
+    """Test ASSETS_READY → ASSET_ERROR is NOT an approval transition (rejection)."""
+    assert is_approval_transition(TaskStatus.ASSETS_READY, TaskStatus.ASSET_ERROR) is False
+
+
+def test_is_approval_transition_generating_to_ready_not_approval():
+    """Test GENERATING_ASSETS → ASSETS_READY is NOT an approval transition."""
+    assert is_approval_transition(TaskStatus.GENERATING_ASSETS, TaskStatus.ASSETS_READY) is False
+
+
+def test_is_approval_transition_approved_to_generating_not_approval():
+    """Test ASSETS_APPROVED → GENERATING_COMPOSITES is NOT an approval transition."""
+    assert (
+        is_approval_transition(TaskStatus.ASSETS_APPROVED, TaskStatus.GENERATING_COMPOSITES)
+        is False
+    )
+
+
+def test_is_approval_transition_composites_ready_to_generating_not_approval():
+    """Test COMPOSITES_READY → GENERATING_VIDEO is NOT approval (auto-proceed)."""
+    assert (
+        is_approval_transition(TaskStatus.COMPOSITES_READY, TaskStatus.GENERATING_VIDEO) is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_handle_approval_transition_sets_review_completed_at(async_session):
+    """Test handle_approval_transition sets review_completed_at timestamp."""
+    from app.models import Channel
+    from app.services.notion_sync import handle_approval_transition
+
+    # Create channel and task
+    channel = Channel(channel_id="test-approval-ts", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-approval-123",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.ASSETS_APPROVED,
+    )
+    task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Handle approval transition
+    await handle_approval_transition(task, async_session)
+    await async_session.commit()
+
+    # Verify review_completed_at was set
+    assert task.review_completed_at is not None
+
+    # Verify timestamp is recent (within last 5 seconds)
+    time_diff = (datetime.now(timezone.utc) - task.review_completed_at).total_seconds()
+    assert time_diff < 5
+
+    # Verify status changed to QUEUED
+    assert task.status == TaskStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_handle_approval_transition_calculates_review_duration(async_session):
+    """Test handle_approval_transition logs review duration if review_started_at exists."""
+    from app.models import Channel
+    from app.services.notion_sync import handle_approval_transition
+
+    # Create channel and task
+    channel = Channel(channel_id="test-duration-calc", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-duration-456",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.VIDEO_APPROVED,
+    )
+    task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Handle approval transition
+    await handle_approval_transition(task, async_session)
+    await async_session.commit()
+
+    # Verify both timestamps exist
+    assert task.review_started_at is not None
+    assert task.review_completed_at is not None
+
+    # Verify we can calculate duration
+    duration = (task.review_completed_at - task.review_started_at).total_seconds()
+    assert duration > 0
+
+
+@pytest.mark.asyncio
+async def test_handle_approval_transition_handles_missing_review_started_at(async_session):
+    """Test handle_approval_transition handles case where review_started_at is missing."""
+    from app.models import Channel
+    from app.services.notion_sync import handle_approval_transition
+
+    # Create channel and task
+    channel = Channel(channel_id="test-missing-start", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-missing-789",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.AUDIO_APPROVED,
+    )
+    task.review_started_at = None
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Handle approval transition (should not crash)
+    await handle_approval_transition(task, async_session)
+    await async_session.commit()
+
+    # Verify review_completed_at was still set
+    assert task.review_completed_at is not None
+    # Verify status changed to QUEUED
+    assert task.status == TaskStatus.QUEUED
+
+
+# Story 5.2 Task 4: Rejection Handling Tests
+
+
+@pytest.mark.asyncio
+async def test_is_rejection_transition_detects_all_rejection_gates(async_session):
+    """Test is_rejection_transition correctly identifies all 4 rejection transitions."""
+    from app.services.notion_sync import is_rejection_transition
+
+    # Test all 4 rejection transitions
+    assert is_rejection_transition(TaskStatus.ASSETS_READY, TaskStatus.ASSET_ERROR) is True
+    assert is_rejection_transition(TaskStatus.VIDEO_READY, TaskStatus.VIDEO_ERROR) is True
+    assert is_rejection_transition(TaskStatus.AUDIO_READY, TaskStatus.AUDIO_ERROR) is True
+    assert is_rejection_transition(TaskStatus.FINAL_REVIEW, TaskStatus.UPLOAD_ERROR) is True
+
+    # Test non-rejection transitions
+    assert is_rejection_transition(TaskStatus.ASSETS_READY, TaskStatus.ASSETS_APPROVED) is False
+    assert is_rejection_transition(TaskStatus.QUEUED, TaskStatus.CLAIMED) is False
+    assert is_rejection_transition(TaskStatus.GENERATING_ASSETS, TaskStatus.ASSET_ERROR) is False
+
+
+@pytest.mark.asyncio
+async def test_handle_rejection_transition_sets_review_completed_at(async_session):
+    """Test handle_rejection_transition sets review_completed_at timestamp."""
+    from app.models import Channel
+    from app.services.notion_sync import handle_rejection_transition
+
+    # Create channel and task
+    channel = Channel(channel_id="test-rejection-ts", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-rejection-123",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.ASSET_ERROR,
+    )
+    task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Create mock Notion page without Error Log
+    notion_page = {"properties": {}}
+
+    # Handle rejection transition
+    await handle_rejection_transition(task, notion_page, async_session)
+    await async_session.commit()
+
+    # Verify review_completed_at was set
+    assert task.review_completed_at is not None
+
+    # Verify timestamp is recent (within last 5 seconds)
+    time_diff = (datetime.now(timezone.utc) - task.review_completed_at).total_seconds()
+    assert time_diff < 5
+
+    # Verify status remains at error state
+    assert task.status == TaskStatus.ASSET_ERROR
+
+
+@pytest.mark.asyncio
+async def test_handle_rejection_transition_logs_rejection_reason(async_session):
+    """Test handle_rejection_transition captures rejection reason from Notion Error Log."""
+    from app.models import Channel
+    from app.services.notion_sync import handle_rejection_transition
+
+    # Create channel and task
+    channel = Channel(channel_id="test-rejection-reason", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-rejection-456",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.VIDEO_ERROR,
+        error_log="",
+    )
+    task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Create mock Notion page with Error Log
+    notion_page = {
+        "properties": {
+            "Error Log": {
+                "rich_text": [
+                    {"plain_text": "Video quality is too low, needs re-rendering"}
+                ]
+            }
+        }
+    }
+
+    # Handle rejection transition
+    await handle_rejection_transition(task, notion_page, async_session)
+    await async_session.commit()
+
+    # Verify error log contains rejection reason
+    assert task.error_log is not None
+    assert "Review Rejection" in task.error_log
+    assert "Video quality is too low" in task.error_log
+
+
+@pytest.mark.asyncio
+async def test_handle_rejection_transition_handles_missing_review_started_at(async_session):
+    """Test handle_rejection_transition handles case where review_started_at is missing."""
+    from app.models import Channel
+    from app.services.notion_sync import handle_rejection_transition
+
+    # Create channel and task
+    channel = Channel(channel_id="test-rejection-missing", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-rejection-789",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.AUDIO_ERROR,
+    )
+    task.review_started_at = None
+    task.review_completed_at = None
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Create mock Notion page without Error Log
+    notion_page = {"properties": {}}
+
+    # Handle rejection transition (should not crash)
+    await handle_rejection_transition(task, notion_page, async_session)
+    await async_session.commit()
+
+    # Verify review_completed_at was still set
+    assert task.review_completed_at is not None
+    # Verify status remains at error state
+    assert task.status == TaskStatus.AUDIO_ERROR
+
+
+@pytest.mark.asyncio
+async def test_error_states_allow_manual_retry_to_queued(async_session):
+    """Test that error states can transition to QUEUED for manual retry (Story 5.2 Task 4 Subtask 4.4)."""
+    from app.models import Channel
+
+    # Create channel and task
+    channel = Channel(channel_id="test-retry", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    # Test ASSET_ERROR → QUEUED
+    task1 = Task(
+        channel_id=channel.id,
+        notion_page_id="test-retry-1",
+        title="Test Task 1",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.ASSET_ERROR,
+    )
+    async_session.add(task1)
+    await async_session.commit()
+
+    # Transition to QUEUED (manual retry)
+    task1.status = TaskStatus.QUEUED
+    await async_session.commit()
+    assert task1.status == TaskStatus.QUEUED
+
+    # Test VIDEO_ERROR → QUEUED
+    task2 = Task(
+        channel_id=channel.id,
+        notion_page_id="test-retry-2",
+        title="Test Task 2",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.VIDEO_ERROR,
+    )
+    async_session.add(task2)
+    await async_session.commit()
+
+    task2.status = TaskStatus.QUEUED
+    await async_session.commit()
+    assert task2.status == TaskStatus.QUEUED
+
+    # Test AUDIO_ERROR → QUEUED
+    task3 = Task(
+        channel_id=channel.id,
+        notion_page_id="test-retry-3",
+        title="Test Task 3",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.AUDIO_ERROR,
+    )
+    async_session.add(task3)
+    await async_session.commit()
+
+    task3.status = TaskStatus.QUEUED
+    await async_session.commit()
+    assert task3.status == TaskStatus.QUEUED
+
+
+# Story 5.2 Task 5: Comprehensive Integration Tests
+
+
+@pytest.mark.asyncio
+async def test_approval_transition_requeues_task_for_pipeline_continuation(async_session):
+    """Test approval transition sets status to QUEUED for worker claiming (Story 5.2 Task 5 Subtask 5.5)."""
+    from app.models import Channel
+    from app.services.notion_sync import sync_notion_page_to_task
+
+    # Create channel and task at ASSETS_READY (waiting for approval)
+    channel = Channel(channel_id="test-approval-resume", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-approval-resume-123",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.ASSETS_READY,
+    )
+    task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    async_session.add(task)
+    await async_session.commit()
+
+    # Simulate user approving in Notion (ASSETS_READY → ASSETS_APPROVED)
+    notion_page = {
+        "id": "test-approval-resume-123",
+        "properties": {
+            "Title": {"title": [{"plain_text": "Test Task"}]},
+            "Topic": {"rich_text": [{"plain_text": "Test Topic"}]},
+            "Story Direction": {"rich_text": [{"plain_text": "Test Story"}]},
+            "Channel": {"select": {"name": "Test Channel"}},
+            "Status": {"select": {"name": "Assets Approved"}},
+            "Priority": {"select": {"name": "Medium"}},
+        },
+    }
+
+    # Sync Notion page to task (will detect approval and re-enqueue)
+    await sync_notion_page_to_task(notion_page, async_session)
+    await async_session.commit()
+
+    # Verify task was re-enqueued for worker claiming
+    assert task.status == TaskStatus.QUEUED
+    # Verify review completed timestamp was set
+    assert task.review_completed_at is not None
+    # Verify review duration was calculated
+    assert task.review_duration_seconds is not None
+    assert task.review_duration_seconds > 0
+
+
+@pytest.mark.asyncio
+async def test_rejection_transition_moves_to_error_and_allows_retry(async_session):
+    """Test rejection moves to error state and manual retry works (Story 5.2 Task 5 Subtask 5.6)."""
+    from app.models import Channel
+    from app.services.notion_sync import sync_notion_page_to_task
+
+    # Create channel and task at VIDEO_READY (waiting for approval)
+    channel = Channel(channel_id="test-rejection-retry", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-rejection-retry-456",
+        title="Test Task",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.VIDEO_READY,
+        error_log="",
+    )
+    task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+    async_session.add(task)
+    await async_session.commit()
+
+    # Simulate user rejecting in Notion (VIDEO_READY → VIDEO_ERROR)
+    notion_page_rejected = {
+        "id": "test-rejection-retry-456",
+        "properties": {
+            "Title": {"title": [{"plain_text": "Test Task"}]},
+            "Topic": {"rich_text": [{"plain_text": "Test Topic"}]},
+            "Story Direction": {"rich_text": [{"plain_text": "Test Story"}]},
+            "Channel": {"select": {"name": "Test Channel"}},
+            "Status": {"select": {"name": "Video Error"}},
+            "Priority": {"select": {"name": "Medium"}},
+            "Error Log": {
+                "rich_text": [{"plain_text": "Video quality too low, please regenerate"}]
+            },
+        },
+    }
+
+    # Sync Notion page to task (will detect rejection)
+    await sync_notion_page_to_task(notion_page_rejected, async_session)
+    await async_session.commit()
+
+    # Verify task moved to error state
+    assert task.status == TaskStatus.VIDEO_ERROR
+    # Verify rejection reason was logged
+    assert "Video quality too low" in task.error_log
+    # Verify review completed timestamp was set
+    assert task.review_completed_at is not None
+
+    # Now simulate manual retry: user changes status back to QUEUED
+    notion_page_retry = {
+        "id": "test-rejection-retry-456",
+        "properties": {
+            "Title": {"title": [{"plain_text": "Test Task"}]},
+            "Topic": {"rich_text": [{"plain_text": "Test Topic"}]},
+            "Story Direction": {"rich_text": [{"plain_text": "Test Story"}]},
+            "Channel": {"select": {"name": "Test Channel"}},
+            "Status": {"select": {"name": "Queued"}},
+            "Priority": {"select": {"name": "Medium"}},
+        },
+    }
+
+    # Sync Notion page to task (will detect manual retry)
+    await sync_notion_page_to_task(notion_page_retry, async_session)
+    await async_session.commit()
+
+    # Verify task was re-queued for worker claiming (manual retry)
+    assert task.status == TaskStatus.QUEUED

@@ -16,7 +16,7 @@ Architecture Compliance:
 import asyncio
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import structlog
@@ -34,6 +34,85 @@ from app.database import async_session_factory
 from app.models import PriorityLevel, Task, TaskStatus
 
 log = structlog.get_logger()
+
+
+def is_approval_transition(old_status: TaskStatus, new_status: TaskStatus) -> bool:
+    """Check if a status change represents an approval transition at a review gate.
+
+    Approval transitions occur when a user reviews content at a review gate and approves it,
+    transitioning from a *_READY status to a *_APPROVED status. These transitions require
+    the pipeline to resume execution from the next step.
+
+    Mandatory Review Gates (AC from Story 5.2):
+        - ASSETS_READY → ASSETS_APPROVED (approve expensive video generation)
+        - VIDEO_READY → VIDEO_APPROVED (approve after video generation)
+        - AUDIO_READY → AUDIO_APPROVED (approve before final assembly)
+        - FINAL_REVIEW → APPROVED (approve before YouTube upload)
+
+    Args:
+        old_status: Previous task status (before sync)
+        new_status: New task status (from Notion)
+
+    Returns:
+        True if this is an approval transition, False otherwise
+
+    Example:
+        >>> is_approval_transition(TaskStatus.ASSETS_READY, TaskStatus.ASSETS_APPROVED)
+        True
+        >>> is_approval_transition(TaskStatus.QUEUED, TaskStatus.CLAIMED)
+        False
+
+    Related:
+        - Story 5.2: Review Gate Enforcement
+        - AC4: Detect approval transitions
+        - AC5: Re-enqueue tasks after approval
+    """
+    approval_transitions = {
+        (TaskStatus.ASSETS_READY, TaskStatus.ASSETS_APPROVED),
+        (TaskStatus.VIDEO_READY, TaskStatus.VIDEO_APPROVED),
+        (TaskStatus.AUDIO_READY, TaskStatus.AUDIO_APPROVED),
+        (TaskStatus.FINAL_REVIEW, TaskStatus.APPROVED),
+    }
+    return (old_status, new_status) in approval_transitions
+
+
+def is_rejection_transition(old_status: TaskStatus, new_status: TaskStatus) -> bool:
+    """Check if a status change represents a rejection transition at a review gate.
+
+    Rejection transitions occur when a user reviews content at a review gate and rejects it,
+    transitioning from a *_READY status to a *_ERROR status. These transitions require
+    logging the rejection reason and allowing manual retry.
+
+    Mandatory Review Gates (Task 4 from Story 5.2):
+        - ASSETS_READY → ASSET_ERROR (reject before video generation)
+        - VIDEO_READY → VIDEO_ERROR (reject after video generation)
+        - AUDIO_READY → AUDIO_ERROR (reject before final assembly)
+        - FINAL_REVIEW → UPLOAD_ERROR (reject before YouTube upload)
+
+    Args:
+        old_status: Previous task status (before sync)
+        new_status: New task status (from Notion)
+
+    Returns:
+        True if this is a rejection transition, False otherwise
+
+    Example:
+        >>> is_rejection_transition(TaskStatus.ASSETS_READY, TaskStatus.ASSET_ERROR)
+        True
+        >>> is_rejection_transition(TaskStatus.QUEUED, TaskStatus.CLAIMED)
+        False
+
+    Related:
+        - Story 5.2 Task 4: Rejection Handling
+        - Subtask 4.1: Detect rejection transitions
+    """
+    rejection_transitions = {
+        (TaskStatus.ASSETS_READY, TaskStatus.ASSET_ERROR),
+        (TaskStatus.VIDEO_READY, TaskStatus.VIDEO_ERROR),
+        (TaskStatus.AUDIO_READY, TaskStatus.AUDIO_ERROR),
+        (TaskStatus.FINAL_REVIEW, TaskStatus.UPLOAD_ERROR),
+    }
+    return (old_status, new_status) in rejection_transitions
 
 
 @dataclass
@@ -225,6 +304,123 @@ def validate_notion_entry(page: dict[str, Any]) -> tuple[bool, str | None]:
     return True, None
 
 
+async def handle_approval_transition(task: Task, session: AsyncSession) -> None:
+    """Handle approval transition by re-enqueueing task for pipeline continuation.
+
+    When a user approves content at a review gate (e.g., ASSETS_READY → ASSETS_APPROVED),
+    the task needs to be re-enqueued so a worker can claim it and resume the pipeline
+    from the next step.
+
+    The pipeline orchestrator will:
+    - Load step_completion_metadata to see which steps are complete
+    - Skip already-completed steps
+    - Resume from the next uncompleted step
+
+    Args:
+        task: Task instance with approved status (*_APPROVED)
+        session: Active async database session
+
+    Note:
+        This function is called by the Notion sync loop when an approval transition
+        is detected. The task status is reset to QUEUED so workers can claim it.
+    """
+    correlation_id = str(uuid.uuid4())
+
+    # Story 5.2 Task 3: Set review_completed_at timestamp for observability
+    old_status = task.status
+    now = datetime.now(timezone.utc)
+    task.review_completed_at = now
+    task.updated_at = now
+
+    # Calculate review duration for logging
+    review_duration = None
+    if task.review_started_at:
+        delta = task.review_completed_at - task.review_started_at
+        review_duration = int(delta.total_seconds())
+
+    # Set status to QUEUED so workers can claim task
+    task.status = TaskStatus.QUEUED
+
+    await session.flush()
+
+    log.info(
+        "task_requeued_after_approval",
+        correlation_id=correlation_id,
+        task_id=str(task.id),
+        notion_page_id=task.notion_page_id,
+        approval_status=old_status.value,
+        new_status=task.status.value,
+        review_duration_seconds=review_duration,
+        message="Task re-enqueued for pipeline continuation",
+    )
+
+
+async def handle_rejection_transition(
+    task: Task, notion_page: dict[str, Any], session: AsyncSession
+) -> None:
+    """Handle rejection transition by moving task to error state and logging reason.
+
+    When a user rejects content at a review gate (e.g., ASSETS_READY → ASSET_ERROR),
+    the task needs to be moved to the appropriate error state. The rejection reason
+    from the Notion "Error Log" property should be captured for debugging.
+
+    The user can manually retry by changing the status back to QUEUED in Notion.
+    The pipeline orchestrator will then resume from the beginning of the failed step.
+
+    Args:
+        task: Task instance with error status (*_ERROR)
+        notion_page: Notion page object (to extract Error Log property)
+        session: Active async database session
+
+    Note:
+        This function is called by the Notion sync loop when a rejection transition
+        is detected. The task status is already set to the error state.
+
+    Related:
+        - Story 5.2 Task 4: Rejection Handling
+        - Subtask 4.2: Move task to appropriate error state
+        - Subtask 4.3: Log rejection reason from Notion Error Log property
+    """
+    correlation_id = str(uuid.uuid4())
+
+    # Story 5.2 Task 4: Set review_completed_at timestamp for observability
+    old_status = task.status
+    now = datetime.now(timezone.utc)
+    task.review_completed_at = now
+    task.updated_at = now
+
+    # Calculate review duration for logging
+    review_duration = None
+    if task.review_started_at:
+        delta = task.review_completed_at - task.review_started_at
+        review_duration = int(delta.total_seconds())
+
+    # Story 5.2 Task 4 Subtask 4.3: Extract rejection reason from Notion Error Log property
+    properties = notion_page.get("properties", {})
+    error_log_prop = properties.get("Error Log")
+    rejection_reason = extract_rich_text(error_log_prop) if error_log_prop else None
+
+    # Append rejection reason to task error log if provided
+    if rejection_reason:
+        current_log = task.error_log or ""
+        timestamp = now.isoformat()
+        new_entry = f"[{timestamp}] Review Rejection: {rejection_reason}"
+        task.error_log = f"{current_log}\n{new_entry}".strip()
+
+    await session.flush()
+
+    log.warning(
+        "task_rejected_at_review_gate",
+        correlation_id=correlation_id,
+        task_id=str(task.id),
+        notion_page_id=task.notion_page_id,
+        error_status=old_status.value,
+        rejection_reason=rejection_reason or "No reason provided",
+        review_duration_seconds=review_duration,
+        message="Task rejected at review gate - manual retry available",
+    )
+
+
 async def sync_notion_page_to_task(
     notion_page: dict[str, Any],
     session: AsyncSession,
@@ -303,6 +499,9 @@ async def sync_notion_page_to_task(
     existing_task = result.scalar_one_or_none()
 
     if existing_task:
+        # Store old status for approval transition detection (Story 5.2)
+        old_status = existing_task.status
+
         # Update existing task
         existing_task.title = title
         existing_task.topic = topic
@@ -318,6 +517,14 @@ async def sync_notion_page_to_task(
             title=title,
             status=status_enum.value,
         )
+
+        # Story 5.2: Check for approval transition and re-enqueue if needed
+        if is_approval_transition(old_status, status_enum):
+            await handle_approval_transition(existing_task, session)
+
+        # Story 5.2 Task 4: Check for rejection transition and log rejection reason
+        if is_rejection_transition(old_status, status_enum):
+            await handle_rejection_transition(existing_task, notion_page, session)
 
         return existing_task
     else:

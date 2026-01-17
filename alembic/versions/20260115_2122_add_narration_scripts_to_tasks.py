@@ -19,7 +19,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "20260115_2122"
-down_revision: str | None = "20260115_0001"
+down_revision: str | None = "20260115_0001_add_total_cost_usd"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

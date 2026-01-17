@@ -400,18 +400,18 @@ class Task(Base):
         # Asset generation phase (MANDATORY review gate)
         TaskStatus.GENERATING_ASSETS: [TaskStatus.ASSETS_READY, TaskStatus.ASSET_ERROR],
         TaskStatus.ASSETS_READY: [TaskStatus.ASSETS_APPROVED, TaskStatus.ASSET_ERROR],
-        TaskStatus.ASSETS_APPROVED: [TaskStatus.GENERATING_COMPOSITES],
+        TaskStatus.ASSETS_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_COMPOSITES],
         # Composite creation phase (OPTIONAL review - auto-proceeds)
         TaskStatus.GENERATING_COMPOSITES: [TaskStatus.COMPOSITES_READY],
         TaskStatus.COMPOSITES_READY: [TaskStatus.GENERATING_VIDEO],
         # Video generation phase (MANDATORY review gate - expensive step)
         TaskStatus.GENERATING_VIDEO: [TaskStatus.VIDEO_READY, TaskStatus.VIDEO_ERROR],
         TaskStatus.VIDEO_READY: [TaskStatus.VIDEO_APPROVED, TaskStatus.VIDEO_ERROR],
-        TaskStatus.VIDEO_APPROVED: [TaskStatus.GENERATING_AUDIO],
+        TaskStatus.VIDEO_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_AUDIO],
         # Audio generation phase (MANDATORY review gate)
         TaskStatus.GENERATING_AUDIO: [TaskStatus.AUDIO_READY, TaskStatus.AUDIO_ERROR],
         TaskStatus.AUDIO_READY: [TaskStatus.AUDIO_APPROVED, TaskStatus.AUDIO_ERROR],
-        TaskStatus.AUDIO_APPROVED: [TaskStatus.GENERATING_SFX],
+        TaskStatus.AUDIO_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_SFX],
         # Sound effects phase (OPTIONAL review - auto-proceeds)
         TaskStatus.GENERATING_SFX: [TaskStatus.SFX_READY],
         TaskStatus.SFX_READY: [TaskStatus.ASSEMBLING],
@@ -420,7 +420,7 @@ class Task(Base):
         TaskStatus.ASSEMBLY_READY: [TaskStatus.FINAL_REVIEW],
         # Final review and upload phase (MANDATORY review gate - YouTube compliance)
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
-        TaskStatus.APPROVED: [TaskStatus.UPLOADING],
+        TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING],
         TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR],
         TaskStatus.PUBLISHED: [],  # Terminal state - no transitions allowed
         TaskStatus.CANCELLED: [],  # Terminal state - no transitions allowed
@@ -575,6 +575,18 @@ class Task(Base):
         nullable=True,
     )
 
+    # Review gate timing (Story 5.2)
+    # Tracks time spent waiting at mandatory review gates for quality control
+    # Used for observability: "How long do tasks wait at review gates?"
+    review_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    review_completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     # Timestamps (UTC timezone-aware)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -650,6 +662,30 @@ class Task(Base):
             )
 
         return value
+
+    @property
+    def review_duration_seconds(self) -> int | None:
+        """Calculate time spent at review gate in seconds.
+
+        Used for observability and SLA tracking: "How long do tasks wait for review?"
+
+        Returns:
+            Integer seconds spent at review gate, or None if review not complete.
+
+        Example:
+            >>> task.review_started_at = datetime(2024, 1, 1, 12, 0, 0)
+            >>> task.review_completed_at = datetime(2024, 1, 1, 12, 5, 30)
+            >>> task.review_duration_seconds
+            330  # 5 minutes 30 seconds
+
+        Related:
+            - Story 5.2: Review Gate Enforcement
+            - Subtask 3.3: Calculate review duration for observability
+        """
+        if self.review_started_at and self.review_completed_at:
+            delta = self.review_completed_at - self.review_started_at
+            return int(delta.total_seconds())
+        return None
 
     def __repr__(self) -> str:
         """Return string representation for debugging.

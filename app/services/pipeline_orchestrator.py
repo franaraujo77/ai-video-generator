@@ -73,6 +73,49 @@ from app.utils.logging import get_logger
 log = get_logger(__name__)
 
 
+def is_review_gate(status: TaskStatus) -> bool:
+    """Check if a task status represents a mandatory review gate.
+
+    Review gates are statuses where the pipeline MUST halt and wait for human
+    approval before proceeding. These correspond to the *_READY statuses that
+    require explicit approval transitions to *_APPROVED.
+
+    Mandatory Review Gates:
+        - ASSETS_READY: Expensive video generation step ahead
+        - VIDEO_READY: Expensive and time-consuming (most costly gate)
+        - AUDIO_READY: Committed to final assembly and cost
+        - FINAL_REVIEW: YouTube compliance gate before upload
+
+    Auto-Proceed (NOT review gates):
+        - COMPOSITES_READY: Simple FFmpeg operation, low risk
+        - SFX_READY: Minor cost, can regenerate easily
+        - ASSEMBLY_READY: Final output for review at FINAL_REVIEW gate
+
+    Args:
+        status: TaskStatus enum value to check
+
+    Returns:
+        True if status is a mandatory review gate, False otherwise
+
+    Example:
+        >>> is_review_gate(TaskStatus.ASSETS_READY)
+        True
+        >>> is_review_gate(TaskStatus.COMPOSITES_READY)
+        False
+
+    Related:
+        - Story 5.2: Review Gate Enforcement
+        - AC2: Halt pipeline at review gates
+        - AC3: Auto-proceed for non-review gates
+    """
+    return status in {
+        TaskStatus.ASSETS_READY,
+        TaskStatus.VIDEO_READY,
+        TaskStatus.AUDIO_READY,
+        TaskStatus.FINAL_REVIEW,
+    }
+
+
 class PipelineStep(Enum):
     """Enumeration of pipeline steps in execution order.
 
@@ -148,6 +191,17 @@ STEP_ERROR_MAP = {
     PipelineStep.NARRATION_GENERATION: TaskStatus.AUDIO_ERROR,
     PipelineStep.SFX_GENERATION: TaskStatus.AUDIO_ERROR,  # SFX is audio content
     PipelineStep.VIDEO_ASSEMBLY: TaskStatus.VIDEO_ERROR,  # Assembly produces final video
+}
+
+# Step-to-ready-status mapping (for review gate detection)
+# Maps pipeline steps to their completion "ready" statuses
+STEP_READY_STATUS_MAP = {
+    PipelineStep.ASSET_GENERATION: TaskStatus.ASSETS_READY,
+    PipelineStep.COMPOSITE_CREATION: TaskStatus.COMPOSITES_READY,
+    PipelineStep.VIDEO_GENERATION: TaskStatus.VIDEO_READY,
+    PipelineStep.NARRATION_GENERATION: TaskStatus.AUDIO_READY,
+    PipelineStep.SFX_GENERATION: TaskStatus.SFX_READY,
+    PipelineStep.VIDEO_ASSEMBLY: TaskStatus.ASSEMBLY_READY,
 }
 
 
@@ -320,6 +374,25 @@ class PipelineOrchestrator:
                         step=step.value,
                         duration_seconds=completion.duration_seconds,
                     )
+
+                    # Story 5.2: Check for review gate after step completion
+                    # Update status to "ready" state (e.g., ASSETS_READY, VIDEO_READY)
+                    ready_status = STEP_READY_STATUS_MAP.get(step)
+                    if ready_status:
+                        await self.update_task_status(ready_status)
+
+                        # Check if this is a mandatory review gate
+                        if is_review_gate(ready_status):
+                            self.log.info(
+                                "pipeline_halted_at_review_gate",
+                                task_id=self.task_id,
+                                review_gate=ready_status.value,
+                                step=step.value,
+                                message="Pipeline halted for human review - awaiting approval",
+                            )
+                            # Halt pipeline execution - wait for human approval
+                            return
+
                 except Exception as e:
                     # Classify error as transient (retry) or permanent (fail)
                     is_transient, error_type = self.classify_error(e)
@@ -645,6 +718,15 @@ class PipelineOrchestrator:
                     timestamp = datetime.now(timezone.utc).isoformat()
                     new_entry = f"[{timestamp}] {status.value}: {error_message}"
                     task.error_log = f"{current_log}\n{new_entry}".strip()
+
+                # Story 5.2 Task 3: Set review_started_at when entering review gate
+                if is_review_gate(status):
+                    task.review_started_at = datetime.now(timezone.utc)
+                    self.log.info(
+                        "review_gate_entered",
+                        status=status.value,
+                        review_started_at=task.review_started_at.isoformat(),
+                    )
 
                 self.log.info(
                     "status_updated",
