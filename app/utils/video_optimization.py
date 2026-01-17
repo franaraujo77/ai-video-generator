@@ -75,7 +75,7 @@ async def is_video_optimized(video_path: Path) -> bool:
         import subprocess
 
         def check_probe() -> str:
-            result = subprocess.run(  # noqa: S607
+            result = subprocess.run(  # noqa: S603, S607
                 [
                     "ffprobe",
                     "-v",
@@ -152,13 +152,12 @@ async def optimize_video_for_streaming(video_path: Path, force: bool = False) ->
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
     # Check if already optimized (unless force=True)
-    if not force:
-        if await is_video_optimized(video_path):
-            log.info(
-                "video_already_optimized",
-                path=str(video_path),
-            )
-            return False
+    if not force and await is_video_optimized(video_path):
+        log.info(
+            "video_already_optimized",
+            path=str(video_path),
+        )
+        return False
 
     # Create temp file path for atomic replacement
     temp_path = video_path.with_suffix(".temp.mp4")
@@ -176,7 +175,7 @@ async def optimize_video_for_streaming(video_path: Path, force: bool = False) ->
         import subprocess
 
         def run_ffmpeg() -> None:
-            result = subprocess.run(  # noqa: S607
+            result = subprocess.run(  # noqa: S603, S607
                 [
                     "ffmpeg",
                     "-i",
@@ -247,7 +246,7 @@ async def get_video_duration(video_path: Path) -> float:
         import subprocess
 
         def probe_duration() -> str:
-            result = subprocess.run(  # noqa: S607
+            result = subprocess.run(  # noqa: S603, S607
                 [
                     "ffprobe",
                     "-v",
