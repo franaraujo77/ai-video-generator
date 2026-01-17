@@ -227,7 +227,6 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
         # Step 3.5: Optimize videos and populate Notion (Story 5.4)
         # Optimize videos for streaming playback (MP4 faststart)
         # Then populate Video entries in Notion database
-        notion_populated_successfully = False
         try:
             log.info(
                 "video_optimization_started",
@@ -268,7 +267,6 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                     if task:
                         await db.refresh(task, ["channel"])
                         channel = task.channel
-                        channel_storage_strategy = channel.storage_strategy
                     else:
                         log.error("task_not_found_for_notion_population", task_id=str(task_id))
                         channel = None

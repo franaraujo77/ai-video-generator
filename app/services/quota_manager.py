@@ -211,27 +211,26 @@ async def record_youtube_quota(channel_id: UUID, operation: str, db: AsyncSessio
                 message=f"YouTube quota exhausted for channel {channel_id}",
                 details={
                     "channel_id": str(channel_id),
-                    "usage": quota.units_used,
-                    "limit": quota.daily_limit,
+                    "usage": str(quota.units_used),
+                    "limit": str(quota.daily_limit),
                     "percentage": f"{percentage * 100:.0f}%",
                     "action": "Upload tasks paused until midnight PST reset",
                 },
             )
-    elif (
-        percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD
-        and _should_send_alert(channel_id, "WARNING")
+    elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD and _should_send_alert(
+        channel_id, "WARNING"
     ):
         await send_alert(
-                level="WARNING",
-                message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
-                details={
-                    "channel_id": str(channel_id),
-                    "usage": quota.units_used,
-                    "limit": quota.daily_limit,
-                    "percentage": f"{percentage * 100:.0f}%",
-                    "remaining": quota.daily_limit - quota.units_used,
-                },
-            )
+            level="WARNING",
+            message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
+            details={
+                "channel_id": str(channel_id),
+                "usage": str(quota.units_used),
+                "limit": str(quota.daily_limit),
+                "percentage": f"{percentage * 100:.0f}%",
+                "remaining": str(quota.daily_limit - quota.units_used),
+            },
+        )
 
 
 def get_required_api(status: str) -> str | None:
