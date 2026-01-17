@@ -217,7 +217,10 @@ async def record_youtube_quota(channel_id: UUID, operation: str, db: AsyncSessio
                     "action": "Upload tasks paused until midnight PST reset",
                 },
             )
-    elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD and _should_send_alert(channel_id, "WARNING"):
+    elif (
+        percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD
+        and _should_send_alert(channel_id, "WARNING")
+    ):
         await send_alert(
                 level="WARNING",
                 message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
