@@ -57,6 +57,7 @@ ACTIVE_TASK_STATUSES = {
 TERMINAL_TASK_STATUSES = {
     TaskStatus.DRAFT,  # Notion-only state, not in DB (but included for completeness)
     TaskStatus.PUBLISHED,  # Successfully completed
+    TaskStatus.CANCELLED,  # User cancelled task (allow re-queue if un-cancelled)
     TaskStatus.ASSET_ERROR,  # Failed states (recoverable)
     TaskStatus.VIDEO_ERROR,
     TaskStatus.AUDIO_ERROR,

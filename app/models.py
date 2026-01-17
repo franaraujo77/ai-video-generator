@@ -422,13 +422,13 @@ class Task(Base):
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
         TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING],
         TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR],
-        TaskStatus.PUBLISHED: [],  # Terminal state - no transitions allowed
-        TaskStatus.CANCELLED: [],  # Terminal state - no transitions allowed
+        TaskStatus.PUBLISHED: [TaskStatus.QUEUED],  # Allow manual re-queue for content updates
+        TaskStatus.CANCELLED: [TaskStatus.QUEUED],  # Allow manual re-queue after un-cancel
         # Error recovery paths (retry by returning to QUEUED)
         TaskStatus.ASSET_ERROR: [TaskStatus.QUEUED],
         TaskStatus.VIDEO_ERROR: [TaskStatus.QUEUED],
         TaskStatus.AUDIO_ERROR: [TaskStatus.QUEUED],
-        TaskStatus.UPLOAD_ERROR: [TaskStatus.FINAL_REVIEW],  # Re-review before re-upload
+        TaskStatus.UPLOAD_ERROR: [TaskStatus.QUEUED, TaskStatus.FINAL_REVIEW],  # Allow full retry or re-review
     }
 
     # Primary key
