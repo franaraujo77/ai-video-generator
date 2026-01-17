@@ -689,10 +689,15 @@ async def test_published_is_terminal_state(async_session):
     async_session.add(task)
     await async_session.commit()
 
-    # Verify PUBLISHED has no valid transitions
-    assert Task.VALID_TRANSITIONS[TaskStatus.PUBLISHED] == []
+    # Verify PUBLISHED allows re-queue for content updates
+    assert Task.VALID_TRANSITIONS[TaskStatus.PUBLISHED] == [TaskStatus.QUEUED]
 
-    # Attempt to transition from PUBLISHED should fail
+    # Valid transition: PUBLISHED → QUEUED (for content updates)
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    # Invalid transition should still fail
+    task.__dict__["status"] = TaskStatus.PUBLISHED  # Reset to PUBLISHED
     with pytest.raises(InvalidStateTransitionError) as exc_info:
         task.status = TaskStatus.DRAFT
 
@@ -722,14 +727,19 @@ async def test_cancelled_is_terminal_state(async_session):
     async_session.add(task)
     await async_session.commit()
 
-    # Verify CANCELLED has no valid transitions
-    assert Task.VALID_TRANSITIONS[TaskStatus.CANCELLED] == []
+    # Verify CANCELLED allows re-queue if user wants to retry
+    assert Task.VALID_TRANSITIONS[TaskStatus.CANCELLED] == [TaskStatus.QUEUED]
 
-    # Attempt to transition from CANCELLED should fail
+    # Valid transition: CANCELLED → QUEUED (for retry)
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    # Invalid transition should still fail
+    task.__dict__["status"] = TaskStatus.CANCELLED  # Reset to CANCELLED
     with pytest.raises(InvalidStateTransitionError) as exc_info:
-        task.status = TaskStatus.QUEUED
+        task.status = TaskStatus.DRAFT
 
-    assert "Invalid transition: cancelled → queued" in str(exc_info.value)
+    assert "Invalid transition: cancelled → draft" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
