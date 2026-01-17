@@ -25,7 +25,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 from app.models import Task, TaskStatus, Channel
-from app.services.webhook_handler import _extract_clip_numbers, _handle_approval_status_change, _handle_rejection_status_change
+from app.services.webhook_handler import (
+    _extract_clip_numbers,
+    _handle_approval_status_change,
+    _handle_rejection_status_change,
+)
 from app.workers.video_generation_worker import process_video_generation_task
 
 
@@ -132,7 +136,9 @@ class TestVideoReviewRejectionFlow:
             "properties": {
                 "Error Log": {
                     "rich_text": [
-                        {"plain_text": "Bad motion quality in clips 5, 12, 17. Regenerate these clips."}
+                        {
+                            "plain_text": "Bad motion quality in clips 5, 12, 17. Regenerate these clips."
+                        }
                     ]
                 }
             }
@@ -195,38 +201,39 @@ class TestPartialRegeneration:
             topic="Pikachu",
             story_direction="Epic nature battles",
             status=TaskStatus.QUEUED,
-            step_completion_metadata={
-                "failed_clip_numbers": [5, 12, 17]
-            },
+            step_completion_metadata={"failed_clip_numbers": [5, 12, 17]},
         )
         db_session.add(task)
         await db_session.commit()
 
         # Mock video generation service
-        with patch("app.workers.video_generation_worker.VideoGenerationService") as mock_service_class:
+        with patch(
+            "app.workers.video_generation_worker.VideoGenerationService"
+        ) as mock_service_class:
             mock_service = MagicMock()
             mock_service_class.return_value = mock_service
 
             # Mock manifest creation
             mock_manifest = MagicMock()
-            mock_manifest.clips = [
-                {"clip_number": i, "prompt": f"Clip {i}"}
-                for i in range(1, 19)
-            ]
+            mock_manifest.clips = [{"clip_number": i, "prompt": f"Clip {i}"} for i in range(1, 19)]
             mock_service.create_video_manifest.return_value = mock_manifest
 
             # Mock video generation
-            mock_service.generate_videos = AsyncMock(return_value={
-                "generated": 3,
-                "skipped": 0,
-                "failed": 0,
-                "total_cost_usd": 0.84,  # 3 clips x $0.28
-            })
+            mock_service.generate_videos = AsyncMock(
+                return_value={
+                    "generated": 3,
+                    "skipped": 0,
+                    "failed": 0,
+                    "total_cost_usd": 0.84,  # 3 clips x $0.28
+                }
+            )
             mock_service.get_video_path = MagicMock()
             mock_service.cleanup = AsyncMock()
 
             # Mock Notion population
-            with patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None):
+            with patch(
+                "app.workers.video_generation_worker.get_notion_api_token", return_value=None
+            ):
                 # Act
                 await process_video_generation_task(task.id)
 
@@ -317,13 +324,7 @@ class Test60SecondReviewWorkflow:
 
         # Mock Notion page
         notion_page = {
-            "properties": {
-                "Error Log": {
-                    "rich_text": [
-                        {"plain_text": "Regenerate clips 5, 12"}
-                    ]
-                }
-            }
+            "properties": {"Error Log": {"rich_text": [{"plain_text": "Regenerate clips 5, 12"}]}}
         }
 
         # Act: Fast rejection (within 60 seconds)

@@ -119,9 +119,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
             if required_api == "youtube":
                 # Check YouTube quota before upload
                 quota_available = await check_youtube_quota(
-                    channel_id=task.channel_id,
-                    operation="upload",
-                    db=db
+                    channel_id=task.channel_id, operation="upload", db=db
                 )
                 if not quota_available:
                     rate_limit_hit = True
@@ -129,7 +127,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         "youtube_quota_exhausted_releasing_task",
                         task_id=task_id,
                         channel_id=task.channel_id,
-                        status=task.status.value
+                        status=task.status.value,
                     )
 
             elif required_api == "gemini":
@@ -140,7 +138,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         "asset_concurrency_limit_releasing_task",
                         task_id=task_id,
                         active_tasks=worker_state.active_asset_tasks,
-                        max_concurrent=worker_state.max_concurrent_asset_gen
+                        max_concurrent=worker_state.max_concurrent_asset_gen,
                     )
                 # Then check Gemini quota flag (worker-local) with auto-reset (Story 4.5)
                 elif not worker_state.check_gemini_quota_available():
@@ -149,7 +147,9 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         "gemini_quota_exhausted_releasing_task",
                         task_id=task_id,
                         status=task.status.value,
-                        reset_time=worker_state.gemini_quota_reset_time.isoformat() if worker_state.gemini_quota_reset_time else None
+                        reset_time=worker_state.gemini_quota_reset_time.isoformat()
+                        if worker_state.gemini_quota_reset_time
+                        else None,
                     )
 
             elif required_api == "kling":
@@ -160,7 +160,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         "kling_concurrency_limit_releasing_task",
                         task_id=task_id,
                         active_tasks=worker_state.active_video_tasks,
-                        max_concurrent=worker_state.max_concurrent_video
+                        max_concurrent=worker_state.max_concurrent_video,
                     )
 
             elif required_api == "elevenlabs":
@@ -171,7 +171,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         "audio_concurrency_limit_releasing_task",
                         task_id=task_id,
                         active_tasks=worker_state.active_audio_tasks,
-                        max_concurrent=worker_state.max_concurrent_audio_gen
+                        max_concurrent=worker_state.max_concurrent_audio_gen,
                     )
 
             # If rate limit hit, release task back to queue
@@ -182,12 +182,13 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                     "task_released_due_to_rate_limit",
                     task_id=task_id,
                     required_api=required_api,
-                    worker_id=worker_id
+                    worker_id=worker_id,
                 )
                 # Return early - don't process this task
                 return
 
-            # Increment task counters for tracked API types (Story 4.5: video, Story 4.6: asset/audio)
+            # Increment task counters for tracked API types
+            # (Story 4.5: video, Story 4.6: asset/audio)
             if required_api == "kling":
                 worker_state.increment_video_tasks()
             elif required_api == "gemini":
@@ -243,7 +244,8 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                     )
             raise
         finally:
-            # Decrement task counters for tracked API types (Story 4.5: video, Story 4.6: asset/audio)
+            # Decrement task counters for tracked API types
+            # (Story 4.5: video, Story 4.6: asset/audio)
             if required_api == "kling":
                 worker_state.decrement_video_tasks()
             elif required_api == "gemini":

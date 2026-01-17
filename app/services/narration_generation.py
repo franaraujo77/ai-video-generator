@@ -333,8 +333,7 @@ class NarrationGenerationService:
         clips_to_generate = manifest.clips
         if clips_to_regenerate is not None:
             clips_to_generate = [
-                clip for clip in manifest.clips
-                if clip.clip_number in clips_to_regenerate
+                clip for clip in manifest.clips if clip.clip_number in clips_to_regenerate
             ]
             self.log.info(
                 "partial_narration_regeneration",

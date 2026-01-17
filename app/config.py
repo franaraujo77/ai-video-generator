@@ -297,8 +297,8 @@ def get_notion_sync_interval() -> int:
 
 # Parallelism defaults (Story 4.6)
 DEFAULT_MAX_CONCURRENT_ASSET = 12  # Gemini: no published limit, conservative
-DEFAULT_MAX_CONCURRENT_VIDEO = 3   # Kling: 10 global limit, 3 workers × 3 = 9 total
-DEFAULT_MAX_CONCURRENT_AUDIO = 6   # ElevenLabs: no published limit, conservative
+DEFAULT_MAX_CONCURRENT_VIDEO = 3  # Kling: 10 global limit, 3 workers x 3 = 9 total
+DEFAULT_MAX_CONCURRENT_AUDIO = 6  # ElevenLabs: no published limit, conservative
 
 # Video generation defaults (Story 5.4)
 DEFAULT_VIDEO_DURATION_SECONDS = 10.0  # Kling generates 10-second clips by default

@@ -284,11 +284,13 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                             try:
                                 # Get actual duration after trimming
                                 duration = await get_video_duration(video_path)
-                                video_files.append({
-                                    "clip_number": clip["clip_number"],
-                                    "output_path": video_path,
-                                    "duration": duration,
-                                })
+                                video_files.append(
+                                    {
+                                        "clip_number": clip["clip_number"],
+                                        "output_path": video_path,
+                                        "duration": duration,
+                                    }
+                                )
                             except Exception as e:
                                 log.warning(
                                     "video_duration_probe_failed",
@@ -297,11 +299,13 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                                     error=str(e),
                                 )
                                 # Use default 10s duration if probe fails
-                                video_files.append({
-                                    "clip_number": clip["clip_number"],
-                                    "output_path": video_path,
-                                    "duration": 10.0,
-                                })
+                                video_files.append(
+                                    {
+                                        "clip_number": clip["clip_number"],
+                                        "output_path": video_path,
+                                        "duration": 10.0,
+                                    }
+                                )
 
                     # Populate Notion Videos database
                     notion_client = NotionClient(auth_token=notion_token)
@@ -348,7 +352,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 task = await db.get(Task, task_id)
                 if task:
                     task.status = TaskStatus.VIDEO_ERROR
-                    task.error_log = f"{task.error_log or ''}\n[{datetime.now(timezone.utc).isoformat()}] Notion video population failed: {str(e)}".strip()
+                    task.error_log = f"{task.error_log or ''}\n[{datetime.now(timezone.utc).isoformat()}] Notion video population failed: {e!s}".strip()
                     await db.commit()
             return
 

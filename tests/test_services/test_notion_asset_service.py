@@ -49,8 +49,10 @@ def mock_channel():
 def notion_asset_service(mock_notion_client, mock_channel):
     """Create NotionAssetService instance with mocks."""
     # Mock config functions to return test IDs (Story 5.3 code review fix)
-    with patch("app.services.notion_asset_service.get_notion_assets_database_id") as mock_assets_id, \
-         patch("app.services.notion_asset_service.get_notion_tasks_collection_id") as mock_tasks_id:
+    with (
+        patch("app.services.notion_asset_service.get_notion_assets_database_id") as mock_assets_id,
+        patch("app.services.notion_asset_service.get_notion_tasks_collection_id") as mock_tasks_id,
+    ):
         mock_assets_id.return_value = "d8503431f040432eb91c3b033460fbbd"
         mock_tasks_id.return_value = "collection://1b4bdba3-2e09-4cc7-be3b-f6475d49298a"
         return NotionAssetService(mock_notion_client, mock_channel)
@@ -91,8 +93,14 @@ class TestNotionAssetService:
         notion_page_id = "abc123def456"
 
         # Mock config functions
-        with patch("app.services.notion_asset_service.get_notion_assets_database_id") as mock_assets_id, \
-             patch("app.services.notion_asset_service.get_notion_tasks_collection_id") as mock_tasks_id:
+        with (
+            patch(
+                "app.services.notion_asset_service.get_notion_assets_database_id"
+            ) as mock_assets_id,
+            patch(
+                "app.services.notion_asset_service.get_notion_tasks_collection_id"
+            ) as mock_tasks_id,
+        ):
             mock_assets_id.return_value = "test_assets_db"
             mock_tasks_id.return_value = "test_tasks_collection"
 
@@ -114,9 +122,7 @@ class TestNotionAssetService:
             assert mock_notion_client.create_page.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_create_asset_entry_properties(
-        self, mock_notion_client, mock_channel
-    ):
+    async def test_create_asset_entry_properties(self, mock_notion_client, mock_channel):
         """Test asset entry created with correct properties."""
         # Arrange
         notion_page_id = "abc123def456"
@@ -125,8 +131,14 @@ class TestNotionAssetService:
         asset_path = Path("/workspace/assets/bulbasaur_resting.png")
 
         # Mock config functions
-        with patch("app.services.notion_asset_service.get_notion_assets_database_id") as mock_assets_id, \
-             patch("app.services.notion_asset_service.get_notion_tasks_collection_id") as mock_tasks_id:
+        with (
+            patch(
+                "app.services.notion_asset_service.get_notion_assets_database_id"
+            ) as mock_assets_id,
+            patch(
+                "app.services.notion_asset_service.get_notion_tasks_collection_id"
+            ) as mock_tasks_id,
+        ):
             mock_assets_id.return_value = "test_assets_db"
             mock_tasks_id.return_value = "test_tasks_collection"
 
@@ -158,17 +170,21 @@ class TestNotionAssetService:
             assert "File URL" in properties  # Story 5.3 code review fix
 
     @pytest.mark.asyncio
-    async def test_populate_assets_r2_strategy(
-        self, mock_notion_client, sample_asset_files
-    ):
+    async def test_populate_assets_r2_strategy(self, mock_notion_client, sample_asset_files):
         """Test asset population with R2 storage strategy."""
         # Arrange
         mock_channel = MagicMock(spec=Channel)
         mock_channel.storage_strategy = "r2"
 
         # Mock config functions
-        with patch("app.services.notion_asset_service.get_notion_assets_database_id") as mock_assets_id, \
-             patch("app.services.notion_asset_service.get_notion_tasks_collection_id") as mock_tasks_id:
+        with (
+            patch(
+                "app.services.notion_asset_service.get_notion_assets_database_id"
+            ) as mock_assets_id,
+            patch(
+                "app.services.notion_asset_service.get_notion_tasks_collection_id"
+            ) as mock_tasks_id,
+        ):
             mock_assets_id.return_value = "test_assets_db"
             mock_tasks_id.return_value = "test_tasks_collection"
 
@@ -198,8 +214,14 @@ class TestNotionAssetService:
         notion_page_id = "abc123def456"
 
         # Mock config functions
-        with patch("app.services.notion_asset_service.get_notion_assets_database_id") as mock_assets_id, \
-             patch("app.services.notion_asset_service.get_notion_tasks_collection_id") as mock_tasks_id:
+        with (
+            patch(
+                "app.services.notion_asset_service.get_notion_assets_database_id"
+            ) as mock_assets_id,
+            patch(
+                "app.services.notion_asset_service.get_notion_tasks_collection_id"
+            ) as mock_tasks_id,
+        ):
             mock_assets_id.return_value = "test_assets_db"
             mock_tasks_id.return_value = "test_tasks_collection"
 

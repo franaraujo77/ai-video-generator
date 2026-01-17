@@ -295,8 +295,7 @@ class SFXGenerationService:
         clips_to_generate = manifest.clips
         if clips_to_regenerate is not None:
             clips_to_generate = [
-                clip for clip in manifest.clips
-                if clip.clip_number in clips_to_regenerate
+                clip for clip in manifest.clips if clip.clip_number in clips_to_regenerate
             ]
             self.log.info(
                 "partial_sfx_regeneration",
@@ -337,9 +336,12 @@ class SFXGenerationService:
                 await run_cli_script(
                     "generate_sound_effects.py",
                     [
-                        "--text", clip.sfx_description,
-                        "--output", str(clip.output_path),
-                        "--format", "mp3_44100_128",  # MP3 format for web playback
+                        "--text",
+                        clip.sfx_description,
+                        "--output",
+                        str(clip.output_path),
+                        "--format",
+                        "mp3_44100_128",  # MP3 format for web playback
                     ],
                     timeout=60,  # 1 minute max per clip
                 )

@@ -84,8 +84,16 @@ class TestNotionVideoService:
     ):
         """Test successful video population with notion storage strategy."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -119,8 +127,16 @@ class TestNotionVideoService:
     ):
         """Test successful video population with r2 storage strategy."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_r2)
 
         task_id = uuid4()
@@ -144,8 +160,16 @@ class TestNotionVideoService:
     ):
         """Test video population with partial failures (some videos fail)."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -176,8 +200,16 @@ class TestNotionVideoService:
     ):
         """Test video population when all videos fail (should raise RuntimeError)."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -198,8 +230,16 @@ class TestNotionVideoService:
     async def test_populate_videos_empty_list(self, notion_client_mock, channel_notion):
         """Test video population with empty video list."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -218,13 +258,19 @@ class TestNotionVideoService:
         assert notion_client_mock.create_page.call_count == 0
 
     @pytest.mark.asyncio
-    async def test_create_video_entry_properties(
-        self, notion_client_mock, channel_notion
-    ):
+    async def test_create_video_entry_properties(self, notion_client_mock, channel_notion):
         """Test video entry properties are correctly formatted."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -275,8 +321,16 @@ class TestNotionVideoService:
     ):
         """[P2] should propagate correlation_id through logging."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -296,14 +350,20 @@ class TestNotionVideoService:
         # Correlation ID is used for logging (verified manually in logs)
 
     @pytest.mark.asyncio
-    async def test_populate_videos_uses_default_duration(
-        self, notion_client_mock, channel_notion
-    ):
+    async def test_populate_videos_uses_default_duration(self, notion_client_mock, channel_notion):
         """[P2] should use default duration when not provided in video_files."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"), \
-             patch("app.services.notion_video_service.DEFAULT_VIDEO_DURATION_SECONDS", 10.0):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+            patch("app.services.notion_video_service.DEFAULT_VIDEO_DURATION_SECONDS", 10.0),
+        ):
             service = NotionVideoService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -336,8 +396,16 @@ class TestNotionVideoService:
     ):
         """[P2] should set File URL to None when R2 upload not implemented."""
         # Arrange
-        with patch("app.services.notion_video_service.get_notion_videos_database_id", return_value="db_123"), \
-             patch("app.services.notion_video_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_video_service.get_notion_videos_database_id",
+                return_value="db_123",
+            ),
+            patch(
+                "app.services.notion_video_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionVideoService(notion_client_mock, channel_r2)
 
         task_id = uuid4()

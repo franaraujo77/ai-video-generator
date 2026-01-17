@@ -20,7 +20,7 @@ Example:
 import enum
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     JSON,
@@ -418,7 +418,7 @@ class Task(Base):
     # State Machine Validation (Story 5.1 + Code Review Fixes)
     # Defines valid status transitions for the 27-status workflow
     # Only transitions listed here are allowed, enforced by @validates decorator
-    VALID_TRANSITIONS = {
+    VALID_TRANSITIONS: ClassVar[dict[TaskStatus, list[TaskStatus]]] = {
         # Initial states
         TaskStatus.DRAFT: [TaskStatus.QUEUED, TaskStatus.CANCELLED],
         TaskStatus.QUEUED: [TaskStatus.CLAIMED, TaskStatus.CANCELLED],
@@ -454,7 +454,10 @@ class Task(Base):
         TaskStatus.ASSET_ERROR: [TaskStatus.QUEUED],
         TaskStatus.VIDEO_ERROR: [TaskStatus.QUEUED],
         TaskStatus.AUDIO_ERROR: [TaskStatus.QUEUED],
-        TaskStatus.UPLOAD_ERROR: [TaskStatus.QUEUED, TaskStatus.FINAL_REVIEW],  # Allow full retry or re-review
+        TaskStatus.UPLOAD_ERROR: [
+            TaskStatus.QUEUED,
+            TaskStatus.FINAL_REVIEW,
+        ],  # Allow full retry or re-review
     }
 
     # Primary key

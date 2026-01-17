@@ -160,11 +160,11 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
 
     pool = await asyncpg.create_pool(
         dsn=database_url,
-        min_size=2,                # Minimum connections
-        max_size=10,               # Maximum connections
-        timeout=30,                # Connection acquire timeout (seconds)
-        command_timeout=1800,      # Query execution timeout (30 minutes = 1800s)
-                                   # Ensures stale claims released after 30 min
+        min_size=2,  # Minimum connections
+        max_size=10,  # Maximum connections
+        timeout=30,  # Connection acquire timeout (seconds)
+        command_timeout=1800,  # Query execution timeout (30 minutes = 1800s)
+        # Ensures stale claims released after 30 min
     )
 
     # Install PgQueuer schema (idempotent: safe to call multiple times)

@@ -609,7 +609,10 @@ class PipelineOrchestrator:
             # Story 5.5: Support partial regeneration for failed audio clips
             # Extract failed clip numbers from task metadata (populated by reject_audio)
             failed_narration_clips = None
-            if task.step_completion_metadata and "failed_audio_clip_numbers" in task.step_completion_metadata:
+            if (
+                task.step_completion_metadata
+                and "failed_audio_clip_numbers" in task.step_completion_metadata
+            ):
                 failed_narration_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
                 self.log.info(
                     "partial_narration_regeneration_requested",
@@ -619,9 +622,7 @@ class PipelineOrchestrator:
                 )
 
             result = await narration_service.generate_narration(
-                narration_manifest,
-                resume=True,
-                clips_to_regenerate=failed_narration_clips
+                narration_manifest, resume=True, clips_to_regenerate=failed_narration_clips
             )
 
             # Clear failed clips from metadata after successful regeneration
@@ -642,11 +643,13 @@ class PipelineOrchestrator:
                 if audio_path.exists():
                     # Get duration using ffprobe (similar to narration service)
                     duration = await self._get_audio_duration(audio_path)
-                    narration_files.append({
-                        "clip_number": i,
-                        "output_path": audio_path,
-                        "duration": duration,
-                    })
+                    narration_files.append(
+                        {
+                            "clip_number": i,
+                            "output_path": audio_path,
+                            "duration": duration,
+                        }
+                    )
 
             # Populate Notion Audio database with narration clips
             if narration_files and notion_client:
@@ -702,7 +705,10 @@ class PipelineOrchestrator:
             # Story 5.5: Support partial regeneration for failed SFX clips
             # Extract failed clip numbers from task metadata (populated by reject_audio)
             failed_sfx_clips = None
-            if task.step_completion_metadata and "failed_audio_clip_numbers" in task.step_completion_metadata:
+            if (
+                task.step_completion_metadata
+                and "failed_audio_clip_numbers" in task.step_completion_metadata
+            ):
                 failed_sfx_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
                 self.log.info(
                     "partial_sfx_regeneration_requested",
@@ -712,9 +718,7 @@ class PipelineOrchestrator:
                 )
 
             result = await sfx_service.generate_sfx(
-                sfx_manifest,
-                resume=True,
-                clips_to_regenerate=failed_sfx_clips
+                sfx_manifest, resume=True, clips_to_regenerate=failed_sfx_clips
             )
 
             # Clear failed clips from metadata after successful regeneration
@@ -738,20 +742,24 @@ class PipelineOrchestrator:
                 if sfx_path_mp3.exists():
                     # Use MP3 file (new format)
                     duration = await self._get_audio_duration(sfx_path_mp3)
-                    sfx_files.append({
-                        "clip_number": i,
-                        "output_path": sfx_path_mp3,
-                        "duration": duration,
-                    })
+                    sfx_files.append(
+                        {
+                            "clip_number": i,
+                            "output_path": sfx_path_mp3,
+                            "duration": duration,
+                        }
+                    )
                 elif sfx_path_wav.exists():
                     # Use legacy WAV file (backward compatibility)
                     # Note: WAV files are larger and not web-optimized, but functional
                     duration = await self._get_audio_duration(sfx_path_wav)
-                    sfx_files.append({
-                        "clip_number": i,
-                        "output_path": sfx_path_wav,
-                        "duration": duration,
-                    })
+                    sfx_files.append(
+                        {
+                            "clip_number": i,
+                            "output_path": sfx_path_wav,
+                            "duration": duration,
+                        }
+                    )
                     self.log.warning(
                         "sfx_legacy_wav_format_detected",
                         correlation_id=correlation_id,
@@ -918,9 +926,7 @@ class PipelineOrchestrator:
             )
 
             if result.returncode != 0:
-                raise RuntimeError(
-                    f"ffprobe failed for {audio_path.name}: {result.stderr}"
-                )
+                raise RuntimeError(f"ffprobe failed for {audio_path.name}: {result.stderr}")
 
             try:
                 return float(result.stdout.strip())
