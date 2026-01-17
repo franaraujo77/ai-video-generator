@@ -176,7 +176,7 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
     # Create PgQueuer driver with round-robin query (Story 4.4)
     driver = AsyncpgPoolDriver(pool)
     global pgq
-    pgq = PgQueuer(driver, query=ROUND_ROBIN_QUERY)
+    pgq = PgQueuer(driver, query=ROUND_ROBIN_QUERY)  # type: ignore[call-arg]
 
     # Extract query pattern for logging (Story 4.4: dynamic pattern detection)
     query_pattern = extract_query_ordering(ROUND_ROBIN_QUERY)
