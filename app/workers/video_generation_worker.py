@@ -135,7 +135,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
         story_direction = task.story_direction
         notion_page_id = task.notion_page_id
 
-        # Claim task by updating status
+        # Claim task by updating status (composites_ready → generating_video)
         task.status = TaskStatus.GENERATING_VIDEO
         await db.commit()
 

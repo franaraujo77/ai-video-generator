@@ -239,9 +239,9 @@ def test_priority_query_fifo_within_priority():
     case_index = next(i for i, line in enumerate(query_lines) if "CASE priority" in line)
     created_at_index = next(i for i, line in enumerate(query_lines) if "created_at ASC" in line)
 
-    assert (
-        order_by_index < case_index < created_at_index
-    ), "Query must order by priority THEN created_at (FIFO within priority)"
+    assert order_by_index < case_index < created_at_index, (
+        "Query must order by priority THEN created_at (FIFO within priority)"
+    )
 
 
 def test_priority_query_atomic_claiming():
@@ -298,9 +298,9 @@ def test_round_robin_query_ordering():
     created_at_index = next(i for i, line in enumerate(query_lines) if "created_at ASC" in line)
 
     # Verify ordering: priority THEN channel THEN created_at
-    assert (
-        order_by_index < case_index < channel_index < created_at_index
-    ), "Query must order by priority THEN channel_id THEN created_at"
+    assert order_by_index < case_index < channel_index < created_at_index, (
+        "Query must order by priority THEN channel_id THEN created_at"
+    )
 
 
 def test_round_robin_query_atomic_claiming():
@@ -383,6 +383,6 @@ def test_round_robin_query_comments():
     assert "--" in ROUND_ROBIN_QUERY  # SQL comment syntax
     # Verify comment mentions "round-robin" or "channel"
     lines_with_channel = [line for line in ROUND_ROBIN_QUERY.split("\n") if "channel_id" in line]
-    assert any(
-        "--" in line for line in lines_with_channel
-    ), "channel_id line should have inline comment explaining round-robin"
+    assert any("--" in line for line in lines_with_channel), (
+        "channel_id line should have inline comment explaining round-robin"
+    )
