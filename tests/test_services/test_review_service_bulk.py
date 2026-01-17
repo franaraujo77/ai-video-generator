@@ -53,6 +53,7 @@ async def test_bulk_approve_tasks_success(async_session):
             db=async_session,
             task_ids=task_ids,
             target_status=TaskStatus.VIDEO_APPROVED,
+            channel_id=channel.id,
         )
 
     # Verify results
@@ -72,8 +73,12 @@ async def test_bulk_approve_tasks_success(async_session):
 @pytest.mark.asyncio
 async def test_bulk_approve_validation_failure_rollback(async_session):
     """Verify validation error rolls back entire operation."""
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
     # Create tasks: 9 in VIDEO_READY, 1 in PUBLISHED (invalid transition)
-    channel_id = "test-channel"
     tasks = [
         Task(
             id=uuid4(),
@@ -82,17 +87,18 @@ async def test_bulk_approve_validation_failure_rollback(async_session):
             topic="Test topic",
             story_direction="Test story",
             status=TaskStatus.VIDEO_READY,
-            notion_page_id=f"notion-page-{i}",
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
         )
         for i in range(9)
     ]
     invalid_task = Task(
         id=uuid4(),
-        channel_id=channel_id,
+        channel_id=channel.id,
+        title="Invalid Video",
+        topic="Test topic",
+        story_direction="Test story",
         status=TaskStatus.PUBLISHED,
-        notion_page_id="notion-page-invalid",
-        prompt="test prompt",
-        priority="normal",
+        notion_page_id="abc123def456invalid00",
     )
     tasks.append(invalid_task)
 
@@ -102,37 +108,52 @@ async def test_bulk_approve_validation_failure_rollback(async_session):
     task_ids = [task.id for task in tasks]
 
     # Attempt bulk approve (should fail validation)
-    review_service = ReviewService()
-    with pytest.raises(InvalidStateTransitionError):
-        await review_service.bulk_approve_tasks(
-            db=async_session,
-            task_ids=task_ids,
-            target_status=TaskStatus.VIDEO_APPROVED,
-        )
+    with patch("app.services.review_service.get_notion_api_token", return_value=None):
+        review_service = ReviewService()
+        with pytest.raises(InvalidStateTransitionError):
+            await review_service.bulk_approve_tasks(
+                db=async_session,
+                task_ids=task_ids,
+                target_status=TaskStatus.VIDEO_APPROVED,
+                channel_id=channel.id,
+            )
+
+    # After rollback inside service, reset session state at test level
+    await async_session.rollback()
+
+    # Now query to verify no changes were persisted
+    from sqlalchemy import select
+    result = await async_session.execute(select(Task).where(Task.id.in_(task_ids)))
+    refreshed_tasks = list(result.scalars().all())
 
     # Verify rollback: NO tasks updated
-    for task in tasks[:-1]:
-        await async_session.refresh(task)
-        assert task.status == TaskStatus.VIDEO_READY  # Unchanged
-
-    await async_session.refresh(invalid_task)
-    assert invalid_task.status == TaskStatus.PUBLISHED  # Unchanged
+    for task in refreshed_tasks:
+        if task.status == TaskStatus.PUBLISHED:
+            # This is the invalid task
+            assert task.id == invalid_task.id
+        else:
+            # These should all still be VIDEO_READY
+            assert task.status == TaskStatus.VIDEO_READY
 
 
 @pytest.mark.asyncio
-async def test_bulk_approve_partial_notion_failure(async_session, monkeypatch):
+async def test_bulk_approve_partial_notion_failure(async_session):
     """Verify partial Notion API failure doesn't block successful tasks."""
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
     # Create 10 tasks
-    channel_id = "test-channel"
     tasks = [
         Task(
             id=uuid4(),
             channel_id=channel.id,
-            title="Test Video",
+            title=f"Test Video {i}",
             topic="Test topic",
             story_direction="Test story",
             status=TaskStatus.VIDEO_READY,
-            notion_page_id=f"notion-page-{i}",
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
         )
         for i in range(10)
     ]
@@ -140,31 +161,27 @@ async def test_bulk_approve_partial_notion_failure(async_session, monkeypatch):
     await async_session.commit()
 
     # Mock Notion API: 2 failures, 8 successes
-    mock_notion_client = AsyncMock()
-    call_count = 0
-
     async def mock_update(page_id, status):
-        nonlocal call_count
-        call_count += 1
-        if page_id in ["notion-page-3", "notion-page-7"]:
+        # Fail for tasks 3 and 7
+        if page_id in ["abc123def4560000000003", "abc123def4560000000007"]:
             raise Exception("Notion API error")
 
-    mock_notion_client.update_task_status = mock_update
+    mock_notion_client = MagicMock()
+    mock_notion_client.update_task_status = AsyncMock(side_effect=mock_update)
 
-    # Monkeypatch NotionClient instantiation
-    def mock_get_client(auth_token):
-        return mock_notion_client
+    # Use patch context manager for proper mocking
+    with patch("app.services.review_service.get_notion_api_token", return_value="test-token"), \
+         patch("app.services.review_service.NotionClient", return_value=mock_notion_client):
 
-    monkeypatch.setattr("app.services.review_service.NotionClient", mock_get_client)
-
-    # Bulk approve
-    review_service = ReviewService()
-    task_ids = [task.id for task in tasks]
-    result = await review_service.bulk_approve_tasks(
-        db=async_session,
-        task_ids=task_ids,
-        target_status=TaskStatus.VIDEO_APPROVED,
-    )
+        # Bulk approve
+        review_service = ReviewService()
+        task_ids = [task.id for task in tasks]
+        result = await review_service.bulk_approve_tasks(
+            db=async_session,
+            task_ids=task_ids,
+            target_status=TaskStatus.VIDEO_APPROVED,
+            channel_id=channel.id,
+        )
 
     # Verify results
     assert result.total_count == 10
@@ -183,33 +200,39 @@ async def test_bulk_approve_partial_notion_failure(async_session, monkeypatch):
 @pytest.mark.asyncio
 async def test_bulk_reject_with_reason(async_session):
     """Verify bulk reject appends reason to error logs."""
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
     # Create 5 tasks in VIDEO_READY
-    channel_id = "test-channel"
     tasks = [
         Task(
             id=uuid4(),
             channel_id=channel.id,
-            title="Test Video",
+            title=f"Test Video {i}",
             topic="Test topic",
             story_direction="Test story",
             status=TaskStatus.VIDEO_READY,
-            notion_page_id=f"notion-page-{i}",
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
         )
         for i in range(5)
     ]
     async_session.add_all(tasks)
     await async_session.commit()
 
-    # Bulk reject with reason
-    review_service = ReviewService()
-    task_ids = [task.id for task in tasks]
-    reason = "Poor video quality in clips 5, 12"
-    result = await review_service.bulk_reject_tasks(
-        db=async_session,
-        task_ids=task_ids,
-        reason=reason,
-        target_status=TaskStatus.VIDEO_ERROR,
-    )
+    # Bulk reject with reason (mock Notion API)
+    with patch("app.services.review_service.get_notion_api_token", return_value=None):
+        review_service = ReviewService()
+        task_ids = [task.id for task in tasks]
+        reason = "Poor video quality in clips 5, 12"
+        result = await review_service.bulk_reject_tasks(
+            db=async_session,
+            task_ids=task_ids,
+            reason=reason,
+            target_status=TaskStatus.VIDEO_ERROR,
+            channel_id=channel.id,
+        )
 
     # Verify results
     assert result.success_count == 5
@@ -230,6 +253,7 @@ async def test_bulk_approve_empty_list(async_session):
         db=async_session,
         task_ids=[],
         target_status=TaskStatus.VIDEO_APPROVED,
+        channel_id="dummy-channel",
     )
 
     assert result.total_count == 0
@@ -241,16 +265,21 @@ async def test_bulk_approve_empty_list(async_session):
 @pytest.mark.asyncio
 async def test_bulk_approve_max_limit(async_session):
     """Verify bulk approve supports up to 100 tasks."""
-    channel_id = "test-channel"
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
+    # Create 100 tasks
     tasks = [
         Task(
             id=uuid4(),
             channel_id=channel.id,
-            title="Test Video",
+            title=f"Test Video {i}",
             topic="Test topic",
             story_direction="Test story",
             status=TaskStatus.VIDEO_READY,
-            notion_page_id=f"notion-page-{i}",
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
         )
         for i in range(100)
     ]
@@ -259,12 +288,15 @@ async def test_bulk_approve_max_limit(async_session):
 
     task_ids = [task.id for task in tasks]
 
-    review_service = ReviewService()
-    result = await review_service.bulk_approve_tasks(
-        db=async_session,
-        task_ids=task_ids,
-        target_status=TaskStatus.VIDEO_APPROVED,
-    )
+    # Bulk approve (mock Notion API)
+    with patch("app.services.review_service.get_notion_api_token", return_value=None):
+        review_service = ReviewService()
+        result = await review_service.bulk_approve_tasks(
+            db=async_session,
+            task_ids=task_ids,
+            target_status=TaskStatus.VIDEO_APPROVED,
+            channel_id=channel.id,
+        )
 
     assert result.total_count == 100
     assert result.success_count == 100
@@ -273,16 +305,21 @@ async def test_bulk_approve_max_limit(async_session):
 @pytest.mark.asyncio
 async def test_bulk_approve_database_transaction_closes(async_session):
     """Verify database connection closes before Notion API loop."""
-    channel_id = "test-channel"
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
+    # Create 5 tasks
     tasks = [
         Task(
             id=uuid4(),
             channel_id=channel.id,
-            title="Test Video",
+            title=f"Test Video {i}",
             topic="Test topic",
             story_direction="Test story",
             status=TaskStatus.VIDEO_READY,
-            notion_page_id=f"notion-page-{i}",
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
         )
         for i in range(5)
     ]
@@ -293,12 +330,14 @@ async def test_bulk_approve_database_transaction_closes(async_session):
 
     # This test verifies pattern but doesn't assert connection state
     # Architecture compliance: Short transaction → close DB → Notion API loop
-    review_service = ReviewService()
-    result = await review_service.bulk_approve_tasks(
-        db=async_session,
-        task_ids=task_ids,
-        target_status=TaskStatus.VIDEO_APPROVED,
-    )
+    with patch("app.services.review_service.get_notion_api_token", return_value=None):
+        review_service = ReviewService()
+        result = await review_service.bulk_approve_tasks(
+            db=async_session,
+            task_ids=task_ids,
+            target_status=TaskStatus.VIDEO_APPROVED,
+            channel_id=channel.id,
+        )
 
     assert result.success_count == 5
 
@@ -306,26 +345,32 @@ async def test_bulk_approve_database_transaction_closes(async_session):
 @pytest.mark.asyncio
 async def test_bulk_reject_validation_error(async_session):
     """Verify validation error causes immediate failure (no partial update)."""
-    channel_id = "test-channel"
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
+    # Create 3 valid tasks + 1 invalid task
     tasks = [
         Task(
             id=uuid4(),
             channel_id=channel.id,
-            title="Test Video",
+            title=f"Test Video {i}",
             topic="Test topic",
             story_direction="Test story",
             status=TaskStatus.VIDEO_READY,
-            notion_page_id=f"notion-page-{i}",
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
         )
         for i in range(3)
     ]
     invalid_task = Task(
         id=uuid4(),
-        channel_id=channel_id,
-        status=TaskStatus.COMPLETED,
-        notion_page_id="notion-page-invalid",
-        prompt="test prompt",
-        priority="normal",
+        channel_id=channel.id,
+        title="Invalid Video",
+        topic="Test topic",
+        story_direction="Test story",
+        status=TaskStatus.PUBLISHED,
+        notion_page_id="abc123def456invalid00",
     )
     tasks.append(invalid_task)
 
@@ -334,19 +379,103 @@ async def test_bulk_reject_validation_error(async_session):
 
     task_ids = [task.id for task in tasks]
 
-    review_service = ReviewService()
-    with pytest.raises(InvalidStateTransitionError):
-        await review_service.bulk_reject_tasks(
-            db=async_session,
-            task_ids=task_ids,
-            reason="Test rejection",
-            target_status=TaskStatus.VIDEO_ERROR,
-        )
+    # Attempt bulk reject (should fail validation)
+    with patch("app.services.review_service.get_notion_api_token", return_value=None):
+        review_service = ReviewService()
+        with pytest.raises(InvalidStateTransitionError):
+            await review_service.bulk_reject_tasks(
+                db=async_session,
+                task_ids=task_ids,
+                reason="Test rejection",
+                target_status=TaskStatus.VIDEO_ERROR,
+                channel_id=channel.id,
+            )
+
+    # After rollback inside service, reset session state at test level
+    await async_session.rollback()
+
+    # Now query to verify no changes were persisted
+    from sqlalchemy import select
+    result = await async_session.execute(select(Task).where(Task.id.in_(task_ids)))
+    refreshed_tasks = list(result.scalars().all())
 
     # Verify NO tasks updated
-    for task in tasks[:-1]:
-        await async_session.refresh(task)
-        assert task.status == TaskStatus.VIDEO_READY
+    for task in refreshed_tasks:
+        if task.status == TaskStatus.PUBLISHED:
+            # This is the invalid task
+            assert task.id == invalid_task.id
+        else:
+            # These should all still be VIDEO_READY
+            assert task.status == TaskStatus.VIDEO_READY
 
-    await async_session.refresh(invalid_task)
-    assert invalid_task.status == TaskStatus.COMPLETED
+
+@pytest.mark.asyncio
+async def test_bulk_approve_respects_max_limit(async_session):
+    """Verify bulk approve enforces maximum 100 tasks limit."""
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
+    # Try to approve 101 tasks (exceeds limit)
+    task_ids = [uuid4() for _ in range(101)]
+
+    with patch("app.services.review_service.get_notion_api_token", return_value=None):
+        review_service = ReviewService()
+        with pytest.raises(ValueError, match="Maximum 100 tasks"):
+            await review_service.bulk_approve_tasks(
+                db=async_session,
+                task_ids=task_ids,
+                target_status=TaskStatus.VIDEO_APPROVED,
+                channel_id=channel.id,
+            )
+
+
+@pytest.mark.asyncio
+async def test_bulk_approve_shared_notion_client(async_session):
+    """Verify bulk operations use shared NotionClient instance for rate limiting."""
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test", storage_strategy="notion")
+    async_session.add(channel)
+    await async_session.flush()
+
+    # Create 5 tasks
+    tasks = [
+        Task(
+            id=uuid4(),
+            channel_id=channel.id,
+            title=f"Test Video {i}",
+            topic="Test topic",
+            story_direction="Test story",
+            status=TaskStatus.VIDEO_READY,
+            notion_page_id=f"abc123def456{str(i).zfill(10)}",
+        )
+        for i in range(5)
+    ]
+    async_session.add_all(tasks)
+    await async_session.commit()
+
+    task_ids = [task.id for task in tasks]
+
+    # Mock NotionClient to verify it's reused
+    mock_notion_client = MagicMock()
+    mock_notion_client.update_task_status = AsyncMock(return_value=None)
+
+    with patch("app.services.review_service.get_notion_api_token", return_value="test-token"), \
+         patch("app.services.review_service.NotionClient", return_value=mock_notion_client) as mock_client_constructor:
+
+        review_service = ReviewService()
+        result = await review_service.bulk_approve_tasks(
+            db=async_session,
+            task_ids=task_ids,
+            target_status=TaskStatus.VIDEO_APPROVED,
+            channel_id=channel.id,
+        )
+
+        # Verify NotionClient constructor called only ONCE (shared instance)
+        assert mock_client_constructor.call_count == 1
+
+        # Verify update_task_status called 5 times (one per task)
+        assert mock_notion_client.update_task_status.call_count == 5
+
+    assert result.success_count == 5
