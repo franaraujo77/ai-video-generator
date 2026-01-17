@@ -237,7 +237,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             # Optimize each video for streaming playback
             optimized_count = 0
             for clip in manifest.clips:
-                video_path = service.get_video_path(clip["clip_number"])
+                video_path = clip.output_path
                 if video_path.exists():
                     try:
                         await optimize_video_for_streaming(video_path)
@@ -246,7 +246,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                         log.warning(
                             "video_optimization_failed",
                             task_id=str(task_id),
-                            clip_number=clip["clip_number"],
+                            clip_number=clip.clip_number,
                             error=str(e),
                         )
                         # Continue with other videos - optimization failure is not critical
@@ -276,14 +276,14 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                     # Build video files list with durations
                     video_files = []
                     for clip in manifest.clips:
-                        video_path = service.get_video_path(clip["clip_number"])
+                        video_path = clip.output_path
                         if video_path.exists():
                             try:
                                 # Get actual duration after trimming
                                 duration = await get_video_duration(video_path)
                                 video_files.append(
                                     {
-                                        "clip_number": clip["clip_number"],
+                                        "clip_number": clip.clip_number,
                                         "output_path": video_path,
                                         "duration": duration,
                                     }
@@ -292,13 +292,13 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                                 log.warning(
                                     "video_duration_probe_failed",
                                     task_id=str(task_id),
-                                    clip_number=clip["clip_number"],
+                                    clip_number=clip.clip_number,
                                     error=str(e),
                                 )
                                 # Use default 10s duration if probe fails
                                 video_files.append(
                                     {
-                                        "clip_number": clip["clip_number"],
+                                        "clip_number": clip.clip_number,
                                         "output_path": video_path,
                                         "duration": 10.0,
                                     }
