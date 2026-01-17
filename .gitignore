@@ -31,6 +31,19 @@ ENV/
 .DS_Store
 Thumbs.db
 
-# Environment variables
+# Environment variables and secrets
 .env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+scripts/.env
 test.db
+
+# API keys and credentials
+*_credentials.json
+*_secrets.json
+*.pem
+*.key
+!*.key.pub
