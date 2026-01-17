@@ -237,11 +237,40 @@ def get_notion_videos_database_id() -> str:
     return db_id.strip()
 
 
+def get_notion_audio_database_id() -> str:
+    """Get Notion Audio database ID from environment.
+
+    Environment Variable:
+        NOTION_AUDIO_DATABASE_ID: Notion Audio database ID for Story 5.5
+        Example: "f0725653h262654gd13e5d255682hdde"
+
+    Returns:
+        Audio database ID string.
+
+    Raises:
+        ValueError: If NOTION_AUDIO_DATABASE_ID not set.
+
+    Note:
+        This database stores audio clip metadata (36 clips per task: 18 narration + 18 SFX)
+        created by the audio generation step. It links to the Tasks database via relation
+        property. Audio files are web-optimized (MP3/WAV format) for direct playback in Notion.
+
+    Story: 5.5 - Audio Review Interface
+    """
+    db_id = os.getenv("NOTION_AUDIO_DATABASE_ID")
+    if not db_id:
+        raise ValueError(
+            "NOTION_AUDIO_DATABASE_ID environment variable is required. "
+            "Set this to your Notion Audio database ID."
+        )
+    return db_id.strip()
+
+
 def get_notion_sync_interval() -> int:
     """Get Notion sync interval in seconds from environment.
 
     Environment Variable:
-        NOTION_SYNC_INTERVAL_SECONDS: Polling interval (default: 60)
+        NOTION_SYNC_INTERVAL_SECONDS: Polling interval (default: 10)
 
     Returns:
         Sync interval in seconds (minimum 10, maximum 600).
@@ -249,18 +278,21 @@ def get_notion_sync_interval() -> int:
     Note:
         Clamps value between 10 seconds (minimum practical polling)
         and 600 seconds (10 minutes maximum delay).
+
+        Changed in Story 5.6: Default reduced from 60s to 10s for
+        real-time status updates (<5s latency target, NFR-P3).
     """
     try:
-        interval = int(os.getenv("NOTION_SYNC_INTERVAL_SECONDS", "60"))
+        interval = int(os.getenv("NOTION_SYNC_INTERVAL_SECONDS", "10"))
         # Clamp between 10s and 600s
         return max(10, min(600, interval))
     except ValueError:
         log.warning(
             "invalid_sync_interval",
             value=os.getenv("NOTION_SYNC_INTERVAL_SECONDS"),
-            using_default=60,
+            using_default=10,
         )
-        return 60
+        return 10
 
 
 # Parallelism defaults (Story 4.6)

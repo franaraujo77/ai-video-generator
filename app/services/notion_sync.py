@@ -129,6 +129,7 @@ class TaskSyncData:
         status: Current task status
         priority: Task priority level
         title: Video title (for logging)
+        updated_at: Timestamp of last task update (Story 5.6, AC2, FR55)
     """
 
     id: uuid.UUID
@@ -136,6 +137,7 @@ class TaskSyncData:
     status: TaskStatus
     priority: PriorityLevel
     title: str
+    updated_at: datetime
 
 
 # Property extraction helpers
@@ -591,14 +593,24 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
     }
     notion_priority = priority_map[task.priority]
 
+    # Build properties dict with Status, Priority, and Updated timestamp
+    properties = {
+        "Status": {"select": {"name": notion_status}},
+        "Priority": {"select": {"name": notion_priority}},
+    }
+
+    # Add Updated timestamp if available (Story 5.6, AC2, FR55)
+    # Format as ISO 8601 for Notion date property
+    if task.updated_at:
+        properties["Updated"] = {
+            "date": {"start": task.updated_at.isoformat()}
+        }
+
     # Update Notion page properties
     try:
         await notion_client.update_page_properties(
             task.notion_page_id,
-            {
-                "Status": {"select": {"name": notion_status}},
-                "Priority": {"select": {"name": notion_priority}},
-            },
+            properties,
         )
 
         log.info(
@@ -608,6 +620,7 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
             notion_page_id=task.notion_page_id,
             notion_status=notion_status,
             notion_priority=notion_priority,
+            updated_at=task.updated_at.isoformat() if task.updated_at else None,
         )
     except NotionAPIError as e:
         log.error(
@@ -748,6 +761,7 @@ async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
                 status=task.status,
                 priority=task.priority,
                 title=task.title,
+                updated_at=task.updated_at,
             )
             for task in tasks
         ]

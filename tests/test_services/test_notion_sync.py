@@ -15,6 +15,7 @@ Mock Patterns:
 """
 
 import asyncio
+import uuid
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -34,6 +35,7 @@ from app.services.notion_sync import (
     map_notion_priority_to_internal,
     map_notion_status_to_internal,
     push_task_to_notion,
+    sync_database_status_to_notion,
     sync_notion_page_to_task,
     validate_notion_entry,
 )
@@ -1353,3 +1355,408 @@ async def test_rejection_transition_moves_to_error_and_allows_retry(async_sessio
 
     # Verify task was re-queued for worker claiming (manual retry)
     assert task.status == TaskStatus.QUEUED
+
+
+# ======================================================================
+# Story 5.6: Real-Time Status Updates - Tests for updated_at sync
+# ======================================================================
+
+
+@pytest.mark.asyncio
+async def test_push_task_to_notion_includes_updated_at():
+    """Test push_task_to_notion includes Updated timestamp (Story 5.6, AC2)."""
+    # Create task with updated_at timestamp
+    task = Task()
+    task.id = "test-task-id"
+    task.notion_page_id = "test-notion-page-id"
+    task.status = TaskStatus.QUEUED
+    task.priority = PriorityLevel.NORMAL
+    task.updated_at = datetime(2026, 1, 17, 14, 30, 0, tzinfo=timezone.utc)
+
+    # Mock Notion client
+    mock_client = AsyncMock(spec=NotionClient)
+    mock_client.update_page_properties = AsyncMock()
+
+    # Push to Notion
+    await push_task_to_notion(task, mock_client)
+
+    # Verify API was called with Status, Priority, AND Updated timestamp
+    mock_client.update_page_properties.assert_called_once()
+    call_args = mock_client.update_page_properties.call_args
+    properties = call_args[0][1]  # Second argument is properties dict
+
+    # Verify Status and Priority still included
+    assert "Status" in properties
+    assert properties["Status"]["select"]["name"] == "Queued"
+    assert "Priority" in properties
+    assert properties["Priority"]["select"]["name"] == "Normal"
+
+    # Verify Updated timestamp included (Story 5.6, AC2)
+    assert "Updated" in properties
+    assert properties["Updated"]["date"]["start"] == "2026-01-17T14:30:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_push_task_to_notion_formats_updated_at_as_iso8601():
+    """Test Updated timestamp is formatted as ISO 8601 (Story 5.6, FR55)."""
+    # Create task with timezone-aware datetime
+    task = Task()
+    task.id = "test-task-id"
+    task.notion_page_id = "test-notion-page-id"
+    task.status = TaskStatus.GENERATING_ASSETS  # Use valid status
+    task.priority = PriorityLevel.HIGH
+    task.updated_at = datetime(2026, 1, 17, 9, 15, 30, tzinfo=timezone.utc)
+
+    # Mock Notion client
+    mock_client = AsyncMock(spec=NotionClient)
+    mock_client.update_page_properties = AsyncMock()
+
+    # Push to Notion
+    await push_task_to_notion(task, mock_client)
+
+    # Extract Updated timestamp from API call
+    call_args = mock_client.update_page_properties.call_args
+    properties = call_args[0][1]
+    updated_timestamp = properties["Updated"]["date"]["start"]
+
+    # Verify ISO 8601 format (YYYY-MM-DDTHH:MM:SS+00:00)
+    assert updated_timestamp == "2026-01-17T09:15:30+00:00"
+    assert "T" in updated_timestamp  # Date/time separator
+    assert "+00:00" in updated_timestamp  # UTC offset
+
+
+@pytest.mark.asyncio
+async def test_push_task_to_notion_handles_none_updated_at():
+    """Test push_task_to_notion handles None updated_at gracefully."""
+    # Create task without updated_at (should not happen in practice, but defensive)
+    task = Task()
+    task.id = "test-task-id"
+    task.notion_page_id = "test-notion-page-id"
+    task.status = TaskStatus.DRAFT
+    task.priority = PriorityLevel.LOW
+    task.updated_at = None  # Explicitly set to None
+
+    # Mock Notion client
+    mock_client = AsyncMock(spec=NotionClient)
+    mock_client.update_page_properties = AsyncMock()
+
+    # Push to Notion (should not crash)
+    await push_task_to_notion(task, mock_client)
+
+    # Verify API was called with Status and Priority (no Updated)
+    mock_client.update_page_properties.assert_called_once()
+    call_args = mock_client.update_page_properties.call_args
+    properties = call_args[0][1]
+
+    # Verify Status and Priority included
+    assert "Status" in properties
+    assert "Priority" in properties
+
+    # Verify Updated NOT included when None
+    assert "Updated" not in properties
+
+
+@pytest.mark.asyncio
+async def test_config_default_polling_interval_is_10s():
+    """Test get_notion_sync_interval() returns 10s by default (Story 5.6)."""
+    from app.config import get_notion_sync_interval
+
+    # Clear environment variable to test default
+    import os
+    if "NOTION_SYNC_INTERVAL_SECONDS" in os.environ:
+        del os.environ["NOTION_SYNC_INTERVAL_SECONDS"]
+
+    # Verify default is 10 seconds (optimized for real-time updates)
+    interval = get_notion_sync_interval()
+    assert interval == 10
+
+
+@pytest.mark.asyncio
+async def test_config_polling_interval_clamping():
+    """Test polling interval clamped between 10s and 600s (Story 5.6)."""
+    from app.config import get_notion_sync_interval
+    import os
+
+    # Test minimum clamping (below 10s)
+    os.environ["NOTION_SYNC_INTERVAL_SECONDS"] = "5"
+    assert get_notion_sync_interval() == 10  # Clamped to 10s
+
+    # Test maximum clamping (above 600s)
+    os.environ["NOTION_SYNC_INTERVAL_SECONDS"] = "700"
+    assert get_notion_sync_interval() == 600  # Clamped to 600s
+
+    # Test valid range
+    os.environ["NOTION_SYNC_INTERVAL_SECONDS"] = "30"
+    assert get_notion_sync_interval() == 30  # No clamping
+
+    # Cleanup
+    del os.environ["NOTION_SYNC_INTERVAL_SECONDS"]
+
+
+@pytest.mark.asyncio
+async def test_task_updated_at_auto_updates_on_status_change(async_session: AsyncSession):
+    """Test Task.updated_at auto-updates when status changes (Story 5.6, AC2).
+
+    This test verifies the SQLAlchemy onupdate=utcnow parameter works correctly.
+    Note: PostgreSQL trigger (from migration 20260117_0001) also ensures auto-update
+    at database level for direct SQL updates.
+    """
+    import uuid
+
+    # Create a test channel first (Task requires valid channel_id UUID)
+    from app.models import Channel
+    channel = Channel()
+    channel.channel_id = "test_channel_5_6"
+    channel.channel_name = "Test Channel for Story 5.6"
+    async_session.add(channel)
+    await async_session.commit()
+    await async_session.refresh(channel)
+
+    # Create task with initial status
+    task = Task()
+    task.channel_id = channel.id  # Use Channel UUID, not string
+    task.notion_page_id = "test-notion-page-id-5-6"  # Required NOT NULL field
+    task.status = TaskStatus.DRAFT
+    task.priority = PriorityLevel.NORMAL
+    task.title = "Test Task"
+    task.topic = "Test Topic"
+    task.story_direction = "Test Story"
+
+    async_session.add(task)
+    await async_session.commit()
+    await async_session.refresh(task)
+
+    # Record initial updated_at
+    initial_updated_at = task.updated_at
+    assert initial_updated_at is not None
+
+    # Wait a small amount to ensure timestamp difference
+    await asyncio.sleep(0.1)
+
+    # Change status (should trigger onupdate)
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+    await async_session.refresh(task)
+
+    # Verify updated_at changed
+    new_updated_at = task.updated_at
+    assert new_updated_at > initial_updated_at
+
+
+@pytest.mark.asyncio
+async def test_task_updated_at_auto_updates_on_any_field_change(async_session: AsyncSession):
+    """Test Task.updated_at auto-updates on any field change, not just status."""
+    import uuid
+
+    # Create a test channel first (Task requires valid channel_id UUID)
+    from app.models import Channel
+    channel = Channel()
+    channel.channel_id = "test_channel_5_6_b"
+    channel.channel_name = "Test Channel for Story 5.6 Field Change"
+    async_session.add(channel)
+    await async_session.commit()
+    await async_session.refresh(channel)
+
+    # Create task
+    task = Task()
+    task.channel_id = channel.id  # Use Channel UUID, not string
+    task.notion_page_id = "test-notion-page-id-5-6-b"  # Required NOT NULL field
+    task.status = TaskStatus.DRAFT
+    task.priority = PriorityLevel.NORMAL
+    task.title = "Original Title"
+    task.topic = "Original Topic"
+    task.story_direction = "Original Story"
+
+    async_session.add(task)
+    await async_session.commit()
+    await async_session.refresh(task)
+
+    initial_updated_at = task.updated_at
+    await asyncio.sleep(0.1)
+
+    # Change priority (not status)
+    task.priority = PriorityLevel.HIGH
+    await async_session.commit()
+    await async_session.refresh(task)
+
+    # Verify updated_at changed
+    assert task.updated_at > initial_updated_at
+
+    priority_updated_at = task.updated_at
+    await asyncio.sleep(0.1)
+
+    # Change title (not status or priority)
+    task.title = "New Title"
+    await async_session.commit()
+    await async_session.refresh(task)
+
+    # Verify updated_at changed again
+    assert task.updated_at > priority_updated_at
+
+
+@pytest.mark.asyncio
+async def test_task_updated_at_preserves_timezone():
+    """Test Task.updated_at preserves UTC timezone (Story 5.6, AC2)."""
+    # Create task with timezone-aware datetime
+    task = Task()
+    task.channel_id = "test_channel"
+    task.status = TaskStatus.DRAFT
+    task.priority = PriorityLevel.NORMAL
+    task.title = "Test Task"
+    task.topic = "Test Topic"
+    task.story_direction = "Test Story"
+    task.updated_at = datetime(2026, 1, 17, 10, 0, 0, tzinfo=timezone.utc)
+
+    # Verify timezone preserved
+    assert task.updated_at.tzinfo == timezone.utc
+    assert task.updated_at.isoformat() == "2026-01-17T10:00:00+00:00"
+
+
+# Story 5.6: Code Review Fixes - Tests for TaskSyncData production path
+
+
+@pytest.mark.asyncio
+async def test_push_task_to_notion_with_task_sync_data():
+    """Test push_task_to_notion works with TaskSyncData (production code path).
+
+    CRITICAL: This test validates the fix for the bug where TaskSyncData
+    was missing the updated_at field, causing AttributeError in production.
+    The polling loop and fire-and-forget sync both use TaskSyncData, not Task.
+    """
+    from app.services.notion_sync import TaskSyncData
+
+    # Create mock NotionClient
+    notion_client = AsyncMock(spec=NotionClient)
+    notion_client.update_page_properties = AsyncMock()
+
+    # Create TaskSyncData with updated_at (production code path)
+    updated_timestamp = datetime(2026, 1, 17, 12, 30, 0, tzinfo=timezone.utc)
+    task_data = TaskSyncData(
+        id=uuid.uuid4(),
+        notion_page_id="test-page-id-task-sync-data",
+        status=TaskStatus.GENERATING_ASSETS,
+        priority=PriorityLevel.HIGH,
+        title="Test Task via TaskSyncData",
+        updated_at=updated_timestamp,
+    )
+
+    # Call push_task_to_notion with TaskSyncData
+    await push_task_to_notion(task_data, notion_client)
+
+    # Verify Updated timestamp included in properties
+    notion_client.update_page_properties.assert_awaited_once()
+    call_args = notion_client.update_page_properties.call_args
+    properties = call_args[0][1]  # Second argument is properties dict
+
+    assert "Status" in properties
+    assert properties["Status"]["select"]["name"] == "Assets Generating"
+    assert "Priority" in properties
+    assert properties["Priority"]["select"]["name"] == "High"
+    assert "Updated" in properties  # CRITICAL: Must be present
+    assert properties["Updated"]["date"]["start"] == "2026-01-17T12:30:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_sync_database_status_to_notion_includes_updated_at(async_session: AsyncSession):
+    """Test sync_database_status_to_notion extracts updated_at into TaskSyncData.
+
+    This validates the polling loop correctly includes updated_at when syncing.
+    """
+    from app.models import Channel
+
+    # Create test channel
+    channel = Channel()
+    channel.channel_id = "test_channel_sync_loop"
+    channel.channel_name = "Test Channel for Sync Loop"
+    async_session.add(channel)
+    await async_session.commit()
+    await async_session.refresh(channel)
+
+    # Create task with updated_at
+    task = Task()
+    task.channel_id = channel.id
+    task.notion_page_id = "test-notion-page-sync-loop"
+    task.status = TaskStatus.ASSETS_READY
+    task.priority = PriorityLevel.NORMAL
+    task.title = "Test Sync Loop Task"
+    task.topic = "Test Topic"
+    task.story_direction = "Test Story"
+    task.updated_at = datetime(2026, 1, 17, 14, 0, 0, tzinfo=timezone.utc)
+
+    async_session.add(task)
+    await async_session.commit()
+
+    # Mock NotionClient
+    notion_client = AsyncMock(spec=NotionClient)
+    notion_client.update_page_properties = AsyncMock()
+
+    # Mock async_session_factory to return our test session
+    with patch("app.services.notion_sync.async_session_factory") as mock_factory:
+        mock_factory.return_value.__aenter__.return_value = async_session
+
+        # Call sync_database_status_to_notion (production polling loop)
+        await sync_database_status_to_notion(notion_client)
+
+    # Verify Updated timestamp was synced
+    notion_client.update_page_properties.assert_awaited_once()
+    call_args = notion_client.update_page_properties.call_args
+    properties = call_args[0][1]
+
+    assert "Updated" in properties
+    assert properties["Updated"]["date"]["start"] == "2026-01-17T14:00:00+00:00"
+
+
+@pytest.mark.asyncio
+async def test_sync_latency_target_compliance():
+    """Test that sync interval configuration supports <15s latency target (Story 5.6, AC1).
+
+    AC1 Requirement: PostgreSQL commit → Notion update within 5 seconds (target)
+    Implementation: 10s polling interval (worst case 10s, typical 5s with fire-and-forget)
+
+    This test validates:
+    1. Default sync interval is 10s (6x improvement from 60s)
+    2. With 10s interval, worst-case latency is 10s (meets <15s acceptable threshold)
+    3. Fire-and-forget path can achieve <5s (not tested here, requires integration test)
+    """
+    from app.config import get_notion_sync_interval
+
+    # Verify default interval is 10s (Story 5.6 optimization)
+    sync_interval = get_notion_sync_interval()
+    assert sync_interval == 10
+
+    # Worst-case latency: status changes right after polling cycle
+    # Next sync happens in 10s, meets <15s requirement
+    worst_case_latency = sync_interval
+    assert worst_case_latency < 15  # AC1 acceptable threshold
+
+    # Expected typical latency with fire-and-forget: 2-5s
+    # (Not tested here - requires end-to-end integration test with real Notion API)
+
+
+@pytest.mark.asyncio
+async def test_task_sync_data_has_all_required_fields():
+    """Test TaskSyncData dataclass includes all fields needed for Notion sync.
+
+    Regression test for bug where updated_at was missing from TaskSyncData,
+    causing AttributeError in production polling loop and fire-and-forget sync.
+    """
+    from app.services.notion_sync import TaskSyncData
+
+    # Create TaskSyncData with all required fields
+    updated_timestamp = datetime.now(timezone.utc)
+    task_data = TaskSyncData(
+        id=uuid.uuid4(),
+        notion_page_id="test-page-id",
+        status=TaskStatus.QUEUED,
+        priority=PriorityLevel.NORMAL,
+        title="Test Task",
+        updated_at=updated_timestamp,
+    )
+
+    # Verify all fields accessible
+    assert task_data.id is not None
+    assert task_data.notion_page_id == "test-page-id"
+    assert task_data.status == TaskStatus.QUEUED
+    assert task_data.priority == PriorityLevel.NORMAL
+    assert task_data.title == "Test Task"
+    assert task_data.updated_at == updated_timestamp  # CRITICAL: Must exist
