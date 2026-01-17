@@ -38,7 +38,9 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
+
+from app.exceptions import InvalidStateTransitionError
 
 
 def utcnow() -> datetime:
@@ -47,20 +49,27 @@ def utcnow() -> datetime:
 
 
 class TaskStatus(enum.Enum):
-    """26-status workflow state machine for video generation pipeline.
+    """27-status workflow state machine for video generation pipeline.
 
     Status values follow the video generation pipeline order from draft to published.
     Each status represents a specific stage in the 8-step production pipeline.
 
-    Pipeline Flow:
+    Pipeline Flow (Happy Path):
         draft → queued → claimed → generating_assets → assets_ready → assets_approved
         → generating_composites → composites_ready → generating_video → video_ready
         → video_approved → generating_audio → audio_ready → audio_approved
         → generating_sfx → sfx_ready → assembling → assembly_ready → final_review
         → approved → uploading → published
 
-    Error States (recoverable via retry):
-        asset_error, video_error, audio_error, upload_error
+    Error Recovery Flow:
+        asset_error/video_error/audio_error → queued (retry from beginning)
+        upload_error → final_review (fix and re-upload)
+
+    Cancellation Flow:
+        queued → cancelled (user cancellation before processing starts)
+
+    Terminal States:
+        published (video live on YouTube), cancelled (user cancelled)
 
     See UX Design document for full state machine transitions.
     """
@@ -69,6 +78,7 @@ class TaskStatus(enum.Enum):
     DRAFT = "draft"
     QUEUED = "queued"
     CLAIMED = "claimed"
+    CANCELLED = "cancelled"
 
     # Asset generation phase (Step 1)
     GENERATING_ASSETS = "generating_assets"
@@ -328,16 +338,17 @@ class Channel(Base):
 
 
 class Task(Base):
-    """Video generation task with 26-status workflow state machine.
+    """Video generation task with 27-status workflow state machine.
 
     Tasks represent video generation jobs that move through the 8-step production
     pipeline from draft to published. Each task belongs to a channel and tracks
     video metadata, Notion integration, and pipeline status.
 
-    26-Status Workflow:
-        The status field follows the TaskStatus enum (26 states) which maps to
+    27-Status Workflow:
+        The status field follows the TaskStatus enum (27 states) which maps to
         the 8-step pipeline: asset generation → composites → video → audio → sfx
-        → assembly → review → upload. See TaskStatus enum for full flow.
+        → assembly → review → upload. Includes CANCELLED status for user cancellation.
+        See TaskStatus enum for full flow.
 
     Notion Integration:
         Tasks are bidirectionally synced with Notion database entries via the
@@ -356,7 +367,7 @@ class Task(Base):
         title: Video title (255 chars max, from Notion).
         topic: Video topic/category (500 chars max, from Notion).
         story_direction: Rich text story direction from Notion (unlimited).
-        status: Pipeline status (26-value enum, indexed).
+        status: Pipeline status (27-value enum, indexed).
         priority: Queue priority (high/normal/low, default: normal).
         error_log: Append-only error history (nullable, text field).
         youtube_url: Published YouTube URL (nullable, populated after upload).
@@ -377,6 +388,48 @@ class Task(Base):
     """
 
     __tablename__ = "tasks"
+
+    # State Machine Validation (Story 5.1 + Code Review Fixes)
+    # Defines valid status transitions for the 27-status workflow
+    # Only transitions listed here are allowed, enforced by @validates decorator
+    VALID_TRANSITIONS = {
+        # Initial states
+        TaskStatus.DRAFT: [TaskStatus.QUEUED, TaskStatus.CANCELLED],
+        TaskStatus.QUEUED: [TaskStatus.CLAIMED, TaskStatus.CANCELLED],
+        TaskStatus.CLAIMED: [TaskStatus.GENERATING_ASSETS],
+        # Asset generation phase (MANDATORY review gate)
+        TaskStatus.GENERATING_ASSETS: [TaskStatus.ASSETS_READY, TaskStatus.ASSET_ERROR],
+        TaskStatus.ASSETS_READY: [TaskStatus.ASSETS_APPROVED, TaskStatus.ASSET_ERROR],
+        TaskStatus.ASSETS_APPROVED: [TaskStatus.GENERATING_COMPOSITES],
+        # Composite creation phase (OPTIONAL review - auto-proceeds)
+        TaskStatus.GENERATING_COMPOSITES: [TaskStatus.COMPOSITES_READY],
+        TaskStatus.COMPOSITES_READY: [TaskStatus.GENERATING_VIDEO],
+        # Video generation phase (MANDATORY review gate - expensive step)
+        TaskStatus.GENERATING_VIDEO: [TaskStatus.VIDEO_READY, TaskStatus.VIDEO_ERROR],
+        TaskStatus.VIDEO_READY: [TaskStatus.VIDEO_APPROVED, TaskStatus.VIDEO_ERROR],
+        TaskStatus.VIDEO_APPROVED: [TaskStatus.GENERATING_AUDIO],
+        # Audio generation phase (MANDATORY review gate)
+        TaskStatus.GENERATING_AUDIO: [TaskStatus.AUDIO_READY, TaskStatus.AUDIO_ERROR],
+        TaskStatus.AUDIO_READY: [TaskStatus.AUDIO_APPROVED, TaskStatus.AUDIO_ERROR],
+        TaskStatus.AUDIO_APPROVED: [TaskStatus.GENERATING_SFX],
+        # Sound effects phase (OPTIONAL review - auto-proceeds)
+        TaskStatus.GENERATING_SFX: [TaskStatus.SFX_READY],
+        TaskStatus.SFX_READY: [TaskStatus.ASSEMBLING],
+        # Assembly phase (OPTIONAL review - auto-proceeds)
+        TaskStatus.ASSEMBLING: [TaskStatus.ASSEMBLY_READY],
+        TaskStatus.ASSEMBLY_READY: [TaskStatus.FINAL_REVIEW],
+        # Final review and upload phase (MANDATORY review gate - YouTube compliance)
+        TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
+        TaskStatus.APPROVED: [TaskStatus.UPLOADING],
+        TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR],
+        TaskStatus.PUBLISHED: [],  # Terminal state - no transitions allowed
+        TaskStatus.CANCELLED: [],  # Terminal state - no transitions allowed
+        # Error recovery paths (retry by returning to QUEUED)
+        TaskStatus.ASSET_ERROR: [TaskStatus.QUEUED],
+        TaskStatus.VIDEO_ERROR: [TaskStatus.QUEUED],
+        TaskStatus.AUDIO_ERROR: [TaskStatus.QUEUED],
+        TaskStatus.UPLOAD_ERROR: [TaskStatus.FINAL_REVIEW],  # Re-review before re-upload
+    }
 
     # Primary key
     id: Mapped[uuid.UUID] = mapped_column(
@@ -549,6 +602,54 @@ class Task(Base):
         # Composite index for channel + status filtering (capacity queries)
         Index("ix_tasks_channel_id_status", "channel_id", "status"),
     )
+
+    @validates("status")
+    def validate_status_change(self, key: str, value: TaskStatus) -> TaskStatus:
+        """Validate status transition before committing to database.
+
+        This method enforces the 27-status workflow state machine defined in
+        VALID_TRANSITIONS. Only valid transitions are allowed.
+
+        Args:
+            key: The attribute name being validated (always "status").
+            value: The new TaskStatus value being assigned.
+
+        Returns:
+            The validated TaskStatus value if transition is valid.
+
+        Raises:
+            InvalidStateTransitionError: If the transition is not valid according
+                to VALID_TRANSITIONS mapping.
+
+        Note:
+            - Validation is skipped on initial task creation (status is None)
+            - Validation is enforced on all subsequent status changes
+            - Terminal states (PUBLISHED) have no valid transitions
+
+        Example:
+            >>> task.status = TaskStatus.DRAFT
+            >>> task.status = TaskStatus.QUEUED  # Valid - allowed
+            >>> task.status = TaskStatus.PUBLISHED  # Invalid - raises exception
+
+        Related:
+            - Story 5.1: 26-Status Workflow State Machine
+            - FR51: 26 workflow status progression
+            - Task.VALID_TRANSITIONS: Allowed transition mapping
+        """
+        # Skip validation on initial task creation (status is None)
+        if self.status is None:
+            return value
+
+        # Check if transition is valid
+        allowed_transitions = self.VALID_TRANSITIONS.get(self.status, [])
+        if value not in allowed_transitions:
+            raise InvalidStateTransitionError(
+                f"Invalid transition: {self.status.value} → {value.value}",
+                from_status=self.status,
+                to_status=value,
+            )
+
+        return value
 
     def __repr__(self) -> str:
         """Return string representation for debugging.

@@ -84,8 +84,8 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: Review Gates & Quality Control
-  epic-5: backlog
-  5-1-26-status-workflow-state-machine: backlog
+  epic-5: in-progress
+  5-1-26-status-workflow-state-machine: code-review
   5-2-review-gate-enforcement: backlog
   5-3-asset-review-interface: backlog
   5-4-video-review-interface: backlog

@@ -11,7 +11,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Channel
+from app.models import Channel, Task, TaskStatus
+from app.exceptions import InvalidStateTransitionError
 
 
 @pytest.mark.asyncio
@@ -346,3 +347,476 @@ async def test_channel_bulk_create(async_session):
     saved = result.scalars().all()
 
     assert len(saved) == 10
+
+
+# ==============================================================================
+# Task Model Tests - 26-Status State Machine (Story 5.1)
+# ==============================================================================
+
+
+@pytest.mark.asyncio
+async def test_taskstatus_enum_has_26_values():
+    """Test that TaskStatus enum contains exactly 27 status values (26 original + CANCELLED).
+
+    NOTE: Test name kept as 26 for backward compatibility but validates 27 statuses.
+    """
+    # AC1: Verify all 27 statuses exist (updated in code review)
+    expected_statuses = {
+        # Initial states (4 - added CANCELLED)
+        "draft", "queued", "claimed", "cancelled",
+        # Asset phase (4)
+        "generating_assets", "assets_ready", "assets_approved", "asset_error",
+        # Composite phase (2)
+        "generating_composites", "composites_ready",
+        # Video phase (4)
+        "generating_video", "video_ready", "video_approved", "video_error",
+        # Audio phase (4)
+        "generating_audio", "audio_ready", "audio_approved", "audio_error",
+        # SFX phase (2)
+        "generating_sfx", "sfx_ready",
+        # Assembly phase (2)
+        "assembling", "assembly_ready",
+        # Final phase (5)
+        "final_review", "approved", "uploading", "published", "upload_error",
+    }
+
+    # Get all enum values
+    actual_statuses = {status.value for status in TaskStatus}
+
+    # Verify count and content (updated to 27 after code review)
+    assert len(actual_statuses) == 27, f"Expected 27 statuses, found {len(actual_statuses)}"
+    assert actual_statuses == expected_statuses
+
+
+@pytest.mark.asyncio
+async def test_taskstatus_enum_values_use_snake_case():
+    """Test that all TaskStatus enum values follow snake_case convention."""
+    # AC1: Status values follow naming convention
+    for status in TaskStatus:
+        # All values should be lowercase with underscores only
+        assert status.value.islower(), f"{status.value} is not lowercase"
+        assert " " not in status.value, f"{status.value} contains spaces"
+        assert "-" not in status.value, f"{status.value} contains hyphens"
+
+
+@pytest.mark.asyncio
+async def test_valid_status_transition_draft_to_queued(async_session):
+    """Test valid transition: DRAFT → QUEUED."""
+    # AC2: Valid transitions are allowed
+    # Create channel first
+    channel = Channel(channel_id="test-channel", channel_name="Test Channel")
+    async_session.add(channel)
+    await async_session.commit()
+
+    # Create task in DRAFT status
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-page-001",
+        title="Test Video",
+        topic="Test Topic",
+        story_direction="Test Story",
+        status=TaskStatus.DRAFT,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Transition to QUEUED (should succeed)
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    assert task.status == TaskStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_invalid_status_transition_draft_to_published(async_session):
+    """Test invalid transition: DRAFT → PUBLISHED raises InvalidStateTransitionError."""
+    # AC2: Invalid transitions raise InvalidStateTransitionError
+    # Create channel first
+    channel = Channel(channel_id="test-channel-2", channel_name="Test Channel 2")
+    async_session.add(channel)
+    await async_session.commit()
+
+    # Create task in DRAFT status
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="test-page-002",
+        title="Test Video 2",
+        topic="Test Topic 2",
+        story_direction="Test Story 2",
+        status=TaskStatus.DRAFT,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Attempt invalid transition (should raise exception)
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        task.status = TaskStatus.PUBLISHED
+        await async_session.commit()
+
+    # Verify exception details
+    assert exc_info.value.from_status == TaskStatus.DRAFT
+    assert exc_info.value.to_status == TaskStatus.PUBLISHED
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "from_status,to_status,should_succeed",
+    [
+        # Happy path transitions (should succeed)
+        (TaskStatus.DRAFT, TaskStatus.QUEUED, True),
+        (TaskStatus.QUEUED, TaskStatus.CLAIMED, True),
+        (TaskStatus.CLAIMED, TaskStatus.GENERATING_ASSETS, True),
+        (TaskStatus.GENERATING_ASSETS, TaskStatus.ASSETS_READY, True),
+        (TaskStatus.ASSETS_READY, TaskStatus.ASSETS_APPROVED, True),
+        (TaskStatus.ASSETS_APPROVED, TaskStatus.GENERATING_COMPOSITES, True),
+        (TaskStatus.GENERATING_COMPOSITES, TaskStatus.COMPOSITES_READY, True),
+        (TaskStatus.COMPOSITES_READY, TaskStatus.GENERATING_VIDEO, True),
+        (TaskStatus.GENERATING_VIDEO, TaskStatus.VIDEO_READY, True),
+        (TaskStatus.VIDEO_READY, TaskStatus.VIDEO_APPROVED, True),
+        (TaskStatus.VIDEO_APPROVED, TaskStatus.GENERATING_AUDIO, True),
+        (TaskStatus.GENERATING_AUDIO, TaskStatus.AUDIO_READY, True),
+        (TaskStatus.AUDIO_READY, TaskStatus.AUDIO_APPROVED, True),
+        (TaskStatus.AUDIO_APPROVED, TaskStatus.GENERATING_SFX, True),
+        (TaskStatus.GENERATING_SFX, TaskStatus.SFX_READY, True),
+        (TaskStatus.SFX_READY, TaskStatus.ASSEMBLING, True),
+        (TaskStatus.ASSEMBLING, TaskStatus.ASSEMBLY_READY, True),
+        (TaskStatus.ASSEMBLY_READY, TaskStatus.FINAL_REVIEW, True),
+        (TaskStatus.FINAL_REVIEW, TaskStatus.APPROVED, True),
+        (TaskStatus.APPROVED, TaskStatus.UPLOADING, True),
+        (TaskStatus.UPLOADING, TaskStatus.PUBLISHED, True),
+        # Error transitions (should succeed)
+        (TaskStatus.GENERATING_ASSETS, TaskStatus.ASSET_ERROR, True),
+        (TaskStatus.GENERATING_VIDEO, TaskStatus.VIDEO_ERROR, True),
+        (TaskStatus.GENERATING_AUDIO, TaskStatus.AUDIO_ERROR, True),
+        (TaskStatus.UPLOADING, TaskStatus.UPLOAD_ERROR, True),
+        # Error recovery paths (should succeed)
+        (TaskStatus.ASSET_ERROR, TaskStatus.QUEUED, True),
+        (TaskStatus.VIDEO_ERROR, TaskStatus.QUEUED, True),
+        (TaskStatus.AUDIO_ERROR, TaskStatus.QUEUED, True),
+        (TaskStatus.UPLOAD_ERROR, TaskStatus.FINAL_REVIEW, True),
+        # Invalid transitions (should fail)
+        (TaskStatus.DRAFT, TaskStatus.PUBLISHED, False),
+        (TaskStatus.QUEUED, TaskStatus.PUBLISHED, False),
+        (TaskStatus.ASSETS_READY, TaskStatus.PUBLISHED, False),
+        (TaskStatus.PUBLISHED, TaskStatus.DRAFT, False),
+        (TaskStatus.GENERATING_ASSETS, TaskStatus.VIDEO_READY, False),
+        (TaskStatus.CLAIMED, TaskStatus.ASSETS_APPROVED, False),
+    ],
+)
+async def test_status_transitions_comprehensive(async_session, from_status, to_status, should_succeed):
+    """Test comprehensive status transition validation matrix."""
+    # AC2: Validate state transitions
+    # AC3: State machine progression matches UX flow
+    # Create channel first
+    channel = Channel(
+        channel_id=f"test-channel-{from_status.value}-{to_status.value}",
+        channel_name="Test Channel",
+    )
+    async_session.add(channel)
+    await async_session.commit()
+
+    # Create task with initial status (bypass validation on creation)
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id=f"test-page-{from_status.value}-{to_status.value}",
+        title="Test Video",
+        topic="Test Topic",
+        story_direction="Test Story",
+    )
+    # Set status directly via __dict__ to bypass validation on initial creation
+    task.__dict__["status"] = from_status
+    async_session.add(task)
+    await async_session.commit()
+
+    if should_succeed:
+        # Valid transition - should not raise exception
+        task.status = to_status
+        await async_session.commit()
+        assert task.status == to_status
+    else:
+        # Invalid transition - should raise InvalidStateTransitionError
+        with pytest.raises(InvalidStateTransitionError):
+            task.status = to_status
+            await async_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_state_transition_error_recovery_asset_error_to_queued(async_session):
+    """Test error recovery path: ASSET_ERROR → QUEUED (retry)."""
+    # AC2: Error recovery paths work correctly
+    channel = Channel(channel_id="error-recovery-test", channel_name="Error Recovery Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    # Create task in ASSET_ERROR status
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="error-recovery-page",
+        title="Error Recovery Video",
+        topic="Error Recovery Topic",
+        story_direction="Error Recovery Story",
+    )
+    task.__dict__["status"] = TaskStatus.ASSET_ERROR
+    async_session.add(task)
+    await async_session.commit()
+
+    # Retry - transition back to QUEUED
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    assert task.status == TaskStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_taskstatus_no_duplicate_values():
+    """Test that TaskStatus enum has no duplicate values."""
+    # AC1: No duplicate enum values
+    values = [status.value for status in TaskStatus]
+    assert len(values) == len(set(values)), "TaskStatus has duplicate values"
+
+
+@pytest.mark.asyncio
+async def test_task_initial_status_defaults_to_draft(async_session):
+    """Test that new Task defaults to DRAFT status when persisted."""
+    # Verify default status is DRAFT (FR51 requirement - set via database default)
+    channel = Channel(channel_id="default-status-test", channel_name="Default Status Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="default-status-page",
+        title="Default Status Video",
+        topic="Default Status Topic",
+        story_direction="Default Status Story",
+        # Note: status not specified, should default via database server_default
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Refresh to get server-set defaults
+    await async_session.refresh(task)
+
+    # Task should default to DRAFT (set by database server_default)
+    assert task.status == TaskStatus.DRAFT
+
+
+@pytest.mark.asyncio
+async def test_initial_task_creation_skips_validation(async_session):
+    """Test that initial status assignment skips validation (status is None).
+
+    This verifies the validation logic correctly handles initial task creation
+    where self.status is None and should not validate the transition.
+    """
+    # Create channel first
+    channel = Channel(channel_id="initial-creation-test", channel_name="Initial Creation Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    # Create task with explicit status (first assignment, status is None internally)
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="initial-creation-page",
+        title="Initial Creation Video",
+        topic="Initial Creation Topic",
+        story_direction="Initial Creation Story",
+        status=TaskStatus.DRAFT,  # First assignment, should not validate
+    )
+
+    # Should succeed without InvalidStateTransitionError
+    async_session.add(task)
+    await async_session.commit()
+
+    assert task.status == TaskStatus.DRAFT
+
+    # Also test assigning QUEUED directly on creation (edge case)
+    task2 = Task(
+        channel_id=channel.id,
+        notion_page_id="initial-creation-page-2",
+        title="Initial Creation Video 2",
+        topic="Initial Creation Topic 2",
+        story_direction="Initial Creation Story 2",
+        status=TaskStatus.QUEUED,  # Skip DRAFT, should be allowed on initial creation
+    )
+    async_session.add(task2)
+    await async_session.commit()
+
+    assert task2.status == TaskStatus.QUEUED
+
+
+@pytest.mark.asyncio
+async def test_published_is_terminal_state(async_session):
+    """Test that PUBLISHED is a terminal state with no valid transitions.
+
+    Once a task reaches PUBLISHED, no further status changes should be allowed.
+    This prevents accidental modification of published content.
+    """
+    # Create channel and task
+    channel = Channel(channel_id="terminal-test", channel_name="Terminal Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="terminal-page",
+        title="Terminal Video",
+        topic="Terminal Topic",
+        story_direction="Terminal Story",
+    )
+    # Bypass validation to set PUBLISHED directly
+    task.__dict__["status"] = TaskStatus.PUBLISHED
+    async_session.add(task)
+    await async_session.commit()
+
+    # Verify PUBLISHED has no valid transitions
+    assert Task.VALID_TRANSITIONS[TaskStatus.PUBLISHED] == []
+
+    # Attempt to transition from PUBLISHED should fail
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        task.status = TaskStatus.DRAFT
+
+    assert "Invalid transition: published → draft" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_cancelled_is_terminal_state(async_session):
+    """Test that CANCELLED is a terminal state with no valid transitions.
+
+    Once a task is cancelled, it should not be able to transition to any other state.
+    """
+    # Create channel and task
+    channel = Channel(channel_id="cancelled-terminal-test", channel_name="Cancelled Terminal Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="cancelled-terminal-page",
+        title="Cancelled Terminal Video",
+        topic="Cancelled Terminal Topic",
+        story_direction="Cancelled Terminal Story",
+    )
+    # Bypass validation to set CANCELLED directly
+    task.__dict__["status"] = TaskStatus.CANCELLED
+    async_session.add(task)
+    await async_session.commit()
+
+    # Verify CANCELLED has no valid transitions
+    assert Task.VALID_TRANSITIONS[TaskStatus.CANCELLED] == []
+
+    # Attempt to transition from CANCELLED should fail
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        task.status = TaskStatus.QUEUED
+
+    assert "Invalid transition: cancelled → queued" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_cancellation_from_draft(async_session):
+    """Test that tasks can be cancelled from DRAFT status."""
+    # Create channel and task
+    channel = Channel(channel_id="cancel-draft-test", channel_name="Cancel Draft Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="cancel-draft-page",
+        title="Cancel Draft Video",
+        topic="Cancel Draft Topic",
+        story_direction="Cancel Draft Story",
+        status=TaskStatus.DRAFT,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Cancel from DRAFT
+    task.status = TaskStatus.CANCELLED
+    await async_session.commit()
+
+    assert task.status == TaskStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cancellation_from_queued(async_session):
+    """Test that tasks can be cancelled from QUEUED status."""
+    # Create channel and task
+    channel = Channel(channel_id="cancel-queued-test", channel_name="Cancel Queued Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="cancel-queued-page",
+        title="Cancel Queued Video",
+        topic="Cancel Queued Topic",
+        story_direction="Cancel Queued Story",
+        status=TaskStatus.DRAFT,
+    )
+    async_session.add(task)
+    await async_session.commit()
+
+    # Transition to QUEUED
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    # Cancel from QUEUED
+    task.status = TaskStatus.CANCELLED
+    await async_session.commit()
+
+    assert task.status == TaskStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_cancellation_from_final_review(async_session):
+    """Test that tasks can be cancelled from FINAL_REVIEW status.
+
+    This allows users to cancel videos during final YouTube compliance review
+    if they decide not to publish.
+    """
+    # Create channel and task
+    channel = Channel(channel_id="cancel-review-test", channel_name="Cancel Review Test")
+    async_session.add(channel)
+    await async_session.commit()
+
+    task = Task(
+        channel_id=channel.id,
+        notion_page_id="cancel-review-page",
+        title="Cancel Review Video",
+        topic="Cancel Review Topic",
+        story_direction="Cancel Review Story",
+    )
+    # Bypass validation to set FINAL_REVIEW directly
+    task.__dict__["status"] = TaskStatus.FINAL_REVIEW
+    async_session.add(task)
+    await async_session.commit()
+
+    # Cancel from FINAL_REVIEW
+    task.status = TaskStatus.CANCELLED
+    await async_session.commit()
+
+    assert task.status == TaskStatus.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_taskstatus_enum_has_27_values():
+    """Test that TaskStatus enum has exactly 27 values (including CANCELLED)."""
+    # AC1: 27 statuses defined (26 original + CANCELLED)
+    assert len(TaskStatus) == 27, f"Expected 27 statuses, got {len(TaskStatus)}"
+
+
+@pytest.mark.asyncio
+async def test_exception_str_includes_transition_details():
+    """Test that InvalidStateTransitionError.__str__ includes transition details."""
+    from app.models import TaskStatus
+
+    exc = InvalidStateTransitionError(
+        "Invalid transition: draft → published",
+        from_status=TaskStatus.DRAFT,
+        to_status=TaskStatus.PUBLISHED,
+    )
+
+    error_str = str(exc)
+    assert "Invalid transition: draft → published" in error_str
+    assert "from=draft" in error_str
+    assert "to=published" in error_str
