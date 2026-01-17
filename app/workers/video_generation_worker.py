@@ -44,16 +44,21 @@ Usage:
 """
 
 import asyncio
+from datetime import datetime, timezone
 from uuid import UUID
 
 import httpx
 
+from app.clients.notion import NotionClient
+from app.config import get_notion_api_token
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
 from app.services.cost_tracker import track_api_cost
+from app.services.notion_video_service import NotionVideoService
 from app.services.video_generation import VideoGenerationService
 from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
+from app.utils.video_optimization import get_video_duration, optimize_video_for_streaming
 
 log = get_logger(__name__)
 
@@ -143,21 +148,55 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
 
     # Step 2: Generate videos (OUTSIDE transaction - DB connection closed)
     try:
+        # Check for partial regeneration (Story 5.4 AC3)
+        async with async_session_factory() as db:
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_partial_regen_check", task_id=str(task_id))
+                return
+            metadata = task.step_completion_metadata or {}
+            failed_clip_numbers = metadata.get("failed_clip_numbers", [])
+
         service = VideoGenerationService(channel_id_str, project_id)
         manifest = service.create_video_manifest(topic, story_direction)
 
-        log.info(
-            "video_generation_start",
-            task_id=str(task_id),
-            clip_count=len(manifest.clips),
-            estimated_time_minutes=18 * 3.5,  # 18 clips x 3.5 min average
-        )
+        # Partial regeneration: only generate failed clips if specified
+        if failed_clip_numbers:
+            log.info(
+                "video_generation_partial_start",
+                task_id=str(task_id),
+                failed_clips=failed_clip_numbers,
+                clip_count=len(failed_clip_numbers),
+                estimated_time_minutes=len(failed_clip_numbers) * 3.5,
+            )
+            # Filter manifest to only include failed clips
+            manifest.clips = [c for c in manifest.clips if c["clip_number"] in failed_clip_numbers]
+        else:
+            log.info(
+                "video_generation_start",
+                task_id=str(task_id),
+                clip_count=len(manifest.clips),
+                estimated_time_minutes=18 * 3.5,  # 18 clips x 3.5 min average
+            )
 
         result = await service.generate_videos(
             manifest,
-            resume=False,  # Future enhancement: detect retries and set resume=True
+            resume=False,  # Resume logic handled by partial regeneration
             max_concurrent=5,  # Kling rate limit
         )
+
+        # Clear failed_clip_numbers after successful regeneration
+        if failed_clip_numbers:
+            async with async_session_factory() as db, db.begin():
+                task = await db.get(Task, task_id)
+                if task and task.step_completion_metadata:
+                    task.step_completion_metadata.pop("failed_clip_numbers", None)
+                    await db.commit()
+                    log.info(
+                        "video_partial_regeneration_cleared",
+                        task_id=str(task_id),
+                        regenerated_clips=failed_clip_numbers,
+                    )
 
         log.info(
             "video_generation_complete",
@@ -185,16 +224,158 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             )
             await db.commit()
 
+        # Step 3.5: Optimize videos and populate Notion (Story 5.4)
+        # Optimize videos for streaming playback (MP4 faststart)
+        # Then populate Video entries in Notion database
+        notion_populated_successfully = False
+        try:
+            log.info(
+                "video_optimization_started",
+                task_id=str(task_id),
+                video_count=len(manifest.clips),
+            )
+
+            # Optimize each video for streaming playback
+            optimized_count = 0
+            for clip in manifest.clips:
+                video_path = service.get_video_path(clip["clip_number"])
+                if video_path.exists():
+                    try:
+                        await optimize_video_for_streaming(video_path)
+                        optimized_count += 1
+                    except Exception as e:
+                        log.warning(
+                            "video_optimization_failed",
+                            task_id=str(task_id),
+                            clip_number=clip["clip_number"],
+                            error=str(e),
+                        )
+                        # Continue with other videos - optimization failure is not critical
+
+            log.info(
+                "video_optimization_complete",
+                task_id=str(task_id),
+                optimized=optimized_count,
+                total=len(manifest.clips),
+            )
+
+            # Populate Notion Videos database
+            notion_token = get_notion_api_token()
+            if notion_token and notion_page_id:
+                # Load channel from database to get storage_strategy (SHORT transaction)
+                async with async_session_factory() as db:
+                    task = await db.get(Task, task_id)
+                    if task:
+                        await db.refresh(task, ["channel"])
+                        channel = task.channel
+                        channel_storage_strategy = channel.storage_strategy
+                    else:
+                        log.error("task_not_found_for_notion_population", task_id=str(task_id))
+                        channel = None
+                        channel_storage_strategy = None
+                # DB connection closed - build video files list outside transaction
+
+                if channel:
+                    # Build video files list with durations
+                    video_files = []
+                    for clip in manifest.clips:
+                        video_path = service.get_video_path(clip["clip_number"])
+                        if video_path.exists():
+                            try:
+                                # Get actual duration after trimming
+                                duration = await get_video_duration(video_path)
+                                video_files.append({
+                                    "clip_number": clip["clip_number"],
+                                    "output_path": video_path,
+                                    "duration": duration,
+                                })
+                            except Exception as e:
+                                log.warning(
+                                    "video_duration_probe_failed",
+                                    task_id=str(task_id),
+                                    clip_number=clip["clip_number"],
+                                    error=str(e),
+                                )
+                                # Use default 10s duration if probe fails
+                                video_files.append({
+                                    "clip_number": clip["clip_number"],
+                                    "output_path": video_path,
+                                    "duration": 10.0,
+                                })
+
+                    # Populate Notion Videos database
+                    notion_client = NotionClient(auth_token=notion_token)
+                    video_service = NotionVideoService(notion_client, channel)
+
+                    populate_result = await video_service.populate_videos(
+                        task_id=task_id,
+                        notion_page_id=notion_page_id,
+                        video_files=video_files,
+                        correlation_id=str(task_id),
+                    )
+
+                    log.info(
+                        "notion_videos_populated",
+                        task_id=str(task_id),
+                        created=populate_result["created"],
+                        failed=populate_result["failed"],
+                        storage_strategy=populate_result["storage_strategy"],
+                    )
+                    notion_populated_successfully = True
+                else:
+                    log.warning(
+                        "channel_not_found_for_notion_population",
+                        task_id=str(task_id),
+                    )
+            else:
+                log.info(
+                    "notion_video_population_skipped",
+                    task_id=str(task_id),
+                    reason="notion_token_missing" if not notion_token else "notion_page_id_missing",
+                )
+
+        except Exception as e:
+            # CRITICAL: If Notion population fails, don't mark VIDEO_READY
+            # User won't be able to see videos for review
+            log.error(
+                "notion_video_population_error",
+                task_id=str(task_id),
+                error=str(e),
+                exc_info=True,
+            )
+            # Mark as VIDEO_ERROR so user knows something went wrong
+            async with async_session_factory() as db, db.begin():
+                task = await db.get(Task, task_id)
+                if task:
+                    task.status = TaskStatus.VIDEO_ERROR
+                    task.error_log = f"{task.error_log or ''}\n[{datetime.now(timezone.utc).isoformat()}] Notion video population failed: {str(e)}".strip()
+                    await db.commit()
+            return
+
         # Step 4: Update task (short transaction)
+        # Only mark VIDEO_READY if Notion population succeeded or was skipped intentionally
         async with async_session_factory() as db, db.begin():
             task = await db.get(Task, task_id)
             if not task:
                 log.error("task_not_found_after_generation", task_id=str(task_id))
                 return
+
+            # Set status to VIDEO_READY (triggers review gate - Story 5.2)
             task.status = TaskStatus.VIDEO_READY
+
+            # Set review_started_at timestamp (Story 5.4 AC1)
+            task.review_started_at = datetime.now(timezone.utc)
+
+            # Update total cost
             task.total_cost_usd = task.total_cost_usd + float(result["total_cost_usd"])
+
             await db.commit()
-            log.info("task_updated", task_id=str(task_id), status="video_ready")
+            log.info(
+                "task_updated_video_ready",
+                task_id=str(task_id),
+                status="video_ready",
+                review_started_at=task.review_started_at.isoformat(),
+            )
 
         # Step 5: Cleanup service resources
         await service.cleanup()

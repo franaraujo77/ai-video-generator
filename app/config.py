@@ -208,6 +208,35 @@ def get_notion_tasks_collection_id() -> str:
     return collection_id.strip()
 
 
+def get_notion_videos_database_id() -> str:
+    """Get Notion Videos database ID from environment.
+
+    Environment Variable:
+        NOTION_VIDEOS_DATABASE_ID: Notion Videos database ID for Story 5.4
+        Example: "e9614542g151543fc02d4c144571gccf"
+
+    Returns:
+        Videos database ID string.
+
+    Raises:
+        ValueError: If NOTION_VIDEOS_DATABASE_ID not set.
+
+    Note:
+        This database stores video clip metadata (18 clips per task) created by
+        the video generation step. It links to the Tasks database via relation property.
+        Videos are optimized with MP4 faststart for streaming playback in Notion.
+
+    Story: 5.4 - Video Review Interface
+    """
+    db_id = os.getenv("NOTION_VIDEOS_DATABASE_ID")
+    if not db_id:
+        raise ValueError(
+            "NOTION_VIDEOS_DATABASE_ID environment variable is required. "
+            "Set this to your Notion Videos database ID."
+        )
+    return db_id.strip()
+
+
 def get_notion_sync_interval() -> int:
     """Get Notion sync interval in seconds from environment.
 
@@ -238,6 +267,9 @@ def get_notion_sync_interval() -> int:
 DEFAULT_MAX_CONCURRENT_ASSET = 12  # Gemini: no published limit, conservative
 DEFAULT_MAX_CONCURRENT_VIDEO = 3   # Kling: 10 global limit, 3 workers × 3 = 9 total
 DEFAULT_MAX_CONCURRENT_AUDIO = 6   # ElevenLabs: no published limit, conservative
+
+# Video generation defaults (Story 5.4)
+DEFAULT_VIDEO_DURATION_SECONDS = 10.0  # Kling generates 10-second clips by default
 
 
 def get_max_concurrent_asset_gen() -> int:

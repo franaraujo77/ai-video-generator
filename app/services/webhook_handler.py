@@ -34,6 +34,42 @@ from app.services.task_service import enqueue_task_from_notion_page
 
 log = structlog.get_logger()
 
+
+def _extract_clip_numbers(text: str) -> list[int]:
+    """Extract clip numbers from rejection reason text.
+
+    Looks for patterns like:
+    - "clips 5, 12, 17"
+    - "Regenerate: clips 5,12,17"
+    - "Bad motion: 5, 12, 17"
+    - "clip 5"
+
+    Args:
+        text: Rejection reason text from Error Log
+
+    Returns:
+        List of clip numbers (1-18), sorted and deduplicated
+
+    Example:
+        >>> _extract_clip_numbers("Regenerate: clips 5, 12, 17")
+        [5, 12, 17]
+    """
+    import re
+
+    # Find all numbers in the text
+    numbers = re.findall(r'\b(\d+)\b', text)
+
+    # Convert to integers and filter to valid clip range (1-18)
+    clip_numbers = []
+    for num_str in numbers:
+        num = int(num_str)
+        if 1 <= num <= 18:
+            clip_numbers.append(num)
+
+    # Return sorted, deduplicated list
+    return sorted(set(clip_numbers))
+
+
 # Constants
 NOTION_STATUS_QUEUED = "Queued"
 NOTION_APPROVAL_STATUSES = {
@@ -311,6 +347,21 @@ async def _handle_rejection_status_change(
         else:
             new_entry = f"[{timestamp}] {notion_status}: No rejection reason provided"
         task.error_log = f"{current_log}\n{new_entry}".strip()
+
+        # Extract clip numbers for partial regeneration (Story 5.4 AC3)
+        if notion_status == "Video Error" and rejection_reason:
+            clip_numbers = _extract_clip_numbers(rejection_reason)
+            if clip_numbers:
+                # Store failed clip numbers in metadata for partial regeneration
+                if not task.step_completion_metadata:
+                    task.step_completion_metadata = {}
+                task.step_completion_metadata["failed_clip_numbers"] = clip_numbers
+                log.info(
+                    "video_rejection_clip_numbers_extracted",
+                    correlation_id=correlation_id,
+                    task_id=str(task.id),
+                    failed_clip_numbers=clip_numbers,
+                )
 
         # Update task status to error state
         task.status = internal_status
