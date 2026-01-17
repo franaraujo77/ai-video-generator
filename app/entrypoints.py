@@ -56,7 +56,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
         pgq: Initialized PgQueuer instance
     """
 
-    @pgq.entrypoint("process_video")  # type: ignore
+    @pgq.entrypoint("process_video")  # type: ignore[misc]
     async def process_video(job: Job) -> None:
         """Process video generation task with priority awareness (Story 4.3).
 

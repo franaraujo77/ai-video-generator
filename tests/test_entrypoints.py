@@ -75,9 +75,9 @@ async def test_process_video_success():
 
         # Verify task status transitions
         # First transaction: pending → claimed → processing (2 commits)
-        # Second transaction: processing → completed (1 commit)
-        # Note: Story 4.5 adds rate limit checks which may affect flow
-        assert mock_task.status == "completed"
+        # Second transaction: processing → published (1 commit)
+        # Note: Placeholder entrypoint marks tasks as PUBLISHED (terminal success state)
+        assert mock_task.status == TaskStatus.PUBLISHED
 
         # Verify commits happened (at least for completion)
         # Story 4.5: Rate limit checks may alter commit pattern
@@ -294,7 +294,7 @@ async def test_process_video_status_transitions():
         assert (
             mock_task_1.status == TaskStatus.GENERATING_ASSETS
         )  # Last set in first transaction (queued->generating_assets)
-        assert mock_task_2.status == "completed"  # Set in second transaction
+        assert mock_task_2.status == TaskStatus.PUBLISHED  # Set in second transaction
 
 
 @pytest.mark.asyncio
