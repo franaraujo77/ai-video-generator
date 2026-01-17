@@ -102,6 +102,7 @@ class NotionVideoService:
                 - clip_number: int (1-18) identifies clip in sequence
                 - output_path: Path object to MP4 file
                 - duration: float (actual duration in seconds)
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Summary dict with keys:
@@ -212,6 +213,7 @@ class NotionVideoService:
             video_path: Path to MP4 file
             duration: Actual duration in seconds (after trimming)
             storage_strategy: "notion" or "r2"
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Created page object from Notion API

@@ -96,6 +96,7 @@ class NotionAssetService:
                 - asset_type: "character" | "environment" | "prop"
                 - name: Asset filename without extension
                 - output_path: Path object to PNG file
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Summary dict with keys:
@@ -207,6 +208,7 @@ class NotionAssetService:
             asset_name: Asset filename without extension
             asset_path: Path to PNG file
             storage_strategy: "notion" or "r2"
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Created page object from Notion API
