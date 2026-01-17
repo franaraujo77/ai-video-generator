@@ -176,9 +176,6 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
     # Create PgQueuer driver with round-robin query (Story 4.4)
     driver = AsyncpgPoolDriver(pool)
     global pgq
-    # TODO: Remove type: ignore when PgQueuer adds proper type hints for query parameter
-    # The query parameter is supported but not exposed in PgQueuer's type stubs
-    # Reference: PgQueuer library lacks type stubs for custom query parameter
     pgq = PgQueuer(driver, query=ROUND_ROBIN_QUERY)  # type: ignore[call-arg]
 
     # Extract query pattern for logging (Story 4.4: dynamic pattern detection)

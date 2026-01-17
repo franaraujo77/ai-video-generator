@@ -95,7 +95,9 @@ class TestVideoReviewApprovalFlow:
         assert 0 < review_duration < 60  # UX requirement: fast review
 
     @pytest.mark.asyncio
-    async def test_approval_flow_calculates_review_duration(self, async_session, patch_session_factory):
+    async def test_approval_flow_calculates_review_duration(
+        self, async_session, patch_session_factory
+    ):
         """Test review duration calculation for analytics."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
@@ -210,7 +212,9 @@ class TestPartialRegeneration:
             assert result == expected_clips, f"Failed for input: {input_text}"
 
     @pytest.mark.asyncio
-    async def test_partial_regeneration_only_generates_failed_clips(self, async_session, patch_session_factory):
+    async def test_partial_regeneration_only_generates_failed_clips(
+        self, async_session, patch_session_factory
+    ):
         """Test partial regeneration only generates specified clip numbers."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
