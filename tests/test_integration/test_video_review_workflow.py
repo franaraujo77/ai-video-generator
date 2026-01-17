@@ -33,28 +33,49 @@ from app.services.webhook_handler import (
 from app.workers.video_generation_worker import process_video_generation_task
 
 
+@pytest.fixture
+def patch_session_factory(async_session, monkeypatch):
+    """Patch async_session_factory to use test database session.
+
+    This fixture patches the session factory to always return the same test
+    session, ensuring that all operations within a test share the same session
+    and can see each other's changes.
+    """
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def mock_factory():
+        """Mock session factory that yields the test session."""
+        yield async_session
+
+    monkeypatch.setattr("app.services.webhook_handler.async_session_factory", mock_factory)
+    monkeypatch.setattr("app.workers.video_generation_worker.async_session_factory", mock_factory)
+    return async_session
+
+
 class TestVideoReviewApprovalFlow:
     """Test complete approval flow: VIDEO_READY → VIDEO_APPROVED → QUEUED."""
 
     @pytest.mark.asyncio
-    async def test_approval_flow_end_to_end(self, db_session):
+    async def test_approval_flow_end_to_end(self, async_session, patch_session_factory):
         """Test complete approval flow with timestamps and re-queueing."""
         # Arrange: Create task in VIDEO_READY state with review_started_at
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
-        db_session.add(channel)
-        await db_session.flush()
+        async_session.add(channel)
+        await async_session.flush()
 
         task = Task(
             id=uuid4(),
             channel_id=channel.id,
             notion_page_id="abc123def456",
+            title="Pikachu Nature Documentary",
             topic="Pikachu",
             story_direction="Epic nature battles",
             status=TaskStatus.VIDEO_READY,
             review_started_at=datetime.now(timezone.utc),
         )
-        db_session.add(task)
-        await db_session.commit()
+        async_session.add(task)
+        await async_session.commit()
 
         # Act: Handle approval status change
         await _handle_approval_status_change(
@@ -64,7 +85,7 @@ class TestVideoReviewApprovalFlow:
         )
 
         # Assert: Task should be re-queued with review_completed_at set
-        await db_session.refresh(task)
+        await async_session.refresh(task)
         assert task.status == TaskStatus.QUEUED
         assert task.review_completed_at is not None
         assert task.review_completed_at > task.review_started_at
@@ -74,25 +95,26 @@ class TestVideoReviewApprovalFlow:
         assert 0 < review_duration < 60  # UX requirement: fast review
 
     @pytest.mark.asyncio
-    async def test_approval_flow_calculates_review_duration(self, db_session):
+    async def test_approval_flow_calculates_review_duration(self, async_session, patch_session_factory):
         """Test review duration calculation for analytics."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
-        db_session.add(channel)
-        await db_session.flush()
+        async_session.add(channel)
+        await async_session.flush()
 
         review_start = datetime.now(timezone.utc)
         task = Task(
             id=uuid4(),
             channel_id=channel.id,
             notion_page_id="abc123def456",
+            title="Pikachu Nature Documentary",
             topic="Pikachu",
             story_direction="Epic nature battles",
             status=TaskStatus.VIDEO_READY,
             review_started_at=review_start,
         )
-        db_session.add(task)
-        await db_session.commit()
+        async_session.add(task)
+        await async_session.commit()
 
         # Act
         await _handle_approval_status_change(
@@ -102,7 +124,7 @@ class TestVideoReviewApprovalFlow:
         )
 
         # Assert
-        await db_session.refresh(task)
+        await async_session.refresh(task)
         duration = (task.review_completed_at - task.review_started_at).total_seconds()
         assert duration > 0
         assert duration < 5  # Should be nearly instant in tests
@@ -112,24 +134,25 @@ class TestVideoReviewRejectionFlow:
     """Test complete rejection flow: VIDEO_READY → VIDEO_ERROR with clip extraction."""
 
     @pytest.mark.asyncio
-    async def test_rejection_flow_with_clip_numbers(self, db_session):
+    async def test_rejection_flow_with_clip_numbers(self, async_session, patch_session_factory):
         """Test rejection extracts clip numbers from Error Log."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
-        db_session.add(channel)
-        await db_session.flush()
+        async_session.add(channel)
+        await async_session.flush()
 
         task = Task(
             id=uuid4(),
             channel_id=channel.id,
             notion_page_id="abc123def456",
+            title="Pikachu Nature Documentary",
             topic="Pikachu",
             story_direction="Epic nature battles",
             status=TaskStatus.VIDEO_READY,
             review_started_at=datetime.now(timezone.utc),
         )
-        db_session.add(task)
-        await db_session.commit()
+        async_session.add(task)
+        await async_session.commit()
 
         # Mock Notion page data with Error Log containing clip numbers
         notion_page = {
@@ -153,7 +176,7 @@ class TestVideoReviewRejectionFlow:
         )
 
         # Assert
-        await db_session.refresh(task)
+        await async_session.refresh(task)
         assert task.status == TaskStatus.VIDEO_ERROR
         assert task.review_completed_at is not None
         assert "Bad motion quality in clips 5, 12, 17" in task.error_log
@@ -187,24 +210,25 @@ class TestPartialRegeneration:
             assert result == expected_clips, f"Failed for input: {input_text}"
 
     @pytest.mark.asyncio
-    async def test_partial_regeneration_only_generates_failed_clips(self, db_session):
+    async def test_partial_regeneration_only_generates_failed_clips(self, async_session, patch_session_factory):
         """Test partial regeneration only generates specified clip numbers."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
-        db_session.add(channel)
-        await db_session.flush()
+        async_session.add(channel)
+        await async_session.flush()
 
         task = Task(
             id=uuid4(),
             channel_id=channel.id,
             notion_page_id="abc123def456",
+            title="Pikachu Nature Documentary",
             topic="Pikachu",
             story_direction="Epic nature battles",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.COMPOSITES_READY,  # Composites exist, ready for video generation
             step_completion_metadata={"failed_clip_numbers": [5, 12, 17]},
         )
-        db_session.add(task)
-        await db_session.commit()
+        async_session.add(task)
+        await async_session.commit()
 
         # Mock video generation service
         with patch(
@@ -215,7 +239,15 @@ class TestPartialRegeneration:
 
             # Mock manifest creation
             mock_manifest = MagicMock()
-            mock_manifest.clips = [{"clip_number": i, "prompt": f"Clip {i}"} for i in range(1, 19)]
+            # Create mock clip objects with clip_number attribute
+            mock_clips = []
+            for i in range(1, 19):
+                mock_clip = MagicMock()
+                mock_clip.clip_number = i
+                mock_clip.output_path = MagicMock()
+                mock_clip.output_path.exists.return_value = False  # Skip video optimization
+                mock_clips.append(mock_clip)
+            mock_manifest.clips = mock_clips
             mock_service.create_video_manifest.return_value = mock_manifest
 
             # Mock video generation
@@ -240,7 +272,7 @@ class TestPartialRegeneration:
                 # Assert: Only 3 clips should be in manifest (not all 18)
                 filtered_clips = mock_manifest.clips
                 assert len(filtered_clips) == 3
-                assert all(c["clip_number"] in [5, 12, 17] for c in filtered_clips)
+                assert all(c.clip_number in [5, 12, 17] for c in filtered_clips)
 
                 # Cost should reflect 3 clips, not 18
                 result = mock_service.generate_videos.call_args[1]
@@ -248,7 +280,7 @@ class TestPartialRegeneration:
                 assert mock_service.generate_videos.called
 
         # Verify failed_clip_numbers cleared after successful regeneration
-        await db_session.refresh(task)
+        await async_session.refresh(task)
         metadata = task.step_completion_metadata or {}
         assert "failed_clip_numbers" not in metadata
 
@@ -257,7 +289,7 @@ class TestReviewTimestamps:
     """Test review timestamp tracking (AC1)."""
 
     @pytest.mark.asyncio
-    async def test_review_started_at_set_on_video_ready(self, db_session):
+    async def test_review_started_at_set_on_video_ready(self, async_session):
         """Test review_started_at timestamp is set when task transitions to VIDEO_READY."""
         # This test would require mocking the entire video generation flow
         # For now, we test that the timestamp is set correctly in worker code
@@ -269,25 +301,26 @@ class Test60SecondReviewWorkflow:
     """Test 60-second review workflow (UX requirement)."""
 
     @pytest.mark.asyncio
-    async def test_fast_approval_under_60_seconds(self, db_session):
+    async def test_fast_approval_under_60_seconds(self, async_session, patch_session_factory):
         """Test that approval can happen within 60 seconds (UX requirement)."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
-        db_session.add(channel)
-        await db_session.flush()
+        async_session.add(channel)
+        await async_session.flush()
 
         review_start = datetime.now(timezone.utc)
         task = Task(
             id=uuid4(),
             channel_id=channel.id,
             notion_page_id="abc123def456",
+            title="Pikachu Nature Documentary",
             topic="Pikachu",
             story_direction="Epic nature battles",
             status=TaskStatus.VIDEO_READY,
             review_started_at=review_start,
         )
-        db_session.add(task)
-        await db_session.commit()
+        async_session.add(task)
+        await async_session.commit()
 
         # Act: Fast approval (within 60 seconds)
         await _handle_approval_status_change(
@@ -297,30 +330,31 @@ class Test60SecondReviewWorkflow:
         )
 
         # Assert
-        await db_session.refresh(task)
+        await async_session.refresh(task)
         review_duration = (task.review_completed_at - task.review_started_at).total_seconds()
         assert review_duration < 60  # UX requirement: fast review path
 
     @pytest.mark.asyncio
-    async def test_rejection_workflow_under_60_seconds(self, db_session):
+    async def test_rejection_workflow_under_60_seconds(self, async_session, patch_session_factory):
         """Test that rejection can happen within 60 seconds (UX requirement)."""
         # Arrange
         channel = Channel(channel_id="test_channel", channel_name="Test", storage_strategy="notion")
-        db_session.add(channel)
-        await db_session.flush()
+        async_session.add(channel)
+        await async_session.flush()
 
         review_start = datetime.now(timezone.utc)
         task = Task(
             id=uuid4(),
             channel_id=channel.id,
             notion_page_id="abc123def456",
+            title="Pikachu Nature Documentary",
             topic="Pikachu",
             story_direction="Epic nature battles",
             status=TaskStatus.VIDEO_READY,
             review_started_at=review_start,
         )
-        db_session.add(task)
-        await db_session.commit()
+        async_session.add(task)
+        await async_session.commit()
 
         # Mock Notion page
         notion_page = {
@@ -336,6 +370,6 @@ class Test60SecondReviewWorkflow:
         )
 
         # Assert
-        await db_session.refresh(task)
+        await async_session.refresh(task)
         review_duration = (task.review_completed_at - task.review_started_at).total_seconds()
         assert review_duration < 60  # UX requirement: fast review path

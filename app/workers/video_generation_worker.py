@@ -190,8 +190,10 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             async with async_session_factory() as db, db.begin():
                 task = await db.get(Task, task_id)
                 if task and task.step_completion_metadata:
-                    task.step_completion_metadata.pop("failed_clip_numbers", None)
-                    await db.commit()
+                    # Create new dict without failed_clip_numbers (SQLAlchemy detects replacement)
+                    metadata = dict(task.step_completion_metadata)
+                    metadata.pop("failed_clip_numbers", None)
+                    task.step_completion_metadata = metadata
                     log.info(
                         "video_partial_regeneration_cleared",
                         task_id=str(task_id),

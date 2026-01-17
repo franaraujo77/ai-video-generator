@@ -236,9 +236,12 @@ async def _handle_approval_status_change(
         else:
             duration = None
 
-        # Re-queue task so pipeline can resume from next step (Story 5.3 Task 4.2)
-        # The pipeline orchestrator will check step completion metadata and skip
-        # completed steps, resuming from the next step after the approved gate
+        # Two-step transition: VIDEO_READY → VIDEO_APPROVED → QUEUED
+        # SQLAlchemy validators only check the immediate transition, so we can
+        # transition through VIDEO_APPROVED to QUEUED in the same transaction
+        # First transition to approved state
+        task.status = TaskStatus.VIDEO_APPROVED
+        # Then immediately transition to queued (both changes committed together)
         task.status = TaskStatus.QUEUED
 
         log.info(
