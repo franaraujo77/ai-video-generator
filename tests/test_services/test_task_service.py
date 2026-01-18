@@ -815,7 +815,7 @@ async def test_get_tasks_needing_review_fifo_within_priority(async_session, test
 
     # Create tasks with different priorities and creation times
     base_time = datetime.now(timezone.utc)
-    
+
     task1 = Task(
         channel_id=test_channel.id,
         notion_page_id="page_1",

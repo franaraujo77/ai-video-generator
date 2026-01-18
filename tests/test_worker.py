@@ -687,11 +687,14 @@ class TestConfigReload:
             # Should now reflect new value
             assert state.max_concurrent_asset_gen == 15
 
-    @patch.dict(os.environ, {
-        "MAX_CONCURRENT_ASSET_GEN": "8",
-        "MAX_CONCURRENT_VIDEO_GEN": "2",
-        "MAX_CONCURRENT_AUDIO_GEN": "4"
-    })
+    @patch.dict(
+        os.environ,
+        {
+            "MAX_CONCURRENT_ASSET_GEN": "8",
+            "MAX_CONCURRENT_VIDEO_GEN": "2",
+            "MAX_CONCURRENT_AUDIO_GEN": "4",
+        },
+    )
     def test_reload_config_updates_all_limits(self):
         """Test that reload_config updates all three parallelism limits."""
         from app.worker import WorkerState
@@ -702,11 +705,14 @@ class TestConfigReload:
         assert state.max_concurrent_audio_gen == 4
 
         # Change all environment variables
-        with patch.dict(os.environ, {
-            "MAX_CONCURRENT_ASSET_GEN": "16",
-            "MAX_CONCURRENT_VIDEO_GEN": "5",
-            "MAX_CONCURRENT_AUDIO_GEN": "10"
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "MAX_CONCURRENT_ASSET_GEN": "16",
+                "MAX_CONCURRENT_VIDEO_GEN": "5",
+                "MAX_CONCURRENT_AUDIO_GEN": "10",
+            },
+        ):
             state.reload_config()
 
             # All should reflect new values

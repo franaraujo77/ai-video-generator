@@ -555,7 +555,8 @@ async def get_tasks_in_progress(session: AsyncSession) -> list[Task]:
             in_progress = await get_tasks_in_progress(db)
             for task in in_progress:
                 duration = datetime.now(timezone.utc) - task.updated_at
-                print(f"{task.title}: {duration.total_seconds() / 60:.0f} minutes in {task.status.value}")
+                minutes = duration.total_seconds() / 60
+                print(f"{task.title}: {minutes:.0f} minutes in {task.status.value}")
     """
     from app.models import IN_PROGRESS_STATUSES
 

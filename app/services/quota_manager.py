@@ -60,8 +60,6 @@ def _should_send_alert(channel_id: UUID, level: str) -> bool:
     Returns:
         True if alert should be sent, False if throttled
     """
-    from datetime import timedelta
-
     key = (channel_id, level)
     now = datetime.now()
 
@@ -83,18 +81,13 @@ def _should_send_alert(channel_id: UUID, level: str) -> bool:
         channel_id=str(channel_id),
         level=level,
         time_since_last=time_since_last,
-        min_interval=MIN_ALERT_INTERVAL_SECONDS
+        min_interval=MIN_ALERT_INTERVAL_SECONDS,
     )
     return False
 
 
-async def check_youtube_quota(
-    channel_id: UUID,
-    operation: str,
-    db: AsyncSession
-) -> bool:
-    """
-    Check if YouTube quota available for operation.
+async def check_youtube_quota(channel_id: UUID, operation: str, db: AsyncSession) -> bool:
+    """Check if YouTube quota available for operation.
 
     Queries YouTubeQuotaUsage table to verify if performing the given
     operation would exceed the channel's daily quota limit.
@@ -119,8 +112,7 @@ async def check_youtube_quota(
 
     # Get quota record for today
     stmt = select(YouTubeQuotaUsage).where(
-        YouTubeQuotaUsage.channel_id == channel_id,
-        YouTubeQuotaUsage.date == today
+        YouTubeQuotaUsage.channel_id == channel_id, YouTubeQuotaUsage.date == today
     )
     result = await db.execute(stmt)
     quota = result.scalar_one_or_none()
@@ -131,7 +123,7 @@ async def check_youtube_quota(
             "youtube_quota_check_first_today",
             channel_id=str(channel_id),
             operation=operation,
-            cost=cost
+            cost=cost,
         )
         return True
 
@@ -146,19 +138,14 @@ async def check_youtube_quota(
         current_usage=quota.units_used,
         daily_limit=quota.daily_limit,
         available=available,
-        would_total=quota.units_used + cost
+        would_total=quota.units_used + cost,
     )
 
     return available
 
 
-async def record_youtube_quota(
-    channel_id: UUID,
-    operation: str,
-    db: AsyncSession
-) -> None:
-    """
-    Record YouTube quota usage after successful operation.
+async def record_youtube_quota(channel_id: UUID, operation: str, db: AsyncSession) -> None:
+    """Record YouTube quota usage after successful operation.
 
     CRITICAL: Only call this AFTER operation succeeds. If operation fails,
     do NOT record quota usage.
@@ -184,20 +171,18 @@ async def record_youtube_quota(
     today = date.today()
 
     # Get or create quota record
-    stmt = select(YouTubeQuotaUsage).where(
-        YouTubeQuotaUsage.channel_id == channel_id,
-        YouTubeQuotaUsage.date == today
-    ).with_for_update()  # Lock for atomic update
+    stmt = (
+        select(YouTubeQuotaUsage)
+        .where(YouTubeQuotaUsage.channel_id == channel_id, YouTubeQuotaUsage.date == today)
+        .with_for_update()
+    )  # Lock for atomic update
 
     result = await db.execute(stmt)
     quota = result.scalar_one_or_none()
 
     if not quota:
         quota = YouTubeQuotaUsage(
-            channel_id=channel_id,
-            date=today,
-            units_used=cost,
-            daily_limit=10000
+            channel_id=channel_id, date=today, units_used=cost, daily_limit=10000
         )
         db.add(quota)
     else:
@@ -206,7 +191,7 @@ async def record_youtube_quota(
     await db.commit()
 
     # Check alert thresholds
-    percentage = (quota.units_used / quota.daily_limit)
+    percentage = quota.units_used / quota.daily_limit
 
     log.info(
         "youtube_quota_recorded",
@@ -215,7 +200,7 @@ async def record_youtube_quota(
         cost=cost,
         total_usage=quota.units_used,
         daily_limit=quota.daily_limit,
-        percentage=f"{percentage * 100:.1f}%"
+        percentage=f"{percentage * 100:.1f}%",
     )
 
     # Trigger alerts (with throttling to prevent spam)
@@ -226,30 +211,30 @@ async def record_youtube_quota(
                 message=f"YouTube quota exhausted for channel {channel_id}",
                 details={
                     "channel_id": str(channel_id),
-                    "usage": quota.units_used,
-                    "limit": quota.daily_limit,
+                    "usage": str(quota.units_used),
+                    "limit": str(quota.daily_limit),
                     "percentage": f"{percentage * 100:.0f}%",
-                    "action": "Upload tasks paused until midnight PST reset"
-                }
+                    "action": "Upload tasks paused until midnight PST reset",
+                },
             )
-    elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD:
-        if _should_send_alert(channel_id, "WARNING"):
-            await send_alert(
-                level="WARNING",
-                message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
-                details={
-                    "channel_id": str(channel_id),
-                    "usage": quota.units_used,
-                    "limit": quota.daily_limit,
-                    "percentage": f"{percentage * 100:.0f}%",
-                    "remaining": quota.daily_limit - quota.units_used
-                }
-            )
+    elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD and _should_send_alert(
+        channel_id, "WARNING"
+    ):
+        await send_alert(
+            level="WARNING",
+            message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
+            details={
+                "channel_id": str(channel_id),
+                "usage": str(quota.units_used),
+                "limit": str(quota.daily_limit),
+                "percentage": f"{percentage * 100:.0f}%",
+                "remaining": str(quota.daily_limit - quota.units_used),
+            },
+        )
 
 
 def get_required_api(status: str) -> str | None:
-    """
-    Determine which external API is required for task at given status.
+    """Determine which external API is required for task at given status.
 
     Maps task status to external API dependency. Used for quota checking
     before task claiming.
@@ -269,13 +254,13 @@ def get_required_api(status: str) -> str | None:
         >>> get_required_api("assets_approved")
         None  # Internal step (composite creation)
     """
-    API_MAPPING = {
-        "pending": "gemini",              # Asset generation
-        "assets_approved": None,          # Internal (composite creation)
-        "composites_ready": "kling",      # Video generation
-        "video_approved": "elevenlabs",   # Audio generation
-        "audio_approved": None,           # Internal (FFmpeg assembly)
-        "final_review": "youtube",        # Upload
+    api_mapping = {
+        "pending": "gemini",  # Asset generation
+        "assets_approved": None,  # Internal (composite creation)
+        "composites_ready": "kling",  # Video generation
+        "video_approved": "elevenlabs",  # Audio generation
+        "audio_approved": None,  # Internal (FFmpeg assembly)
+        "final_review": "youtube",  # Upload
     }
 
-    return API_MAPPING.get(status)
+    return api_mapping.get(status)

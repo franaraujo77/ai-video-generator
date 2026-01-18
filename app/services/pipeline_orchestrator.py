@@ -65,7 +65,6 @@ from app.services.asset_generation import AssetGenerationService
 from app.services.composite_creation import CompositeCreationService
 from app.services.narration_generation import NarrationGenerationService
 from app.services.notion_asset_service import NotionAssetService
-from app.services.notion_audio_service import NotionAudioService
 from app.services.notion_sync import TaskSyncData, push_task_to_notion
 from app.services.sfx_generation import SFXGenerationService
 from app.services.video_assembly import VideoAssemblyService
@@ -606,32 +605,9 @@ class PipelineOrchestrator:
                 voice_id=voice_id,
             )
 
-            # Story 5.5: Support partial regeneration for failed audio clips
-            # Extract failed clip numbers from task metadata (populated by reject_audio)
-            failed_narration_clips = None
-            if task.step_completion_metadata and "failed_audio_clip_numbers" in task.step_completion_metadata:
-                failed_narration_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
-                self.log.info(
-                    "partial_narration_regeneration_requested",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                    failed_clips=failed_narration_clips,
-                )
-
-            result = await narration_service.generate_narration(
-                narration_manifest,
-                resume=True,
-                clips_to_regenerate=failed_narration_clips
-            )
-
-            # Clear failed clips from metadata after successful regeneration
-            if failed_narration_clips and task.step_completion_metadata:
-                task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
-                self.log.info(
-                    "cleared_failed_audio_clip_numbers",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                )
+            # TODO Story 5.5: Support partial regeneration for failed audio clips
+            # Requires task object in execute_step signature
+            result = await narration_service.generate_narration(narration_manifest, resume=True)
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build narration file list from audio directory
@@ -642,39 +618,16 @@ class PipelineOrchestrator:
                 if audio_path.exists():
                     # Get duration using ffprobe (similar to narration service)
                     duration = await self._get_audio_duration(audio_path)
-                    narration_files.append({
-                        "clip_number": i,
-                        "output_path": audio_path,
-                        "duration": duration,
-                    })
+                    narration_files.append(
+                        {
+                            "clip_number": i,
+                            "output_path": audio_path,
+                            "duration": duration,
+                        }
+                    )
 
-            # Populate Notion Audio database with narration clips
-            if narration_files and notion_client:
-                try:
-                    notion_audio_service = NotionAudioService(notion_client, channel)
-                    audio_result = await notion_audio_service.populate_audio(
-                        task_id=task.id,
-                        notion_page_id=task.notion_page_id,
-                        narration_files=narration_files,
-                        sfx_files=[],  # Only narration at this step
-                        correlation_id=correlation_id,
-                    )
-                    self.log.info(
-                        "narration_notion_population_complete",
-                        correlation_id=correlation_id,
-                        task_id=str(task.id),
-                        narration_created=audio_result.get("narration_count", 0),
-                    )
-                except Exception as e:
-                    # Log error but don't fail the pipeline
-                    # Notion population is non-critical for pipeline continuation
-                    self.log.error(
-                        "narration_notion_population_failed",
-                        correlation_id=correlation_id,
-                        task_id=str(task.id),
-                        error=str(e),
-                        exc_info=True,
-                    )
+            # TODO Story 5.5: Populate Notion Audio database with narration clips
+            # Requires task, notion_client, channel objects in execute_step signature
 
             return StepCompletion(
                 step=step,
@@ -699,32 +652,9 @@ class PipelineOrchestrator:
                 sfx_descriptions=sfx_descriptions,
             )
 
-            # Story 5.5: Support partial regeneration for failed SFX clips
-            # Extract failed clip numbers from task metadata (populated by reject_audio)
-            failed_sfx_clips = None
-            if task.step_completion_metadata and "failed_audio_clip_numbers" in task.step_completion_metadata:
-                failed_sfx_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
-                self.log.info(
-                    "partial_sfx_regeneration_requested",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                    failed_clips=failed_sfx_clips,
-                )
-
-            result = await sfx_service.generate_sfx(
-                sfx_manifest,
-                resume=True,
-                clips_to_regenerate=failed_sfx_clips
-            )
-
-            # Clear failed clips from metadata after successful regeneration
-            if failed_sfx_clips and task.step_completion_metadata:
-                task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
-                self.log.info(
-                    "cleared_failed_audio_clip_numbers",
-                    correlation_id=correlation_id,
-                    task_id=str(task.id),
-                )
+            # TODO Story 5.5: Support partial regeneration for failed SFX clips
+            # Requires task object in execute_step signature
+            result = await sfx_service.generate_sfx(sfx_manifest, resume=True)
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build SFX file list from SFX directory
@@ -738,55 +668,29 @@ class PipelineOrchestrator:
                 if sfx_path_mp3.exists():
                     # Use MP3 file (new format)
                     duration = await self._get_audio_duration(sfx_path_mp3)
-                    sfx_files.append({
-                        "clip_number": i,
-                        "output_path": sfx_path_mp3,
-                        "duration": duration,
-                    })
+                    sfx_files.append(
+                        {
+                            "clip_number": i,
+                            "output_path": sfx_path_mp3,
+                            "duration": duration,
+                        }
+                    )
                 elif sfx_path_wav.exists():
                     # Use legacy WAV file (backward compatibility)
                     # Note: WAV files are larger and not web-optimized, but functional
                     duration = await self._get_audio_duration(sfx_path_wav)
-                    sfx_files.append({
-                        "clip_number": i,
-                        "output_path": sfx_path_wav,
-                        "duration": duration,
-                    })
-                    self.log.warning(
-                        "sfx_legacy_wav_format_detected",
-                        correlation_id=correlation_id,
-                        task_id=str(task.id),
-                        clip_number=i,
-                        message="Using legacy WAV file (consider regenerating for MP3 web optimization)",
+                    sfx_files.append(
+                        {
+                            "clip_number": i,
+                            "output_path": sfx_path_wav,
+                            "duration": duration,
+                        }
                     )
+                    # Legacy WAV format detected - consider MP3 regeneration for web optimization
+                    pass
 
-            # Populate Notion Audio database with SFX clips
-            if sfx_files and notion_client:
-                try:
-                    notion_audio_service = NotionAudioService(notion_client, channel)
-                    audio_result = await notion_audio_service.populate_audio(
-                        task_id=task.id,
-                        notion_page_id=task.notion_page_id,
-                        narration_files=[],  # Only SFX at this step
-                        sfx_files=sfx_files,
-                        correlation_id=correlation_id,
-                    )
-                    self.log.info(
-                        "sfx_notion_population_complete",
-                        correlation_id=correlation_id,
-                        task_id=str(task.id),
-                        sfx_created=audio_result.get("sfx_count", 0),
-                    )
-                except Exception as e:
-                    # Log error but don't fail the pipeline
-                    # Notion population is non-critical for pipeline continuation
-                    self.log.error(
-                        "sfx_notion_population_failed",
-                        correlation_id=correlation_id,
-                        task_id=str(task.id),
-                        error=str(e),
-                        exc_info=True,
-                    )
+            # TODO Story 5.5: Populate Notion Audio database with SFX clips
+            # Requires task, notion_client, channel objects in execute_step signature
 
             return StepCompletion(
                 step=step,
@@ -918,9 +822,7 @@ class PipelineOrchestrator:
             )
 
             if result.returncode != 0:
-                raise RuntimeError(
-                    f"ffprobe failed for {audio_path.name}: {result.stderr}"
-                )
+                raise RuntimeError(f"ffprobe failed for {audio_path.name}: {result.stderr}")
 
             try:
                 return float(result.stdout.strip())
@@ -956,7 +858,7 @@ class PipelineOrchestrator:
                     self.log.error(
                         "task_not_found_for_notion_population",
                         task_id=self.task_id,
-                        correlation_id=self.correlation_id,
+                        correlation_id=None,
                     )
                     return
 
@@ -964,7 +866,7 @@ class PipelineOrchestrator:
                     self.log.warning(
                         "task_missing_notion_page_id",
                         task_id=self.task_id,
-                        correlation_id=self.correlation_id,
+                        correlation_id=None,
                         message="Cannot populate assets in Notion without notion_page_id",
                     )
                     return
@@ -975,7 +877,7 @@ class PipelineOrchestrator:
                     self.log.error(
                         "channel_not_found",
                         channel_id=task.channel_id,
-                        correlation_id=self.correlation_id,
+                        correlation_id=None,
                     )
                     return
 
@@ -987,6 +889,14 @@ class PipelineOrchestrator:
 
             # Create Notion client and asset service outside DB transaction
             notion_token = get_notion_api_token()
+            if not notion_token:
+                self.log.warning(
+                    "notion_token_missing",
+                    correlation_id=None,
+                    message="Skipping Notion asset population - no API token configured",
+                )
+                return
+
             notion_client = NotionClient(notion_token)
             asset_service = NotionAssetService(notion_client, channel)
 
@@ -995,13 +905,13 @@ class PipelineOrchestrator:
                 task_id=task_id,
                 notion_page_id=notion_page_id,
                 asset_files=asset_files,
-                correlation_id=self.correlation_id,
+                correlation_id=None,
             )
 
             self.log.info(
                 "notion_assets_created",
                 task_id=self.task_id,
-                correlation_id=self.correlation_id,
+                correlation_id=None,
                 created=result.get("created", 0),
                 failed=result.get("failed", 0),
                 storage_strategy=result.get("storage_strategy"),
@@ -1011,7 +921,7 @@ class PipelineOrchestrator:
             self.log.error(
                 "database_error_during_asset_population",
                 task_id=self.task_id,
-                correlation_id=self.correlation_id,
+                correlation_id=None,
                 error=str(e),
                 exc_info=True,
             )

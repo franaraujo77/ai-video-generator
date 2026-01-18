@@ -105,7 +105,7 @@ async def process_narration_generation_task(task_id: str | UUID) -> None:
             log.error("task_not_found", task_id=str(task_id))
             return
 
-        # Update task status to generating_audio
+        # Update task status to generating_audio (video_approved → generating_audio)
         task.status = TaskStatus.GENERATING_AUDIO
         await db.commit()
         log.info("task_claimed", task_id=str(task_id), status="generating_audio")

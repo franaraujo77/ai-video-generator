@@ -41,7 +41,7 @@ References:
 import asyncio
 from pathlib import Path
 
-from app.utils.cli_wrapper import CLIScriptError, run_cli_script
+from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -75,17 +75,20 @@ async def is_video_optimized(video_path: Path) -> bool:
         import subprocess
 
         def check_probe() -> str:
-            result = subprocess.run(
-                [
+            result = subprocess.run(  # noqa: S603
+                [  # noqa: S607
                     "ffprobe",
-                    "-v", "error",
-                    "-show_entries", "format=start_time",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(video_path)
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=start_time",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    str(video_path),
                 ],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
             if result.returncode != 0:
                 raise CLIScriptError("ffprobe", result.returncode, result.stderr)
@@ -117,10 +120,7 @@ async def is_video_optimized(video_path: Path) -> bool:
         return False
 
 
-async def optimize_video_for_streaming(
-    video_path: Path,
-    force: bool = False
-) -> bool:
+async def optimize_video_for_streaming(video_path: Path, force: bool = False) -> bool:
     """Optimize MP4 video for streaming by adding faststart flag.
 
     Re-encodes video with `-movflags faststart` to move MOOV atom to
@@ -152,13 +152,12 @@ async def optimize_video_for_streaming(
         raise FileNotFoundError(f"Video file not found: {video_path}")
 
     # Check if already optimized (unless force=True)
-    if not force:
-        if await is_video_optimized(video_path):
-            log.info(
-                "video_already_optimized",
-                path=str(video_path),
-            )
-            return False
+    if not force and await is_video_optimized(video_path):
+        log.info(
+            "video_already_optimized",
+            path=str(video_path),
+        )
+        return False
 
     # Create temp file path for atomic replacement
     temp_path = video_path.with_suffix(".temp.mp4")
@@ -176,18 +175,21 @@ async def optimize_video_for_streaming(
         import subprocess
 
         def run_ffmpeg() -> None:
-            result = subprocess.run(
-                [
+            result = subprocess.run(  # noqa: S603
+                [  # noqa: S607
                     "ffmpeg",
-                    "-i", str(video_path),
-                    "-movflags", "faststart",
-                    "-c", "copy",  # Copy codecs, no re-encoding (fast)
+                    "-i",
+                    str(video_path),
+                    "-movflags",
+                    "faststart",
+                    "-c",
+                    "copy",  # Copy codecs, no re-encoding (fast)
                     "-y",  # Overwrite temp file if exists
-                    str(temp_path)
+                    str(temp_path),
                 ],
                 capture_output=True,
                 text=True,
-                timeout=60
+                timeout=60,
             )
             if result.returncode != 0:
                 raise CLIScriptError("ffmpeg", result.returncode, result.stderr)
@@ -229,7 +231,7 @@ async def get_video_duration(video_path: Path) -> float:
 
     Raises:
         CLIScriptError: If ffprobe fails
-        asyncio.TimeoutError: If ffprobe takes too long (>10 seconds)
+        TimeoutError: If ffprobe takes too long (>10 seconds)
         FileNotFoundError: If video file doesn't exist
 
     Example:
@@ -244,17 +246,20 @@ async def get_video_duration(video_path: Path) -> float:
         import subprocess
 
         def probe_duration() -> str:
-            result = subprocess.run(
-                [
+            result = subprocess.run(  # noqa: S603
+                [  # noqa: S607
                     "ffprobe",
-                    "-v", "error",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(video_path)
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "default=noprint_wrappers=1:nokey=1",
+                    str(video_path),
                 ],
                 capture_output=True,
                 text=True,
-                timeout=10
+                timeout=10,
             )
             if result.returncode != 0:
                 raise CLIScriptError("ffprobe", result.returncode, result.stderr)
@@ -271,6 +276,13 @@ async def get_video_duration(video_path: Path) -> float:
 
         return duration
 
+    except subprocess.TimeoutExpired as e:
+        log.error(
+            "video_duration_probe_timeout",
+            path=str(video_path),
+            timeout=e.timeout,
+        )
+        raise TimeoutError(f"ffprobe timed out after {e.timeout} seconds") from e
     except Exception as e:
         log.error(
             "video_duration_probe_failed",

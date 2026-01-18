@@ -96,6 +96,7 @@ class NotionAssetService:
                 - asset_type: "character" | "environment" | "prop"
                 - name: Asset filename without extension
                 - output_path: Path object to PNG file
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Summary dict with keys:
@@ -115,9 +116,9 @@ class NotionAssetService:
             ...         {
             ...             "asset_type": "character",
             ...             "name": "bulbasaur_resting",
-            ...             "output_path": Path("/workspace/assets/bulbasaur_resting.png")
+            ...             "output_path": Path("/workspace/assets/bulbasaur_resting.png"),
             ...         }
-            ...     ]
+            ...     ],
             ... )
             >>> print(result)
             {"created": 1, "failed": 0, "storage_strategy": "notion"}
@@ -207,6 +208,7 @@ class NotionAssetService:
             asset_name: Asset filename without extension
             asset_path: Path to PNG file
             storage_strategy: "notion" or "r2"
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Created page object from Notion API
@@ -219,28 +221,11 @@ class NotionAssetService:
         current_date = datetime.now(timezone.utc).isoformat()
 
         properties: dict[str, Any] = {
-            "Asset Name": {
-                "title": [
-                    {
-                        "type": "text",
-                        "text": {"content": asset_name}
-                    }
-                ]
-            },
-            "Asset Type": {
-                "select": {"name": asset_type}
-            },
-            "Status": {
-                "select": {"name": "generated"}
-            },
-            "Generated Date": {
-                "date": {"start": current_date}
-            },
-            "Task": {
-                "relation": [
-                    {"id": notion_page_id}
-                ]
-            }
+            "Asset Name": {"title": [{"type": "text", "text": {"content": asset_name}}]},
+            "Asset Type": {"select": {"name": asset_type}},
+            "Status": {"select": {"name": "generated"}},
+            "Generated Date": {"date": {"start": current_date}},
+            "Task": {"relation": [{"id": notion_page_id}]},
         }
 
         # Handle file storage based on strategy
@@ -267,14 +252,10 @@ class NotionAssetService:
         # Add File URL property (null if upload not implemented)
         # This property MUST exist in schema even if value is None
         if file_url:
-            properties["File URL"] = {
-                "url": file_url
-            }
+            properties["File URL"] = {"url": file_url}
         else:
             # Set to null explicitly - shows property exists but needs implementation
-            properties["File URL"] = {
-                "url": None
-            }
+            properties["File URL"] = {"url": None}
 
         # Create page in Assets database using NotionClient method (rate limited, auto-retry)
         try:

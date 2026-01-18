@@ -107,8 +107,16 @@ class TestNotionAudioService:
     ):
         """Test successful audio population with notion storage strategy."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -153,8 +161,16 @@ class TestNotionAudioService:
     ):
         """Test successful audio population with r2 storage strategy."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_r2)
 
         task_id = uuid4()
@@ -181,8 +197,16 @@ class TestNotionAudioService:
     ):
         """Test audio population with partial narration failures."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -220,8 +244,16 @@ class TestNotionAudioService:
     ):
         """Test audio population with partial SFX failures."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -259,8 +291,16 @@ class TestNotionAudioService:
     ):
         """Test audio population with all clips failing (raises RuntimeError)."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -279,13 +319,19 @@ class TestNotionAudioService:
             )
 
     @pytest.mark.asyncio
-    async def test_populate_audio_empty_lists(
-        self, notion_client_mock, channel_notion
-    ):
+    async def test_populate_audio_empty_lists(self, notion_client_mock, channel_notion):
         """Test audio population with empty narration and SFX lists."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -312,8 +358,16 @@ class TestNotionAudioService:
     ):
         """Test audio population with only narration files (no SFX)."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -335,13 +389,19 @@ class TestNotionAudioService:
         assert notion_client_mock.create_page.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_populate_audio_only_sfx(
-        self, notion_client_mock, channel_notion, sfx_files
-    ):
+    async def test_populate_audio_only_sfx(self, notion_client_mock, channel_notion, sfx_files):
         """Test audio population with only SFX files (no narration)."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         task_id = uuid4()
@@ -368,8 +428,16 @@ class TestNotionAudioService:
     ):
         """Test _create_audio_entry correctly sets properties for narration."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         # Act
@@ -400,8 +468,16 @@ class TestNotionAudioService:
     ):
         """Test _create_audio_entry correctly sets properties for SFX."""
         # Arrange
-        with patch("app.services.notion_audio_service.get_notion_audio_database_id", return_value="db_audio_123"), \
-             patch("app.services.notion_audio_service.get_notion_tasks_collection_id", return_value="collection://task_123"):
+        with (
+            patch(
+                "app.services.notion_audio_service.get_notion_audio_database_id",
+                return_value="db_audio_123",
+            ),
+            patch(
+                "app.services.notion_audio_service.get_notion_tasks_collection_id",
+                return_value="collection://task_123",
+            ),
+        ):
             service = NotionAudioService(notion_client_mock, channel_notion)
 
         # Act

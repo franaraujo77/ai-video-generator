@@ -26,11 +26,13 @@ def get_process_video_entrypoint():
         def decorator(func):
             registered_functions[name] = func
             return func
+
         return decorator
 
     mock_pgq.entrypoint = mock_entrypoint
 
     from app.entrypoints import register_entrypoints
+
     register_entrypoints(mock_pgq)
 
     return registered_functions["process_video"]
@@ -61,9 +63,10 @@ async def test_process_video_success():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         # Call process_video
         await process_video(mock_job)
 
@@ -72,9 +75,9 @@ async def test_process_video_success():
 
         # Verify task status transitions
         # First transaction: pending → claimed → processing (2 commits)
-        # Second transaction: processing → completed (1 commit)
-        # Note: Story 4.5 adds rate limit checks which may affect flow
-        assert mock_task.status == "completed"
+        # Second transaction: processing → published (1 commit)
+        # Note: Placeholder entrypoint marks tasks as PUBLISHED (terminal success state)
+        assert mock_task.status == TaskStatus.PUBLISHED
 
         # Verify commits happened (at least for completion)
         # Story 4.5: Rate limit checks may alter commit pattern
@@ -98,9 +101,10 @@ async def test_process_video_task_not_found():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock(return_value=None)
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         # Call process_video and expect ValueError
         with pytest.raises(ValueError, match="Task not found: nonexistent_task"):
             await process_video(mock_job)
@@ -141,9 +145,10 @@ async def test_process_video_short_transaction_pattern():
     mock_db.get = AsyncMock(return_value=mock_task)
     mock_db.commit = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=MockSession()), \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=MockSession()),
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         await process_video(mock_job)
 
         # Verify two separate transactions (open and close twice)
@@ -172,10 +177,11 @@ async def test_process_video_logging():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch("app.entrypoints.log") as mock_log, \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-2"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch("app.entrypoints.log") as mock_log,
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-2"}),
+    ):
         await process_video(mock_job)
 
         # Verify logging calls
@@ -206,10 +212,11 @@ async def test_process_video_worker_id_from_env():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch("app.entrypoints.log") as mock_log, \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-3"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch("app.entrypoints.log") as mock_log,
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-3"}),
+    ):
         await process_video(mock_job)
 
         # Verify worker_id in log calls
@@ -235,10 +242,11 @@ async def test_process_video_worker_id_defaults_to_local():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch("app.entrypoints.log") as mock_log, \
-         patch.dict(os.environ, {}, clear=True):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch("app.entrypoints.log") as mock_log,
+        patch.dict(os.environ, {}, clear=True),
+    ):
         await process_video(mock_job)
 
         # Verify worker_id defaults to "worker-local"
@@ -275,15 +283,18 @@ async def test_process_video_status_transitions():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         await process_video(mock_job)
 
         # Verify status transitions: pending → claimed → generating_assets → completed
         # Story 4.6: Status transitions to appropriate pipeline step based on current state
-        assert mock_task_1.status == TaskStatus.GENERATING_ASSETS  # Last set in first transaction (queued->generating_assets)
-        assert mock_task_2.status == "completed"  # Set in second transaction
+        assert (
+            mock_task_1.status == TaskStatus.GENERATING_ASSETS
+        )  # Last set in first transaction (queued->generating_assets)
+        assert mock_task_2.status == TaskStatus.PUBLISHED  # Set in second transaction
 
 
 @pytest.mark.asyncio
@@ -304,10 +315,11 @@ async def test_process_video_pgqueuer_job_id_logged():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch("app.entrypoints.log") as mock_log, \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch("app.entrypoints.log") as mock_log,
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         await process_video(mock_job)
 
         # Verify PgQueuer job_id logged in task_claimed message
@@ -333,9 +345,10 @@ async def test_process_video_database_commit_called():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         await process_video(mock_job)
 
         # Verify commit called 3 times (claimed, processing, completed)
@@ -363,10 +376,11 @@ async def test_process_video_logs_priority_on_claim():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch("app.entrypoints.log") as mock_log, \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch("app.entrypoints.log") as mock_log,
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         await process_video(mock_job)
 
         # Verify task_claimed log includes priority
@@ -393,10 +407,11 @@ async def test_process_video_logs_priority_on_completion():
     mock_db.__aenter__ = AsyncMock(return_value=mock_db)
     mock_db.__aexit__ = AsyncMock()
 
-    with patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db), \
-         patch("app.entrypoints.log") as mock_log, \
-         patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}):
-
+    with (
+        patch("app.entrypoints.AsyncSessionLocal", return_value=mock_db),
+        patch("app.entrypoints.log") as mock_log,
+        patch.dict(os.environ, {"RAILWAY_SERVICE_NAME": "worker-1"}),
+    ):
         await process_video(mock_job)
 
         # Verify task_completed log includes priority
@@ -428,6 +443,7 @@ def test_process_video_error_handler_includes_priority():
         def decorator(func):
             registered_functions[name] = func
             return func
+
         return decorator
 
     mock_pgq.entrypoint = mock_entrypoint
@@ -438,11 +454,11 @@ def test_process_video_error_handler_includes_priority():
     source = inspect.getsource(process_video)
 
     # Verify error handler includes priority in log.error call
-    assert 'log.error(' in source
+    assert "log.error(" in source
     assert '"task_failed"' in source
-    assert 'priority=task.priority' in source or 'priority' in source
-    assert 'is_retriable' in source
+    assert "priority=task.priority" in source or "priority" in source
+    assert "is_retriable" in source
 
     # Verify error handler code structure exists
-    assert 'except Exception as e:' in source
-    assert '_is_retriable_error(e)' in source
+    assert "except Exception as e:" in source
+    assert "_is_retriable_error(e)" in source
