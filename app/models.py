@@ -448,8 +448,12 @@ class Task(Base):
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
         TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING],
         TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR],
-        TaskStatus.PUBLISHED: [TaskStatus.QUEUED],  # Allow manual re-queue for content updates
-        TaskStatus.CANCELLED: [TaskStatus.QUEUED],  # Allow manual re-queue after un-cancel
+        # Terminal states with manual re-queue capability (requires user intervention):
+        # - PUBLISHED → QUEUED: Update content after publish (e.g., compliance changes)
+        # - CANCELLED → QUEUED: Un-cancel if user changes mind
+        # Both are manual operations, not automatic workflow transitions
+        TaskStatus.PUBLISHED: [TaskStatus.QUEUED],
+        TaskStatus.CANCELLED: [TaskStatus.QUEUED],
         # Error recovery paths (retry by returning to QUEUED)
         TaskStatus.ASSET_ERROR: [TaskStatus.QUEUED],
         TaskStatus.VIDEO_ERROR: [TaskStatus.QUEUED],
