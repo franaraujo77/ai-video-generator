@@ -18,6 +18,7 @@ Test Strategy:
 import asyncio
 import time
 from datetime import datetime
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -222,15 +223,21 @@ class TestExecuteStep:
         """Test narration generation step executes successfully."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        with patch(
-            "app.services.pipeline_orchestrator.NarrationGenerationService"
-        ) as mock_service_class:
+        with (
+            patch(
+                "app.services.pipeline_orchestrator.NarrationGenerationService"
+            ) as mock_service_class,
+            patch("app.services.pipeline_orchestrator.get_audio_dir") as mock_audio_dir,
+            patch("app.services.pipeline_orchestrator.get_notion_api_token", return_value=None),
+        ):
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
             mock_service.create_narration_manifest = AsyncMock(return_value=Mock())
             mock_service.generate_narration = AsyncMock(
                 return_value={"generated": 16, "skipped": 2}
             )
+            # Mock audio directory to return a path that won't be created
+            mock_audio_dir.return_value = Path("/tmp/test_audio")  # noqa: S108
 
             completion = await orchestrator.execute_step(
                 PipelineStep.NARRATION_GENERATION,
@@ -250,11 +257,17 @@ class TestExecuteStep:
         """Test SFX generation step executes successfully."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
-        with patch("app.services.pipeline_orchestrator.SFXGenerationService") as mock_service_class:
+        with (
+            patch("app.services.pipeline_orchestrator.SFXGenerationService") as mock_service_class,
+            patch("app.services.pipeline_orchestrator.get_sfx_dir") as mock_sfx_dir,
+            patch("app.services.pipeline_orchestrator.get_notion_api_token", return_value=None),
+        ):
             mock_service = AsyncMock()
             mock_service_class.return_value = mock_service
             mock_service.create_sfx_manifest = AsyncMock(return_value=Mock())
             mock_service.generate_sfx = AsyncMock(return_value={"generated": 16, "skipped": 2})
+            # Mock SFX directory to return a path that won't be created
+            mock_sfx_dir.return_value = Path("/tmp/test_sfx")  # noqa: S108
 
             completion = await orchestrator.execute_step(
                 PipelineStep.SFX_GENERATION,
