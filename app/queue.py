@@ -134,9 +134,14 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
 
     Claim Timeout (Architecture Decision):
         PgQueuer uses PostgreSQL transaction-based locking for atomic task claiming.
-        Stale claims are automatically released after 30 minutes via PostgreSQL's
-        statement_timeout parameter. This ensures crashed workers don't hold locks
-        indefinitely (FR43: fault tolerance requirement).
+        Stale claims are automatically released after 180 minutes via PostgreSQL's
+        statement_timeout parameter (command_timeout). This ensures crashed workers
+        don't hold locks indefinitely (FR43: fault tolerance requirement).
+
+        180-minute timeout accommodates:
+        - pipeline_worker: 51-124 minutes typical
+        - video_generation_worker: 36-90 minutes typical
+        - All other workers: < 30 minutes
 
     Returns:
         tuple[PgQueuer, asyncpg.Pool]: Configured PgQueuer with round-robin scheduling
@@ -155,7 +160,7 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
         min_size=2,
         max_size=10,
         timeout=30,
-        claim_timeout_minutes=30,
+        claim_timeout_minutes=180,
     )
 
     pool = await asyncpg.create_pool(
@@ -163,8 +168,11 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
         min_size=2,  # Minimum connections
         max_size=10,  # Maximum connections
         timeout=30,  # Connection acquire timeout (seconds)
-        command_timeout=1800,  # Query execution timeout (30 minutes = 1800s)
-        # Ensures stale claims released after 30 min
+        command_timeout=10800,  # Query execution timeout (180 minutes = 10800s)
+        # Accommodates long-running workers:
+        # - pipeline_worker: 51-124 min typical
+        # - video_generation_worker: 36-90 min typical
+        # Ensures stale claims released after 3 hours
     )
 
     # Install PgQueuer schema (idempotent: safe to call multiple times)
@@ -183,7 +191,7 @@ async def initialize_pgqueuer() -> tuple[PgQueuer, asyncpg.Pool]:
 
     log.info(
         "pgqueuer_initialized_with_round_robin",
-        claim_timeout_minutes=30,
+        claim_timeout_minutes=180,
         query_pattern=query_pattern,
         custom_query_enabled=True,
     )

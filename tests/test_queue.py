@@ -46,7 +46,7 @@ async def test_initialize_pgqueuer_success():
             min_size=2,
             max_size=10,
             timeout=30,
-            command_timeout=1800,  # 30 minutes for claim timeout
+            command_timeout=10800,  # 180 minutes (3 hours) for claim timeout
         )
 
         # Assert schema installation called
@@ -129,7 +129,7 @@ async def test_initialize_pgqueuer_pool_configuration():
         assert call_kwargs["min_size"] == 2
         assert call_kwargs["max_size"] == 10
         assert call_kwargs["timeout"] == 30
-        assert call_kwargs["command_timeout"] == 1800  # 30 minutes for claim timeout
+        assert call_kwargs["command_timeout"] == 10800  # 180 minutes (3 hours) for claim timeout
 
 
 @pytest.mark.asyncio
