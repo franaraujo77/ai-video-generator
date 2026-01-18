@@ -5,7 +5,7 @@
 repos:
   # Ruff - Fast linting and formatting (Rust-based)
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.6
+    rev: v0.14.13
     hooks:
       - id: ruff
         name: ruff (lint)
