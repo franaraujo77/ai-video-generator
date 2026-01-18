@@ -93,7 +93,7 @@ development_status:
   5-6-real-time-status-updates-to-notion: done  # Code review complete, CRITICAL bug fixed (TaskSyncData missing updated_at)
   5-7-progress-visibility-dashboard: done  # Code review complete, 18/18 tests passing, 2 MEDIUM issues fixed (git staging)
   5-8-bulk-approve-reject-operations: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
 
   # Epic 6: Error Handling & Auto-Recovery
   epic-6: backlog
