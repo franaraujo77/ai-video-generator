@@ -1202,9 +1202,9 @@ class TestReviewTimestampTracking:
                 await orchestrator.update_task_status(to_status)
 
                 # Verify timestamp was set
-                assert (
-                    task.review_started_at is not None
-                ), f"review_started_at not set for {to_status.value}"
+                assert task.review_started_at is not None, (
+                    f"review_started_at not set for {to_status.value}"
+                )
                 assert task.status == to_status
 
     @pytest.mark.asyncio
@@ -1252,7 +1252,7 @@ class TestReviewTimestampTracking:
                 await orchestrator.update_task_status(to_status)
 
                 # Verify timestamp was NOT set
-                assert (
-                    task.review_started_at is None
-                ), f"review_started_at incorrectly set for {to_status.value}"
+                assert task.review_started_at is None, (
+                    f"review_started_at incorrectly set for {to_status.value}"
+                )
                 assert task.status == to_status
