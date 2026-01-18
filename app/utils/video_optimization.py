@@ -231,7 +231,7 @@ async def get_video_duration(video_path: Path) -> float:
 
     Raises:
         CLIScriptError: If ffprobe fails
-        asyncio.TimeoutError: If ffprobe takes too long (>10 seconds)
+        TimeoutError: If ffprobe takes too long (>10 seconds)
         FileNotFoundError: If video file doesn't exist
 
     Example:
@@ -282,7 +282,7 @@ async def get_video_duration(video_path: Path) -> float:
             path=str(video_path),
             timeout=e.timeout,
         )
-        raise asyncio.TimeoutError(f"ffprobe timed out after {e.timeout} seconds") from e
+        raise TimeoutError(f"ffprobe timed out after {e.timeout} seconds") from e
     except Exception as e:
         log.error(
             "video_duration_probe_failed",
