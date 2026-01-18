@@ -383,6 +383,6 @@ def test_round_robin_query_comments():
     assert "--" in ROUND_ROBIN_QUERY  # SQL comment syntax
     # Verify comment mentions "round-robin" or "channel"
     lines_with_channel = [line for line in ROUND_ROBIN_QUERY.split("\n") if "channel_id" in line]
-    assert any(
-        "--" in line for line in lines_with_channel
-    ), "channel_id line should have inline comment explaining round-robin"
+    assert any("--" in line for line in lines_with_channel), (
+        "channel_id line should have inline comment explaining round-robin"
+    )
