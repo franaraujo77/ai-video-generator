@@ -236,11 +236,13 @@ async def _handle_approval_status_change(
         else:
             duration = None
 
-        # Two-step transition: VIDEO_READY → VIDEO_APPROVED → QUEUED
+        # Two-step transition: *_READY → *_APPROVED → QUEUED
         # SQLAlchemy validators only check the immediate transition, so we can
-        # transition through VIDEO_APPROVED to QUEUED in the same transaction
+        # transition through the approval state to QUEUED in the same transaction
         # First transition to approved state
-        task.status = TaskStatus.VIDEO_APPROVED
+        # (ASSETS_APPROVED, VIDEO_APPROVED, AUDIO_APPROVED, or APPROVED)
+        internal_status = TaskStatus(internal_status_str)
+        task.status = internal_status
         # Then immediately transition to queued (both changes committed together)
         task.status = TaskStatus.QUEUED
 
