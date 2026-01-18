@@ -487,3 +487,139 @@ class TestNotionAssetService:
             call_args = mock_notion_client.create_page.call_args
             properties = call_args[1]["properties"]
             assert properties["File URL"]["url"] is None
+
+    @pytest.mark.asyncio
+    async def test_populate_assets_idempotency_skips_existing(
+        self, mock_notion_client, mock_channel, sample_asset_files_full
+    ):
+        """Test that skip_existing=True skips assets that already exist in Notion (Code Review Issue #2)."""
+        # Arrange
+        task_id = uuid4()
+        notion_page_id = "abc123def456"
+
+        # Mock query_database to return 5 existing asset names
+        existing_assets = {
+            "character_0",
+            "character_1",
+            "environment_0",
+            "environment_1",
+            "prop_0",
+        }
+
+        mock_response = {
+            "results": [
+                {
+                    "properties": {
+                        "Asset Name": {
+                            "title": [{"plain_text": name}]
+                        }
+                    }
+                }
+                for name in existing_assets
+            ],
+            "has_more": False,
+        }
+        mock_notion_client.query_database = AsyncMock(return_value=mock_response)
+
+        # Mock config functions
+        with (
+            patch(
+                "app.services.notion_asset_service.get_notion_assets_database_id"
+            ) as mock_assets_id,
+            patch(
+                "app.services.notion_asset_service.get_notion_tasks_collection_id"
+            ) as mock_tasks_id,
+        ):
+            mock_assets_id.return_value = "test_assets_db"
+            mock_tasks_id.return_value = "test_tasks_collection"
+
+            service = NotionAssetService(mock_notion_client, mock_channel)
+
+            # Act
+            result = await service.populate_assets(
+                task_id=task_id,
+                notion_page_id=notion_page_id,
+                asset_files=sample_asset_files_full,
+                skip_existing=True,  # Enable idempotency
+            )
+
+            # Assert
+            # Should have skipped 5 existing assets, created 17 new ones
+            assert result["created"] == 17
+            assert result["failed"] == 0
+            assert result["skipped"] == 5
+            assert result["storage_strategy"] == "notion"
+
+            # Verify query_database was called to check existing assets
+            assert mock_notion_client.query_database.called
+
+            # Verify create_page called 17 times (22 total - 5 existing)
+            assert mock_notion_client.create_page.call_count == 17
+
+    @pytest.mark.asyncio
+    async def test_parallel_upload_mixed_success_failure(
+        self, mock_notion_client, mock_channel, sample_asset_files_full
+    ):
+        """Test that parallel file upload handles mixed success/failure correctly (Code Review Issue #4)."""
+        # Arrange
+        task_id = uuid4()
+        notion_page_id = "abc123def456"
+
+        # Mock catbox client to fail for some assets
+        mock_catbox_client = MagicMock(spec=CatboxClient)
+
+        upload_count = 0
+
+        async def upload_side_effect(file_path):
+            nonlocal upload_count
+            upload_count += 1
+            # Fail every 3rd upload
+            if upload_count % 3 == 0:
+                raise Exception("Network timeout")
+            return f"https://files.catbox.moe/asset_{upload_count}.png"
+
+        mock_catbox_client.upload_image = AsyncMock(side_effect=upload_side_effect)
+
+        # Mock config functions
+        with (
+            patch(
+                "app.services.notion_asset_service.get_notion_assets_database_id"
+            ) as mock_assets_id,
+            patch(
+                "app.services.notion_asset_service.get_notion_tasks_collection_id"
+            ) as mock_tasks_id,
+        ):
+            mock_assets_id.return_value = "test_assets_db"
+            mock_tasks_id.return_value = "test_tasks_collection"
+
+            service = NotionAssetService(mock_notion_client, mock_channel, mock_catbox_client)
+
+            # Act
+            result = await service.populate_assets(
+                task_id=task_id,
+                notion_page_id=notion_page_id,
+                asset_files=sample_asset_files_full,
+                skip_existing=False,
+                min_success_rate=0.6,  # Lower threshold to allow some failures
+            )
+
+            # Assert
+            # All 22 Notion entries created successfully (graceful degradation on upload failures)
+            assert result["created"] == 22
+            assert result["failed"] == 0  # "failed" tracks Notion API failures, not upload failures
+            assert result["skipped"] == 0
+
+            # Verify all 22 Notion entries created (some with null URLs due to upload failures)
+            assert mock_notion_client.create_page.call_count == 22
+
+            # Verify catbox upload was attempted 22 times (7 failed, 15 succeeded)
+            assert mock_catbox_client.upload_image.call_count == 22
+
+            # Verify that entries were created even when file upload failed (graceful degradation)
+            # Check that create_page was called with None for file_url when upload failed
+            call_args_list = mock_notion_client.create_page.call_args_list
+            none_url_count = sum(
+                1 for call in call_args_list
+                if call[1]["properties"]["File URL"]["url"] is None
+            )
+            assert none_url_count == 7  # Every 3rd upload failed
