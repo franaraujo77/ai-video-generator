@@ -75,27 +75,33 @@ def sample_asset_files_full():
 
     # 6 character assets
     for i in range(6):
-        assets.append({
-            "asset_type": "character",
-            "name": f"character_{i}",
-            "output_path": Path(f"/workspace/assets/character_{i}.png"),
-        })
+        assets.append(
+            {
+                "asset_type": "character",
+                "name": f"character_{i}",
+                "output_path": Path(f"/workspace/assets/character_{i}.png"),
+            }
+        )
 
     # 10 environment assets
     for i in range(10):
-        assets.append({
-            "asset_type": "environment",
-            "name": f"environment_{i}",
-            "output_path": Path(f"/workspace/assets/environment_{i}.png"),
-        })
+        assets.append(
+            {
+                "asset_type": "environment",
+                "name": f"environment_{i}",
+                "output_path": Path(f"/workspace/assets/environment_{i}.png"),
+            }
+        )
 
     # 6 prop assets
     for i in range(6):
-        assets.append({
-            "asset_type": "prop",
-            "name": f"prop_{i}",
-            "output_path": Path(f"/workspace/assets/prop_{i}.png"),
-        })
+        assets.append(
+            {
+                "asset_type": "prop",
+                "name": f"prop_{i}",
+                "output_path": Path(f"/workspace/assets/prop_{i}.png"),
+            }
+        )
 
     return assets
 
@@ -402,9 +408,7 @@ class TestNotionAssetService:
             assert mock_notion_client.create_page.call_count == 22
 
     @pytest.mark.asyncio
-    async def test_file_upload_via_catbox(
-        self, mock_notion_client, mock_channel
-    ):
+    async def test_file_upload_via_catbox(self, mock_notion_client, mock_channel):
         """Test file upload to catbox.moe and URL population in Notion property (Code Review Issue #2)."""
         # Arrange
         mock_catbox_client = MagicMock(spec=CatboxClient)
@@ -447,15 +451,11 @@ class TestNotionAssetService:
             assert properties["File URL"]["url"] == "https://files.catbox.moe/abc123.png"
 
     @pytest.mark.asyncio
-    async def test_file_upload_failure_graceful_degradation(
-        self, mock_notion_client, mock_channel
-    ):
+    async def test_file_upload_failure_graceful_degradation(self, mock_notion_client, mock_channel):
         """Test that asset entry is still created even if file upload fails (Code Review Issue #2)."""
         # Arrange
         mock_catbox_client = MagicMock(spec=CatboxClient)
-        mock_catbox_client.upload_image = AsyncMock(
-            side_effect=Exception("catbox.moe is down")
-        )
+        mock_catbox_client.upload_image = AsyncMock(side_effect=Exception("catbox.moe is down"))
 
         # Mock config functions
         with (
@@ -508,13 +508,7 @@ class TestNotionAssetService:
 
         mock_response = {
             "results": [
-                {
-                    "properties": {
-                        "Asset Name": {
-                            "title": [{"plain_text": name}]
-                        }
-                    }
-                }
+                {"properties": {"Asset Name": {"title": [{"plain_text": name}]}}}
                 for name in existing_assets
             ],
             "has_more": False,
@@ -619,7 +613,6 @@ class TestNotionAssetService:
             # Check that create_page was called with None for file_url when upload failed
             call_args_list = mock_notion_client.create_page.call_args_list
             none_url_count = sum(
-                1 for call in call_args_list
-                if call[1]["properties"]["File URL"]["url"] is None
+                1 for call in call_args_list if call[1]["properties"]["File URL"]["url"] is None
             )
             assert none_url_count == 7  # Every 3rd upload failed

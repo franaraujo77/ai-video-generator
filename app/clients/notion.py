@@ -467,9 +467,7 @@ class NotionClient:
             last_error or Exception("Unknown error"),
         )
 
-    async def query_database(
-        self, database_id: str, **query_params: Any
-    ) -> dict[str, Any]:
+    async def query_database(self, database_id: str, **query_params: Any) -> dict[str, Any]:
         """Query a Notion database with filters and sorting (rate limited, auto-retry).
 
         This method supports the full Notion database query API, including filters,
@@ -496,7 +494,7 @@ class NotionClient:
         Example:
             >>> result = await client.query_database(
             ...     database_id="abc123",
-            ...     filter={"property": "Status", "select": {"equals": "Done"}}
+            ...     filter={"property": "Status", "select": {"equals": "Done"}},
             ... )
             >>> print(len(result["results"]))
             42
@@ -521,7 +519,8 @@ class NotionClient:
                         json=query_params,  # POST body contains filter, sorts, etc.
                     )
                     response.raise_for_status()
-                    return response.json()
+                    result: dict[str, Any] = response.json()
+                    return result
 
             except httpx.HTTPStatusError as e:
                 last_error = e
@@ -537,10 +536,11 @@ class NotionClient:
                         await asyncio.sleep(wait_time)
                 else:
                     # Non-retriable error - fail immediately
-                    raise NotionAPIError(
-                        f"Notion API query_database failed: {e.response.status_code} {e.response.text}",
-                        e,
+                    error_msg = (
+                        f"Notion API query_database failed: "
+                        f"{e.response.status_code} {e.response.text}"
                     )
+                    raise NotionAPIError(error_msg, e.response) from e
 
             except (httpx.TimeoutException, httpx.ConnectError) as e:
                 # Network error - retry with exponential backoff

@@ -101,12 +101,14 @@ ASSET_TYPE_ENVIRONMENT = "environment"
 ASSET_TYPE_PROP = "prop"
 ASSET_TYPE_COMPOSITE = "composite"
 
-VALID_ASSET_TYPES = frozenset([
-    ASSET_TYPE_CHARACTER,
-    ASSET_TYPE_ENVIRONMENT,
-    ASSET_TYPE_PROP,
-    ASSET_TYPE_COMPOSITE,
-])
+VALID_ASSET_TYPES = frozenset(
+    [
+        ASSET_TYPE_CHARACTER,
+        ASSET_TYPE_ENVIRONMENT,
+        ASSET_TYPE_PROP,
+        ASSET_TYPE_COMPOSITE,
+    ]
+)
 
 # Asset status constants (Story 5.3: Asset Review Interface)
 ASSET_STATUS_PENDING = "pending"

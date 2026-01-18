@@ -87,7 +87,12 @@ class NotionAssetService:
     - NOTION_TASKS_COLLECTION_ID: Notion Tasks collection ID
     """
 
-    def __init__(self, notion_client: NotionClient, channel: Channel, catbox_client: CatboxClient | None = None):
+    def __init__(
+        self,
+        notion_client: NotionClient,
+        channel: Channel,
+        catbox_client: CatboxClient | None = None,
+    ):
         """Initialize asset service with Notion client and channel config.
 
         Args:
@@ -237,7 +242,9 @@ class NotionAssetService:
 
         # Count upload failures
         upload_failures = sum(1 for result in upload_results.values() if result is None)
-        upload_success_rate = (len(upload_results) - upload_failures) / len(upload_results) if upload_results else 0
+        upload_success_rate = (
+            (len(upload_results) - upload_failures) / len(upload_results) if upload_results else 0
+        )
 
         self.log.info(
             "asset_uploads_complete",
@@ -322,7 +329,8 @@ class NotionAssetService:
         # FIXED (Issue #8): Validate minimum success threshold
         if success_rate < min_success_rate:
             error_msg = (
-                f"Asset population success rate {success_rate:.1%} below minimum threshold {min_success_rate:.1%}. "
+                f"Asset population success rate {success_rate:.1%} "
+                f"below minimum threshold {min_success_rate:.1%}. "
                 f"Created {created}/{total_attempted} entries successfully."
             )
             self.log.error(
@@ -373,8 +381,8 @@ class NotionAssetService:
         upload_results = await asyncio.gather(*upload_tasks, return_exceptions=True)
 
         # Map results back to asset names
-        results = {}
-        for asset_name, result in zip(asset_names, upload_results):
+        results: dict[str, str | None] = {}
+        for asset_name, result in zip(asset_names, upload_results, strict=False):
             if isinstance(result, Exception):
                 # Upload failed - log and store None
                 self.log.error(
@@ -385,8 +393,8 @@ class NotionAssetService:
                 )
                 results[asset_name] = None
             else:
-                # Upload succeeded
-                results[asset_name] = result
+                # Upload succeeded - result is str (URL)
+                results[asset_name] = str(result)
 
         return results
 

@@ -911,7 +911,9 @@ class PipelineOrchestrator:
                 notion_page_id=notion_page_id,
                 asset_files=asset_files,
                 correlation_id=correlation_id,
-                skip_existing=False,  # Disabled until idempotency fully tested (query_database exists but needs integration test)
+                # Disabled until idempotency fully tested
+                # (query_database exists but needs integration test)
+                skip_existing=False,
             )
 
             self.log.info(
