@@ -130,6 +130,10 @@ class TaskSyncData:
         priority: Task priority level
         title: Video title (for logging)
         updated_at: Timestamp of last task update (Story 5.6, AC2, FR55)
+        retry_count: Number of retry attempts (Story 6.2)
+        next_retry_at: Timestamp for next retry attempt (Story 6.2)
+        completed_steps: Step-level checkpoints (Story 6.3, Task 9)
+        step_metadata: Sub-step checkpoints (Story 6.3, Task 9)
     """
 
     id: uuid.UUID
@@ -138,6 +142,10 @@ class TaskSyncData:
     priority: PriorityLevel
     title: str
     updated_at: datetime
+    retry_count: int = 0
+    next_retry_at: datetime | None = None
+    completed_steps: list[dict[str, Any]] | None = None
+    step_metadata: dict[str, Any] | None = None
 
 
 # Property extraction helpers
@@ -542,6 +550,122 @@ async def sync_notion_page_to_task(
         )
 
 
+def format_retry_display(retry_count: int, next_retry_at: datetime) -> str:
+    """Format retry info for user display in Notion.
+
+    Args:
+        retry_count: Current retry attempt number (1-5)
+        next_retry_at: Timestamp when next retry will occur
+
+    Returns:
+        Formatted string like "Retrying in 15 min (Attempt 3/5)"
+
+    Example:
+        >>> from datetime import datetime, timedelta, timezone
+        >>> next_retry = datetime.now(timezone.utc) + timedelta(minutes=15)
+        >>> format_retry_display(3, next_retry)
+        'Retrying in 15 min (Attempt 3/5)'
+    """
+    from app.services.retry_orchestrator import MAX_RETRY_ATTEMPTS
+
+    now = datetime.now(timezone.utc)
+
+    # Handle timezone-naive datetimes (SQLite compatibility)
+    retry_time = next_retry_at
+    if retry_time.tzinfo is None:
+        retry_time = retry_time.replace(tzinfo=timezone.utc)
+
+    time_remaining = retry_time - now
+
+    # Format time remaining
+    total_seconds = time_remaining.total_seconds()
+    if total_seconds < 60:
+        time_str = f"{int(total_seconds)}s"
+    elif total_seconds < 3600:
+        time_str = f"{int(total_seconds / 60)} min"
+    else:
+        hours = int(total_seconds / 3600)
+        time_str = f"{hours} hr" if hours == 1 else f"{hours} hrs"
+
+    return f"Retrying in {time_str} (Attempt {retry_count}/{MAX_RETRY_ATTEMPTS})"
+
+
+def format_checkpoint_progress(
+    step_metadata: dict[str, Any] | None,
+    status: TaskStatus,
+) -> str | None:
+    """Format checkpoint progress for Notion Progress field (Story 6.3, Task 9).
+
+    Creates a human-readable progress summary showing completed sub-steps
+    for the current pipeline step. This helps users see exactly which clips/assets
+    completed before a failure, enabling them to understand resume-from-failure behavior.
+
+    Args:
+        step_metadata: Sub-step checkpoint data (completed clips/assets)
+        status: Current task status to determine which progress to show
+
+    Returns:
+        Formatted progress string or None if no relevant checkpoints
+
+    Examples:
+        >>> # Video generation with 10/18 clips complete
+        >>> format_checkpoint_progress(
+        ...     {"completed_video_clips": [1,2,3,4,5,6,7,8,9,10]},
+        ...     TaskStatus.VIDEO_ERROR
+        ... )
+        'Video: 10/18 clips ✓'
+
+        >>> # Audio generation with 5/18 clips complete
+        >>> format_checkpoint_progress(
+        ...     {"completed_narration_clips": [1,2,3,4,5]},
+        ...     TaskStatus.AUDIO_ERROR
+        ... )
+        'Audio: 5/18 clips ✓'
+
+        >>> # Asset generation with 15 assets complete
+        >>> format_checkpoint_progress(
+        ...     {"completed_assets": ["char_1", "char_2", ...]},  # 15 items
+        ...     TaskStatus.ASSET_ERROR
+        ... )
+        'Assets: 15 complete ✓'
+
+    Related:
+        - Story 6.3 Task 9: Show checkpoint progress in Notion
+        - Tasks 3-5: Sub-step checkpointing implementation
+    """
+    if not step_metadata:
+        return None
+
+    # Video generation progress (18 clips total)
+    if status == TaskStatus.VIDEO_ERROR and "completed_video_clips" in step_metadata:
+        completed = len(step_metadata["completed_video_clips"])
+        return f"Video: {completed}/18 clips ✓"
+
+    # Audio generation progress (18 clips total)
+    # AUDIO_ERROR can come from either narration or SFX generation (both produce audio)
+    if status == TaskStatus.AUDIO_ERROR:
+        # Check for narration progress
+        if "completed_narration_clips" in step_metadata:
+            completed = len(step_metadata["completed_narration_clips"])
+            # If SFX also in progress, show both
+            if "completed_sfx_clips" in step_metadata:
+                sfx_completed = len(step_metadata["completed_sfx_clips"])
+                return f"Audio: {completed}/18 clips ✓ | SFX: {sfx_completed}/18 clips ✓"
+            return f"Audio: {completed}/18 clips ✓"
+
+        # Check for SFX progress (if narration complete, only SFX in progress)
+        if "completed_sfx_clips" in step_metadata:
+            completed = len(step_metadata["completed_sfx_clips"])
+            return f"SFX: {completed}/18 clips ✓"
+
+    # Asset generation progress (variable count)
+    if status == TaskStatus.ASSET_ERROR and "completed_assets" in step_metadata:
+        completed = len(step_metadata["completed_assets"])
+        return f"Assets: {completed} complete ✓"
+
+    return None
+
+
 async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionClient) -> None:
     """Push Task status/priority updates back to Notion.
 
@@ -603,6 +727,27 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
     # Format as ISO 8601 for Notion date property
     if task.updated_at:
         properties["Updated"] = {"date": {"start": task.updated_at.isoformat()}}
+
+    # Add retry info if task is retrying (Story 6.2)
+    # Display as "Retrying in 15 min (Attempt 3/5)" in Notion Error Log field
+    if task.retry_count > 0 and task.next_retry_at:
+        retry_display = format_retry_display(task.retry_count, task.next_retry_at)
+        properties["Error Log"] = {
+            "rich_text": [{"text": {"content": retry_display}}]
+        }
+
+    # Add checkpoint progress if available (Story 6.3, Task 9)
+    # Display as "Video: 10/18 clips ✓" in Notion Progress field
+    # This shows users which sub-steps completed before failure, helping them
+    # understand resume-from-failure behavior
+    checkpoint_progress = format_checkpoint_progress(
+        getattr(task, "step_metadata", None),
+        task.status
+    )
+    if checkpoint_progress:
+        properties["Progress"] = {
+            "rich_text": [{"text": {"content": checkpoint_progress}}]
+        }
 
     # Update Notion page properties
     try:
@@ -760,6 +905,10 @@ async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
                 priority=task.priority,
                 title=task.title,
                 updated_at=task.updated_at,
+                retry_count=task.retry_count,
+                next_retry_at=task.next_retry_at,
+                completed_steps=task.completed_steps,  # Story 6.3, Task 9: Checkpoint fields
+                step_metadata=task.step_metadata,      # Story 6.3, Task 9: Checkpoint fields
             )
             for task in tasks
         ]

@@ -62,6 +62,7 @@ from app.config import get_notion_api_token
 from app.database import async_session_factory
 from app.models import Channel, Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
+from app.services.checkpoint_service import clear_step_metadata, is_step_complete, save_step_checkpoint
 from app.services.composite_creation import CompositeCreationService
 from app.services.narration_generation import NarrationGenerationService
 from app.services.notion_asset_service import NotionAssetService
@@ -251,7 +252,6 @@ class PipelineOrchestrator:
         """
         self.task_id = task_id
         self.log = get_logger(__name__)
-        self.step_completions: dict[PipelineStep, StepCompletion] = {}
 
     async def execute_pipeline(self) -> None:
         """Execute complete video generation pipeline from start to finish.
@@ -322,9 +322,6 @@ class PipelineOrchestrator:
             # Record pipeline start time in database
             await self._update_pipeline_start_time(datetime.now(timezone.utc))
 
-            # Load step completion metadata for partial resume
-            self.step_completions = await self.load_step_completion_metadata()
-
             # Define pipeline steps in execution order
             steps = [
                 PipelineStep.ASSET_GENERATION,
@@ -350,10 +347,18 @@ class PipelineOrchestrator:
                     # Save current progress and exit gracefully
                     return
 
-                # Check if step already complete (partial resume)
-                if step in self.step_completions and self.step_completions[step].completed:
-                    self.log.info("step_skipped", step=step.value, reason="already_complete")
-                    continue
+                # Story 6.3: Check if step already complete using checkpoint service
+                async with async_session_factory() as db:  # type: ignore[misc]
+                    if await is_step_complete(self.task_id, step.value, db):
+                        self.log.info("step_skipped", step=step.value, reason="checkpoint_exists")
+                        continue
+
+                # Story 6.3 Issue #12: Clear old sub-step metadata when starting step from scratch
+                # If we reach here, the step checkpoint doesn't exist, so we're starting fresh.
+                # Clear stale sub-step data (completed_video_clips, completed_assets, etc.)
+                # from previous failed attempts to prevent confusion.
+                async with async_session_factory() as db:  # type: ignore[misc]
+                    await clear_step_metadata(self.task_id, db)
 
                 # Update status to step's in-progress state
                 await self.update_task_status(STEP_STATUS_MAP[step])
@@ -370,7 +375,19 @@ class PipelineOrchestrator:
                         sfx_descriptions,
                         voice_id,
                     )
-                    await self.save_step_completion(step, completion)
+
+                    # Story 6.3: Save checkpoint using checkpoint service
+                    async with async_session_factory() as db:  # type: ignore[misc]
+                        await save_step_checkpoint(
+                            self.task_id,
+                            step.value,
+                            {
+                                "completed": completion.completed,
+                                "duration_seconds": completion.duration_seconds,
+                                "partial_progress": completion.partial_progress,
+                            },
+                            db
+                        )
 
                     self.log.info(
                         "step_completed",
@@ -533,7 +550,12 @@ class PipelineOrchestrator:
         if step == PipelineStep.ASSET_GENERATION:
             asset_service = AssetGenerationService(channel_id, project_id)
             manifest = asset_service.create_asset_manifest(topic, story_direction)
-            result = await asset_service.generate_assets(manifest, resume=True)
+
+            # Story 6.3 Task 4: Pass task_id and db session for sub-step checkpointing
+            async with async_session_factory() as db:  # type: ignore[misc]
+                result = await asset_service.generate_assets(
+                    manifest, resume=True, task_id=self.task_id, db=db
+                )
 
             # Store asset files for Notion population (Story 5.3)
             asset_files = [
@@ -578,7 +600,15 @@ class PipelineOrchestrator:
         elif step == PipelineStep.VIDEO_GENERATION:
             video_service = VideoGenerationService(channel_id, project_id)
             video_manifest = video_service.create_video_manifest(topic, story_direction)
-            result = await video_service.generate_videos(video_manifest, resume=True)
+
+            # Story 6.3: Pass task_id and db session for sub-step checkpointing
+            async with async_session_factory() as db:  # type: ignore[misc]
+                result = await video_service.generate_videos(
+                    video_manifest,
+                    resume=True,
+                    task_id=self.task_id,
+                    db=db
+                )
 
             return StepCompletion(
                 step=step,
@@ -605,9 +635,35 @@ class PipelineOrchestrator:
                 voice_id=voice_id,
             )
 
-            # TODO Story 5.5: Support partial regeneration for failed audio clips
-            # Requires task object in execute_step signature
-            result = await narration_service.generate_narration(narration_manifest, resume=True)
+            # Story 5.5: Support partial regeneration for failed audio clips
+            # Extract failed clip numbers from task metadata (populated by reject_audio)
+            failed_narration_clips = None
+            if task.step_completion_metadata and "failed_audio_clip_numbers" in task.step_completion_metadata:
+                failed_narration_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
+                self.log.info(
+                    "partial_narration_regeneration_requested",
+                    correlation_id=correlation_id,
+                    task_id=str(task.id),
+                    failed_clips=failed_narration_clips,
+                )
+
+            # Story 6.3 Task 5: Pass task_id and db for narration clip checkpointing
+            result = await narration_service.generate_narration(
+                narration_manifest,
+                resume=True,
+                clips_to_regenerate=failed_narration_clips,
+                task_id=str(task.id),
+                db=db,
+            )
+
+            # Clear failed clips from metadata after successful regeneration
+            if failed_narration_clips and task.step_completion_metadata:
+                task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
+                self.log.info(
+                    "cleared_failed_audio_clip_numbers",
+                    correlation_id=correlation_id,
+                    task_id=str(task.id),
+                )
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build narration file list from audio directory
@@ -725,6 +781,9 @@ class PipelineOrchestrator:
 
     async def load_step_completion_metadata(self) -> dict[PipelineStep, StepCompletion]:
         """Load step completion metadata from database for partial resume.
+
+        DEPRECATED: Story 6.3 - Use checkpoint_service.is_step_complete() instead
+        This method is kept for backward compatibility with existing step_completion_metadata.
 
         Metadata Storage:
         - Stored in Task.step_completion_metadata (JSONB column)
@@ -998,6 +1057,9 @@ class PipelineOrchestrator:
         completion: StepCompletion,
     ) -> None:
         """Save step completion metadata to database.
+
+        DEPRECATED: Story 6.3 - Use checkpoint_service.save_step_checkpoint() instead
+        This method is kept for backward compatibility with existing step_completion_metadata.
 
         Metadata Format:
         {
