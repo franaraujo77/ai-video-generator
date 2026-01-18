@@ -94,3 +94,31 @@ NOTION_PRIORITY_OPTIONS = ["Low", "Normal", "High"]
 
 # Valid Task internal priority options (lowercase)
 TASK_PRIORITY_OPTIONS = ["low", "normal", "high"]
+
+# Asset type constants (Story 5.3: Asset Review Interface)
+ASSET_TYPE_CHARACTER = "character"
+ASSET_TYPE_ENVIRONMENT = "environment"
+ASSET_TYPE_PROP = "prop"
+ASSET_TYPE_COMPOSITE = "composite"
+
+VALID_ASSET_TYPES = frozenset([
+    ASSET_TYPE_CHARACTER,
+    ASSET_TYPE_ENVIRONMENT,
+    ASSET_TYPE_PROP,
+    ASSET_TYPE_COMPOSITE,
+])
+
+# Asset status constants (Story 5.3: Asset Review Interface)
+ASSET_STATUS_PENDING = "pending"
+ASSET_STATUS_GENERATED = "generated"
+ASSET_STATUS_APPROVED = "approved"
+ASSET_STATUS_REJECTED = "rejected"
+
+# Expected asset counts per task (Story 5.3: Asset Review Interface)
+EXPECTED_TOTAL_ASSETS = 22
+EXPECTED_CHARACTER_ASSETS_MIN = 6
+EXPECTED_CHARACTER_ASSETS_MAX = 8
+EXPECTED_ENVIRONMENT_ASSETS_MIN = 8
+EXPECTED_ENVIRONMENT_ASSETS_MAX = 10
+EXPECTED_PROP_ASSETS_MIN = 4
+EXPECTED_PROP_ASSETS_MAX = 6

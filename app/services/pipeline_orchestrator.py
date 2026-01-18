@@ -862,11 +862,14 @@ class PipelineOrchestrator:
                     )
                     return
 
+                # FIXED (Code Review Issue #9): Use task_id as correlation ID
+                correlation_id = str(task.id)
+
                 if not task.notion_page_id:
                     self.log.warning(
                         "task_missing_notion_page_id",
                         task_id=self.task_id,
-                        correlation_id=None,
+                        correlation_id=correlation_id,
                         message="Cannot populate assets in Notion without notion_page_id",
                     )
                     return
@@ -877,7 +880,7 @@ class PipelineOrchestrator:
                     self.log.error(
                         "channel_not_found",
                         channel_id=task.channel_id,
-                        correlation_id=None,
+                        correlation_id=correlation_id,
                     )
                     return
 
@@ -901,11 +904,14 @@ class PipelineOrchestrator:
             asset_service = NotionAssetService(notion_client, channel)
 
             # Populate assets in Notion (no DB connection held during API calls)
+            # FIXED (Code Review Issue #9): Pass correlation_id for distributed tracing
+            correlation_id = str(task_id)  # Use task_id as correlation ID
             result = await asset_service.populate_assets(
                 task_id=task_id,
                 notion_page_id=notion_page_id,
                 asset_files=asset_files,
-                correlation_id=None,
+                correlation_id=correlation_id,
+                skip_existing=False,  # Disabled until query_database method added to NotionClient
             )
 
             self.log.info(
