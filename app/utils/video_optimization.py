@@ -276,6 +276,13 @@ async def get_video_duration(video_path: Path) -> float:
 
         return duration
 
+    except subprocess.TimeoutExpired as e:
+        log.error(
+            "video_duration_probe_timeout",
+            path=str(video_path),
+            timeout=e.timeout,
+        )
+        raise asyncio.TimeoutError(f"ffprobe timed out after {e.timeout} seconds") from e
     except Exception as e:
         log.error(
             "video_duration_probe_failed",
