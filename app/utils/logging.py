@@ -7,11 +7,17 @@ Configuration:
 - JSON output format (for production log aggregation)
 - Context binding support (correlation IDs, task IDs, etc.)
 - Log levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+Enhanced Features (Story 6.1):
+- log_error() helper for error logging with required metadata
+- ISO 8601 timestamp format (UTC timezone)
+- Integration with error_classifier for transient/permanent classification
 """
 
 import json
 import logging
 import sys
+from datetime import datetime, timezone
 from typing import Any
 
 
@@ -67,3 +73,88 @@ def get_logger(name: str) -> StructuredLogger:
         logger.setLevel(logging.INFO)
 
     return StructuredLogger(logger)
+
+
+def log_error(
+    task_id: str,
+    channel_id: str,
+    step: str,
+    error_type: str,
+    error_message: str,
+    is_transient: bool,
+    retry_attempt: int,
+    http_status_code: int | None = None,
+    confidence: float | None = None,
+) -> None:
+    """Log error with required metadata for error tracking and analysis.
+
+    This helper function ensures all error logs include consistent metadata
+    fields required for error analysis, retry decisions, and observability.
+
+    Required Fields:
+    - timestamp: ISO 8601 timestamp with UTC timezone (auto-generated)
+    - task_id: Database task UUID
+    - channel_id: Channel identifier (for multi-channel isolation)
+    - step: Pipeline step where error occurred
+    - error_type: Exception class name (e.g., "HTTPStatusError", "TimeoutException")
+    - error_message: Original error message
+    - is_transient: Whether error is transient (retry) or permanent (fail fast)
+    - retry_attempt: Current retry attempt number (0 = first attempt)
+
+    Optional Fields:
+    - http_status_code: HTTP status code if applicable (429, 500, 400, etc.)
+    - confidence: Classification confidence from error_classifier (0.0-1.0)
+
+    Args:
+        task_id: Database task UUID (correlation ID)
+        channel_id: Channel identifier for multi-channel isolation
+        step: Pipeline step (e.g., "narration_generation", "video_generation")
+        error_type: Exception type name (e.g., "HTTPStatusError", "CLIScriptError")
+        error_message: Original error message from exception
+        is_transient: True if error is transient (retry), False if permanent (fail fast)
+        retry_attempt: Current retry attempt number (0 = first attempt, 1 = first retry, etc.)
+        http_status_code: Optional HTTP status code (429, 500, 400, etc.)
+        confidence: Optional classification confidence from error_classifier (0.0-1.0)
+
+    Example:
+        >>> from app.services.error_classifier import classify_error
+        >>> from app.utils.logging import log_error
+        >>> from app.utils.cli_wrapper import CLIScriptError
+        >>>
+        >>> try:
+        ...     await run_cli_script("generate_audio.py", args)
+        ... except CLIScriptError as e:
+        ...     analysis = classify_error(e)
+        ...     log_error(
+        ...         task_id=str(task.id),
+        ...         channel_id=task.channel_id,
+        ...         step="narration_generation",
+        ...         error_type=analysis.error_type,
+        ...         error_message=analysis.error_message,
+        ...         is_transient=analysis.retry_recommended,
+        ...         retry_attempt=1,
+        ...         http_status_code=analysis.http_status_code,
+        ...         confidence=analysis.confidence,
+        ...     )
+
+    Story Reference: 6.1 - Transient Failure Detection (Task 4)
+    """
+    logger = get_logger("app.error_logging")
+
+    # Generate ISO 8601 timestamp with UTC timezone
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    # Log error with all required metadata
+    logger.error(
+        "error_logged",
+        timestamp=timestamp,
+        task_id=task_id,
+        channel_id=channel_id,
+        step=step,
+        error_type=error_type,
+        error_message=error_message,
+        is_transient=is_transient,
+        retry_attempt=retry_attempt,
+        http_status_code=http_status_code,
+        confidence=confidence,
+    )

@@ -53,6 +53,7 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.services.error_classifier import classify_error
 from app.utils.cli_wrapper import CLIScriptError, run_cli_script
 from app.utils.filesystem import get_audio_dir
 from app.utils.logging import get_logger
@@ -102,36 +103,25 @@ def _validate_voice_id(voice_id: str) -> None:
 
 
 def _is_retriable_error(error: CLIScriptError) -> bool:
-    """Check if CLI script error is retriable (rate limit, timeout, server error).
+    """Check if CLI script error is retriable using centralized error classifier.
 
-    Retriable errors:
-    - HTTP 429 (rate limit) - wait and retry
-    - HTTP 5xx (server error) - temporary issue
-    - Timeout errors - ElevenLabs took too long
+    DEPRECATED: This function delegates to centralized error_classifier.classify_error().
+    Use classify_error() directly for new code.
 
-    Non-retriable errors:
-    - HTTP 401 (auth error) - invalid API key
-    - HTTP 403 (forbidden) - permission issue
-    - HTTP 400 (bad request) - invalid input
+    This wrapper maintained for backward compatibility during Story 6.1 refactoring.
+    TODO(Story 6.2): Remove this wrapper once direct classify_error() usage is validated.
+    Removal tracked in Epic 6 completion review.
 
     Args:
         error: CLIScriptError from CLI wrapper
 
     Returns:
         True if error should be retried, False otherwise
+
+    Story Reference: 6.1 - Transient Failure Detection (Task 3)
     """
-    stderr_lower = error.stderr.lower()
-
-    # Check for rate limit (429)
-    if "429" in error.stderr or "rate limit" in stderr_lower:
-        return True
-
-    # Check for server errors (5xx)
-    if any(code in error.stderr for code in ["500", "502", "503", "504"]):
-        return True
-
-    # Check for timeout and return directly
-    return "timeout" in stderr_lower
+    analysis = classify_error(error)
+    return analysis.retry_recommended
 
 
 @dataclass
