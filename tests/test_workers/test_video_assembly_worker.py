@@ -77,7 +77,7 @@ class TestProcessVideoAssemblyTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.SFX_READY,
             total_cost_usd=0.0,
         )
         async_session.add(task)
@@ -151,7 +151,7 @@ class TestProcessVideoAssemblyTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.SFX_READY,
             total_cost_usd=0.0,
         )
         async_session.add(task)
@@ -202,7 +202,7 @@ class TestProcessVideoAssemblyTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.SFX_READY,
             total_cost_usd=0.0,
         )
         async_session.add(task)
@@ -263,7 +263,7 @@ class TestProcessVideoAssemblyTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.SFX_READY,
             total_cost_usd=0.0,
         )
         async_session.add(task)
@@ -320,7 +320,7 @@ class TestProcessVideoAssemblyTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.SFX_READY,
             total_cost_usd=0.0,
         )
         async_session.add(task)
@@ -378,7 +378,7 @@ class TestProcessVideoAssemblyTask:
             title="Test Video",
             topic="Haunter documentary",
             story_direction="Show ghostly powers",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.SFX_READY,
             total_cost_usd=0.0,
         )
         async_session.add(task)

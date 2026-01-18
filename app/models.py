@@ -20,7 +20,7 @@ Example:
 import enum
 import uuid
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, ClassVar
 
 from sqlalchemy import (
     JSON,
@@ -418,7 +418,7 @@ class Task(Base):
     # State Machine Validation (Story 5.1 + Code Review Fixes)
     # Defines valid status transitions for the 27-status workflow
     # Only transitions listed here are allowed, enforced by @validates decorator
-    VALID_TRANSITIONS = {
+    VALID_TRANSITIONS: ClassVar[dict[TaskStatus, list[TaskStatus]]] = {
         # Initial states
         TaskStatus.DRAFT: [TaskStatus.QUEUED, TaskStatus.CANCELLED],
         TaskStatus.QUEUED: [TaskStatus.CLAIMED, TaskStatus.CANCELLED],
@@ -428,7 +428,7 @@ class Task(Base):
         TaskStatus.ASSETS_READY: [TaskStatus.ASSETS_APPROVED, TaskStatus.ASSET_ERROR],
         TaskStatus.ASSETS_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_COMPOSITES],
         # Composite creation phase (OPTIONAL review - auto-proceeds)
-        TaskStatus.GENERATING_COMPOSITES: [TaskStatus.COMPOSITES_READY],
+        TaskStatus.GENERATING_COMPOSITES: [TaskStatus.COMPOSITES_READY, TaskStatus.ASSET_ERROR],
         TaskStatus.COMPOSITES_READY: [TaskStatus.GENERATING_VIDEO],
         # Video generation phase (MANDATORY review gate - expensive step)
         TaskStatus.GENERATING_VIDEO: [TaskStatus.VIDEO_READY, TaskStatus.VIDEO_ERROR],
@@ -439,22 +439,29 @@ class Task(Base):
         TaskStatus.AUDIO_READY: [TaskStatus.AUDIO_APPROVED, TaskStatus.AUDIO_ERROR],
         TaskStatus.AUDIO_APPROVED: [TaskStatus.QUEUED, TaskStatus.GENERATING_SFX],
         # Sound effects phase (OPTIONAL review - auto-proceeds)
-        TaskStatus.GENERATING_SFX: [TaskStatus.SFX_READY],
+        TaskStatus.GENERATING_SFX: [TaskStatus.SFX_READY, TaskStatus.AUDIO_ERROR],
         TaskStatus.SFX_READY: [TaskStatus.ASSEMBLING],
         # Assembly phase (OPTIONAL review - auto-proceeds)
-        TaskStatus.ASSEMBLING: [TaskStatus.ASSEMBLY_READY],
+        TaskStatus.ASSEMBLING: [TaskStatus.ASSEMBLY_READY, TaskStatus.VIDEO_ERROR],
         TaskStatus.ASSEMBLY_READY: [TaskStatus.FINAL_REVIEW],
         # Final review and upload phase (MANDATORY review gate - YouTube compliance)
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
         TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING],
         TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR],
-        TaskStatus.PUBLISHED: [TaskStatus.QUEUED],  # Allow manual re-queue for content updates
-        TaskStatus.CANCELLED: [TaskStatus.QUEUED],  # Allow manual re-queue after un-cancel
+        # Terminal states with manual re-queue capability (requires user intervention):
+        # - PUBLISHED → QUEUED: Update content after publish (e.g., compliance changes)
+        # - CANCELLED → QUEUED: Un-cancel if user changes mind
+        # Both are manual operations, not automatic workflow transitions
+        TaskStatus.PUBLISHED: [TaskStatus.QUEUED],
+        TaskStatus.CANCELLED: [TaskStatus.QUEUED],
         # Error recovery paths (retry by returning to QUEUED)
         TaskStatus.ASSET_ERROR: [TaskStatus.QUEUED],
         TaskStatus.VIDEO_ERROR: [TaskStatus.QUEUED],
         TaskStatus.AUDIO_ERROR: [TaskStatus.QUEUED],
-        TaskStatus.UPLOAD_ERROR: [TaskStatus.QUEUED, TaskStatus.FINAL_REVIEW],  # Allow full retry or re-review
+        TaskStatus.UPLOAD_ERROR: [
+            TaskStatus.QUEUED,
+            TaskStatus.FINAL_REVIEW,
+        ],  # Allow full retry or re-review
     }
 
     # Primary key

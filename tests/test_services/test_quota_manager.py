@@ -123,9 +123,7 @@ class TestCheckYouTubeQuota:
 
         assert result is False
 
-    async def test_per_channel_isolation(
-        self, async_session: AsyncSession, channel: Channel
-    ):
+    async def test_per_channel_isolation(self, async_session: AsyncSession, channel: Channel):
         """Scenario 5: Per-channel quota isolation."""
         # Create second channel
         channel2 = Channel(
@@ -159,9 +157,7 @@ class TestCheckYouTubeQuota:
 class TestRecordYouTubeQuota:
     """Test record_youtube_quota function."""
 
-    async def test_create_new_quota_record(
-        self, async_session: AsyncSession, channel: Channel
-    ):
+    async def test_create_new_quota_record(self, async_session: AsyncSession, channel: Channel):
         """Scenario 6: First operation creates new quota record."""
         with patch("app.services.quota_manager.send_alert") as mock_alert:
             await record_youtube_quota(channel.id, "upload", async_session)
@@ -179,9 +175,7 @@ class TestRecordYouTubeQuota:
         # No alert triggered (1600 / 10000 = 16%)
         mock_alert.assert_not_called()
 
-    async def test_increment_existing_quota(
-        self, async_session: AsyncSession, channel: Channel
-    ):
+    async def test_increment_existing_quota(self, async_session: AsyncSession, channel: Channel):
         """Scenario 7: Subsequent operation increments existing record."""
         # Create initial quota record
         quota = YouTubeQuotaUsage(
@@ -203,9 +197,7 @@ class TestRecordYouTubeQuota:
         # No alert triggered (4600 / 10000 = 46%)
         mock_alert.assert_not_called()
 
-    async def test_warning_alert_at_80_percent(
-        self, async_session: AsyncSession, channel: Channel
-    ):
+    async def test_warning_alert_at_80_percent(self, async_session: AsyncSession, channel: Channel):
         """Scenario 8: WARNING alert triggered at 80% threshold."""
         # Create quota record at 70% (7000 / 10000)
         quota = YouTubeQuotaUsage(
@@ -266,9 +258,7 @@ class TestRecordYouTubeQuota:
         with pytest.raises(ValueError, match="Invalid YouTube operation"):
             await record_youtube_quota(channel.id, "invalid_op", async_session)
 
-    async def test_operation_costs(
-        self, async_session: AsyncSession, channel: Channel
-    ):
+    async def test_operation_costs(self, async_session: AsyncSession, channel: Channel):
         """Scenario 11: Different operations have different costs."""
         with patch("app.services.quota_manager.send_alert"):
             # Upload: 1600 units

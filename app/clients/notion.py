@@ -385,9 +385,7 @@ class NotionClient:
             last_error or Exception("Unknown error"),
         )
 
-    async def create_page(
-        self, database_id: str, properties: dict[str, Any]
-    ) -> dict[str, Any]:
+    async def create_page(self, database_id: str, properties: dict[str, Any]) -> dict[str, Any]:
         """Create a new page in a Notion database (rate limited, auto-retry).
 
         Args:
@@ -405,7 +403,7 @@ class NotionClient:
         Example:
             >>> properties = {
             ...     "Name": {"title": [{"text": {"content": "My Page"}}]},
-            ...     "Status": {"select": {"name": "Active"}}
+            ...     "Status": {"select": {"name": "Active"}},
             ... }
             >>> page = await client.create_page("abc123", properties)
         """
@@ -469,9 +467,97 @@ class NotionClient:
             last_error or Exception("Unknown error"),
         )
 
-    async def upload_file(
-        self, file_path: Path
-    ) -> str:
+    async def query_database(self, database_id: str, **query_params: Any) -> dict[str, Any]:
+        """Query a Notion database with filters and sorting (rate limited, auto-retry).
+
+        This method supports the full Notion database query API, including filters,
+        sorts, and pagination. Used by NotionAssetService for idempotency checks.
+
+        Args:
+            database_id: Database ID (with or without dashes)
+            **query_params: Query parameters (filter, sorts, page_size, start_cursor)
+                - filter: Database filter object (see Notion API docs)
+                - sorts: List of sort objects
+                - page_size: Number of results per page (max 100)
+                - start_cursor: Pagination cursor
+
+        Returns:
+            Query results dict with keys:
+                - results: List of page objects matching query
+                - next_cursor: Pagination cursor for next page (None if no more)
+                - has_more: Boolean indicating if more results exist
+
+        Raises:
+            NotionAPIError: On non-retriable errors (404, 400, etc.)
+            NotionRateLimitError: After retry exhaustion
+
+        Example:
+            >>> result = await client.query_database(
+            ...     database_id="abc123",
+            ...     filter={"property": "Status", "select": {"equals": "Done"}},
+            ... )
+            >>> print(len(result["results"]))
+            42
+
+        Story: 5.3 - Asset Review Interface (idempotency check)
+        """
+        # Normalize database ID to UUID format
+        database_id = self._normalize_database_id(database_id)
+
+        url = f"{self.base_url}/databases/{database_id}/query"
+
+        attempt = 0
+        max_attempts = 3
+        last_error: Exception | None = None
+
+        while attempt < max_attempts:
+            try:
+                async with self.rate_limiter:
+                    response = await self.client.post(
+                        url,
+                        headers=self._get_headers(),
+                        json=query_params,  # POST body contains filter, sorts, etc.
+                    )
+                    response.raise_for_status()
+                    result: dict[str, Any] = response.json()
+                    return result
+
+            except httpx.HTTPStatusError as e:
+                last_error = e
+                if e.response.status_code == 429:
+                    # Rate limit hit - respect Retry-After header
+                    await self._handle_retry_after(e.response)
+                    attempt += 1
+                elif self._is_retriable_error(e):
+                    # Retriable server error - exponential backoff
+                    attempt += 1
+                    if attempt < max_attempts:
+                        wait_time = 2**attempt
+                        await asyncio.sleep(wait_time)
+                else:
+                    # Non-retriable error - fail immediately
+                    error_msg = (
+                        f"Notion API query_database failed: "
+                        f"{e.response.status_code} {e.response.text}"
+                    )
+                    raise NotionAPIError(error_msg, e.response) from e
+
+            except (httpx.TimeoutException, httpx.ConnectError) as e:
+                # Network error - retry with exponential backoff
+                last_error = e
+                attempt += 1
+                if attempt < max_attempts:
+                    wait_time = 2**attempt
+                    await asyncio.sleep(wait_time)
+
+        # All retries exhausted
+        raise NotionRateLimitError(
+            "Notion API query_database rate limit exceeded after retries",
+            attempt,
+            last_error or Exception("Unknown error"),
+        )
+
+    async def upload_file(self, file_path: Path) -> str:
         """Upload a file to Notion and return the file URL.
 
         Note: Notion API currently only supports external file URLs, not direct uploads.

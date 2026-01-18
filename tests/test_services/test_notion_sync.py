@@ -907,9 +907,7 @@ def test_is_approval_transition_approved_to_generating_not_approval():
 
 def test_is_approval_transition_composites_ready_to_generating_not_approval():
     """Test COMPOSITES_READY → GENERATING_VIDEO is NOT approval (auto-proceed)."""
-    assert (
-        is_approval_transition(TaskStatus.COMPOSITES_READY, TaskStatus.GENERATING_VIDEO) is False
-    )
+    assert is_approval_transition(TaskStatus.COMPOSITES_READY, TaskStatus.GENERATING_VIDEO) is False
 
 
 @pytest.mark.asyncio
@@ -1118,9 +1116,7 @@ async def test_handle_rejection_transition_logs_rejection_reason(async_session):
     notion_page = {
         "properties": {
             "Error Log": {
-                "rich_text": [
-                    {"plain_text": "Video quality is too low, needs re-rendering"}
-                ]
+                "rich_text": [{"plain_text": "Video quality is too low, needs re-rendering"}]
             }
         }
     }
@@ -1463,6 +1459,7 @@ async def test_config_default_polling_interval_is_10s():
 
     # Clear environment variable to test default
     import os
+
     if "NOTION_SYNC_INTERVAL_SECONDS" in os.environ:
         del os.environ["NOTION_SYNC_INTERVAL_SECONDS"]
 
@@ -1505,6 +1502,7 @@ async def test_task_updated_at_auto_updates_on_status_change(async_session: Asyn
 
     # Create a test channel first (Task requires valid channel_id UUID)
     from app.models import Channel
+
     channel = Channel()
     channel.channel_id = "test_channel_5_6"
     channel.channel_name = "Test Channel for Story 5.6"
@@ -1550,6 +1548,7 @@ async def test_task_updated_at_auto_updates_on_any_field_change(async_session: A
 
     # Create a test channel first (Task requires valid channel_id UUID)
     from app.models import Channel
+
     channel = Channel()
     channel.channel_id = "test_channel_5_6_b"
     channel.channel_name = "Test Channel for Story 5.6 Field Change"

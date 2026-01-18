@@ -209,8 +209,8 @@ class TestTaskStatusConstants:
         assert TaskStatus.GENERATING_AUDIO in IN_PROGRESS_STATUSES
         assert TaskStatus.ASSEMBLING in IN_PROGRESS_STATUSES
         assert TaskStatus.FINAL_REVIEW in IN_PROGRESS_STATUSES
-        # Verify correct count (14 in-progress statuses)
-        assert len(IN_PROGRESS_STATUSES) == 14
+        # Verify correct count (18 in-progress statuses)
+        assert len(IN_PROGRESS_STATUSES) == 18
 
 
 class TestMaxConcurrentSync:

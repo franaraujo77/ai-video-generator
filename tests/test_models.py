@@ -363,21 +363,40 @@ async def test_taskstatus_enum_has_26_values():
     # AC1: Verify all 27 statuses exist (updated in code review)
     expected_statuses = {
         # Initial states (4 - added CANCELLED)
-        "draft", "queued", "claimed", "cancelled",
+        "draft",
+        "queued",
+        "claimed",
+        "cancelled",
         # Asset phase (4)
-        "generating_assets", "assets_ready", "assets_approved", "asset_error",
+        "generating_assets",
+        "assets_ready",
+        "assets_approved",
+        "asset_error",
         # Composite phase (2)
-        "generating_composites", "composites_ready",
+        "generating_composites",
+        "composites_ready",
         # Video phase (4)
-        "generating_video", "video_ready", "video_approved", "video_error",
+        "generating_video",
+        "video_ready",
+        "video_approved",
+        "video_error",
         # Audio phase (4)
-        "generating_audio", "audio_ready", "audio_approved", "audio_error",
+        "generating_audio",
+        "audio_ready",
+        "audio_approved",
+        "audio_error",
         # SFX phase (2)
-        "generating_sfx", "sfx_ready",
+        "generating_sfx",
+        "sfx_ready",
         # Assembly phase (2)
-        "assembling", "assembly_ready",
+        "assembling",
+        "assembly_ready",
         # Final phase (5)
-        "final_review", "approved", "uploading", "published", "upload_error",
+        "final_review",
+        "approved",
+        "uploading",
+        "published",
+        "upload_error",
     }
 
     # Get all enum values
@@ -503,7 +522,9 @@ async def test_invalid_status_transition_draft_to_published(async_session):
         (TaskStatus.CLAIMED, TaskStatus.ASSETS_APPROVED, False),
     ],
 )
-async def test_status_transitions_comprehensive(async_session, from_status, to_status, should_succeed):
+async def test_status_transitions_comprehensive(
+    async_session, from_status, to_status, should_succeed
+):
     """Test comprehensive status transition validation matrix."""
     # AC2: Validate state transitions
     # AC3: State machine progression matches UX flow
@@ -668,10 +689,15 @@ async def test_published_is_terminal_state(async_session):
     async_session.add(task)
     await async_session.commit()
 
-    # Verify PUBLISHED has no valid transitions
-    assert Task.VALID_TRANSITIONS[TaskStatus.PUBLISHED] == []
+    # Verify PUBLISHED allows re-queue for content updates
+    assert Task.VALID_TRANSITIONS[TaskStatus.PUBLISHED] == [TaskStatus.QUEUED]
 
-    # Attempt to transition from PUBLISHED should fail
+    # Valid transition: PUBLISHED → QUEUED (for content updates)
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    # Invalid transition should still fail
+    task.__dict__["status"] = TaskStatus.PUBLISHED  # Reset to PUBLISHED
     with pytest.raises(InvalidStateTransitionError) as exc_info:
         task.status = TaskStatus.DRAFT
 
@@ -701,14 +727,19 @@ async def test_cancelled_is_terminal_state(async_session):
     async_session.add(task)
     await async_session.commit()
 
-    # Verify CANCELLED has no valid transitions
-    assert Task.VALID_TRANSITIONS[TaskStatus.CANCELLED] == []
+    # Verify CANCELLED allows re-queue if user wants to retry
+    assert Task.VALID_TRANSITIONS[TaskStatus.CANCELLED] == [TaskStatus.QUEUED]
 
-    # Attempt to transition from CANCELLED should fail
+    # Valid transition: CANCELLED → QUEUED (for retry)
+    task.status = TaskStatus.QUEUED
+    await async_session.commit()
+
+    # Invalid transition should still fail
+    task.__dict__["status"] = TaskStatus.CANCELLED  # Reset to CANCELLED
     with pytest.raises(InvalidStateTransitionError) as exc_info:
-        task.status = TaskStatus.QUEUED
+        task.status = TaskStatus.DRAFT
 
-    assert "Invalid transition: cancelled → queued" in str(exc_info.value)
+    assert "Invalid transition: cancelled → draft" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

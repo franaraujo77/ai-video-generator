@@ -602,9 +602,7 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
     # Add Updated timestamp if available (Story 5.6, AC2, FR55)
     # Format as ISO 8601 for Notion date property
     if task.updated_at:
-        properties["Updated"] = {
-            "date": {"start": task.updated_at.isoformat()}
-        }
+        properties["Updated"] = {"date": {"start": task.updated_at.isoformat()}}
 
     # Update Notion page properties
     try:

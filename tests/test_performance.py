@@ -201,9 +201,10 @@ class TestDatabasePerformance:
         result = await async_session.execute(select(Task).where(Task.channel_id == perf_channel.id))
         tasks = result.scalars().all()
 
-        # When: Update all tasks to new status
+        # When: Update all tasks to new status (must go through CLAIMED)
         start_time = time.time()
         for task in tasks:
+            task.status = TaskStatus.CLAIMED
             task.status = TaskStatus.GENERATING_ASSETS
         await async_session.commit()
         end_time = time.time()
@@ -390,6 +391,7 @@ class TestConcurrentOperations:
             )
             task_list = result.scalars().all()
             for task in task_list[:25]:  # Update half
+                task.status = TaskStatus.CLAIMED
                 task.status = TaskStatus.GENERATING_ASSETS
                 update_count += 1
                 await async_session.commit()

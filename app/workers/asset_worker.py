@@ -113,7 +113,8 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
         story_direction = task.story_direction
         notion_page_id = task.notion_page_id
 
-        # Claim task by updating status
+        # Claim task by updating status (queued → claimed → generating_assets)
+        task.status = TaskStatus.CLAIMED
         task.status = TaskStatus.GENERATING_ASSETS
         await db.commit()
 

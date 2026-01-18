@@ -118,7 +118,7 @@ async def process_video_assembly_task(task_id: str | UUID) -> None:
             )
             return
 
-        # Update task status to "assembling"
+        # Update task status to "assembling" (sfx_ready → assembling)
         task.status = TaskStatus.ASSEMBLING
         await db.commit()
 

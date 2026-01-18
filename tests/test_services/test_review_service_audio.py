@@ -69,16 +69,12 @@ class TestAudioApproval:
     """Test suite for audio approval workflow (Task 4)."""
 
     @pytest.mark.asyncio
-    async def test_approve_audio_success(
-        self, review_service, mock_db_session, task_audio_ready
-    ):
+    async def test_approve_audio_success(self, review_service, mock_db_session, task_audio_ready):
         """Test successful audio approval from AUDIO_READY to AUDIO_APPROVED."""
         # Arrange
         mock_db_session.get = AsyncMock(return_value=task_audio_ready)
 
-        with patch.object(
-            review_service, "_update_notion_status_async", new=AsyncMock()
-        ):
+        with patch.object(review_service, "_update_notion_status_async", new=AsyncMock()):
             # Act
             result = await review_service.approve_audio(
                 db=mock_db_session,
@@ -163,9 +159,7 @@ class TestAudioApproval:
         mock_db_session.flush.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_approve_audio_task_not_found(
-        self, review_service, mock_db_session
-    ):
+    async def test_approve_audio_task_not_found(self, review_service, mock_db_session):
         """Test that approval fails if task does not exist."""
         # Arrange
         mock_db_session.get = AsyncMock(return_value=None)
@@ -183,17 +177,13 @@ class TestAudioRejection:
     """Test suite for audio rejection workflow (Task 5)."""
 
     @pytest.mark.asyncio
-    async def test_reject_audio_success(
-        self, review_service, mock_db_session, task_audio_ready
-    ):
+    async def test_reject_audio_success(self, review_service, mock_db_session, task_audio_ready):
         """Test successful audio rejection from AUDIO_READY to AUDIO_ERROR."""
         # Arrange
         mock_db_session.get = AsyncMock(return_value=task_audio_ready)
         rejection_reason = "Audio quality issues on multiple clips"
 
-        with patch.object(
-            review_service, "_update_notion_status_async", new=AsyncMock()
-        ):
+        with patch.object(review_service, "_update_notion_status_async", new=AsyncMock()):
             # Act
             result = await review_service.reject_audio(
                 db=mock_db_session,
@@ -222,9 +212,7 @@ class TestAudioRejection:
         rejection_reason = "Audio quality issues on clips 3, 7, 12"
         failed_clips = [3, 7, 12]
 
-        with patch.object(
-            review_service, "_update_notion_status_async", new=AsyncMock()
-        ):
+        with patch.object(review_service, "_update_notion_status_async", new=AsyncMock()):
             # Act
             result = await review_service.reject_audio(
                 db=mock_db_session,
@@ -245,8 +233,7 @@ class TestAudioRejection:
 
         # Verify failed clips stored in metadata for partial regeneration
         assert (
-            task_audio_ready.step_completion_metadata["failed_audio_clip_numbers"]
-            == failed_clips
+            task_audio_ready.step_completion_metadata["failed_audio_clip_numbers"] == failed_clips
         )
 
     @pytest.mark.asyncio
@@ -259,9 +246,7 @@ class TestAudioRejection:
         mock_db_session.get = AsyncMock(return_value=task_audio_ready)
         rejection_reason = "New audio quality issues"
 
-        with patch.object(
-            review_service, "_update_notion_status_async", new=AsyncMock()
-        ):
+        with patch.object(review_service, "_update_notion_status_async", new=AsyncMock()):
             # Act
             await review_service.reject_audio(
                 db=mock_db_session,
@@ -340,9 +325,7 @@ class TestAudioRejection:
         )
 
     @pytest.mark.asyncio
-    async def test_reject_audio_task_not_found(
-        self, review_service, mock_db_session
-    ):
+    async def test_reject_audio_task_not_found(self, review_service, mock_db_session):
         """Test that rejection fails if task does not exist."""
         # Arrange
         mock_db_session.get = AsyncMock(return_value=None)

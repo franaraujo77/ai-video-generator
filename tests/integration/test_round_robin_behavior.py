@@ -35,7 +35,9 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_fair_distribution_across_three_channels():
     """Test Scenario 1: Workers claim tasks in round-robin across channels.
 
@@ -47,7 +49,9 @@ async def test_fair_distribution_across_three_channels():
     pytest.skip("Integration test deferred - requires PostgreSQL + PgQueuer runtime")
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_priority_preservation_with_round_robin():
     """Test Scenario 2: Priority ordering maintained with round-robin.
 
@@ -60,7 +64,9 @@ async def test_priority_preservation_with_round_robin():
     pytest.skip("Integration test deferred - requires PostgreSQL + PgQueuer runtime")
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_starvation_prevention():
     """Test Scenario 3: Low-activity channel not starved by busy channel.
 
@@ -85,7 +91,9 @@ async def test_multi_worker_concurrent_claiming():
     pytest.skip("Integration test deferred - requires PostgreSQL + PgQueuer runtime")
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_new_channel_added_mid_stream():
     """Test Scenario 5: New channel seamlessly joins round-robin rotation.
 
@@ -96,7 +104,9 @@ async def test_new_channel_added_mid_stream():
     pytest.skip("Integration test deferred - requires PostgreSQL + PgQueuer runtime")
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_channel_removed_during_processing():
     """Test Scenario 6: Deactivated channel gracefully removed from rotation.
 
@@ -108,7 +118,9 @@ async def test_channel_removed_during_processing():
     pytest.skip("Integration test deferred - requires PostgreSQL + PgQueuer runtime")
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_single_channel_dominance_prevention():
     """Test Scenario 7: Busy channel doesn't monopolize all workers.
 
@@ -132,7 +144,9 @@ async def test_query_performance_with_mixed_channels():
     pytest.skip("Integration test deferred - requires PostgreSQL + PgQueuer runtime")
 
 
-@pytest.mark.skip(reason="Behavioral validation deferred - SQL structure validated in test_queue.py")
+@pytest.mark.skip(
+    reason="Behavioral validation deferred - SQL structure validated in test_queue.py"
+)
 async def test_round_robin_with_priority_changes():
     """Test Scenario 9: Priority groups maintain round-robin within each level.
 

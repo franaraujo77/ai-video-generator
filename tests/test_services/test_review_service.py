@@ -116,9 +116,10 @@ class TestReviewService:
     async def test_update_notion_status_async_no_token(self, review_service):
         """Test Notion status update skips when token not configured."""
         # Arrange
-        with patch("app.services.review_service.get_notion_api_token", return_value=None), \
-             patch("app.services.review_service.NotionClient") as notion_client_class_mock:
-
+        with (
+            patch("app.services.review_service.get_notion_api_token", return_value=None),
+            patch("app.services.review_service.NotionClient") as notion_client_class_mock,
+        ):
             # Act
             await review_service._update_notion_status_async(
                 notion_page_id="abc123",
@@ -132,10 +133,14 @@ class TestReviewService:
     async def test_update_notion_status_async_error_handling(self, review_service):
         """Test Notion status update logs error but doesn't raise."""
         # Arrange
-        with patch("app.services.review_service.get_notion_api_token", return_value="token_123"), \
-             patch("app.services.review_service.NotionClient") as notion_client_class_mock:
+        with (
+            patch("app.services.review_service.get_notion_api_token", return_value="token_123"),
+            patch("app.services.review_service.NotionClient") as notion_client_class_mock,
+        ):
             notion_client_mock = MagicMock()
-            notion_client_mock.update_task_status = AsyncMock(side_effect=Exception("Notion API error"))
+            notion_client_mock.update_task_status = AsyncMock(
+                side_effect=Exception("Notion API error")
+            )
             notion_client_class_mock.return_value = notion_client_mock
 
             # Act - Should not raise, just log
@@ -309,8 +314,12 @@ class TestReviewServiceIntegration:
         await async_session.commit()
 
         # WHEN: Approving videos with Notion token
-        with patch("app.services.review_service.get_notion_api_token", return_value="notion_token_123"), \
-             patch("app.services.review_service.NotionClient") as notion_client_class_mock:
+        with (
+            patch(
+                "app.services.review_service.get_notion_api_token", return_value="notion_token_123"
+            ),
+            patch("app.services.review_service.NotionClient") as notion_client_class_mock,
+        ):
             notion_client_mock = MagicMock()
             notion_client_mock.update_task_status = AsyncMock()
             notion_client_class_mock.return_value = notion_client_mock
@@ -331,9 +340,11 @@ class TestReviewServiceIntegration:
     async def test_notion_status_mapping_validation(self, review_service):
         """[P2] should handle unmapped internal status gracefully."""
         # GIVEN: Internal status that doesn't map to Notion status
-        with patch("app.services.review_service.get_notion_api_token", return_value="token_123"), \
-             patch("app.services.review_service.INTERNAL_TO_NOTION_STATUS", {}), \
-             patch("app.services.review_service.NotionClient") as notion_client_class_mock:
+        with (
+            patch("app.services.review_service.get_notion_api_token", return_value="token_123"),
+            patch("app.services.review_service.INTERNAL_TO_NOTION_STATUS", {}),
+            patch("app.services.review_service.NotionClient") as notion_client_class_mock,
+        ):
             notion_client_mock = MagicMock()
             notion_client_mock.update_task_status = AsyncMock()
             notion_client_class_mock.return_value = notion_client_mock

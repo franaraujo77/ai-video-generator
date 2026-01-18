@@ -67,7 +67,17 @@
       "WebFetch(domain:github.com)",
       "WebFetch(domain:pgqueuer.readthedocs.io)",
       "WebFetch(domain:pypi.org)",
-      "Bash(pytest:*)"
+      "Bash(pytest:*)",
+      "Bash(git rev-list:*)",
+      "Bash(gh pr list:*)",
+      "Bash(git fetch:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(gh api:*)",
+      "Bash(git rebase:*)",
+      "Bash(git stash:*)",
+      "Bash(gh pr reopen:*)",
+      "Bash(gh pr diff:*)",
+      "Bash(ruff format:*)"
     ],
     "deny": [],
     "ask": []

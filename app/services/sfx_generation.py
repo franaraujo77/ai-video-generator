@@ -268,13 +268,15 @@ class SFXGenerationService:
             resume: If True, skip clips that already exist on filesystem
             max_concurrent: Maximum concurrent ElevenLabs API requests (default 10)
             clips_to_regenerate: Optional list of clip numbers (1-18) to regenerate.
-                If provided, only these clips will be generated (partial regeneration for Story 5.5).
+                If provided, only these clips will be generated
+                (partial regeneration for Story 5.5).
                 If None, all clips in manifest will be generated.
 
         Returns:
             Summary dict with keys:
                 - generated: Number of newly generated SFX clips
-                - skipped: Number of existing SFX clips (if resume=True or not in clips_to_regenerate)
+                - skipped: Number of existing SFX clips
+                  (if resume=True or not in clips_to_regenerate)
                 - failed: Number of failed SFX clips
                 - total_cost_usd: Total ElevenLabs API cost (Decimal)
 
@@ -295,8 +297,7 @@ class SFXGenerationService:
         clips_to_generate = manifest.clips
         if clips_to_regenerate is not None:
             clips_to_generate = [
-                clip for clip in manifest.clips
-                if clip.clip_number in clips_to_regenerate
+                clip for clip in manifest.clips if clip.clip_number in clips_to_regenerate
             ]
             self.log.info(
                 "partial_sfx_regeneration",
@@ -337,9 +338,12 @@ class SFXGenerationService:
                 await run_cli_script(
                     "generate_sound_effects.py",
                     [
-                        "--text", clip.sfx_description,
-                        "--output", str(clip.output_path),
-                        "--format", "mp3_44100_128",  # MP3 format for web playback
+                        "--text",
+                        clip.sfx_description,
+                        "--output",
+                        str(clip.output_path),
+                        "--format",
+                        "mp3_44100_128",  # MP3 format for web playback
                     ],
                     timeout=60,  # 1 minute max per clip
                 )

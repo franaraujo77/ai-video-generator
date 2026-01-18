@@ -36,6 +36,7 @@ class TestVideoGenerationWorker:
         task.story_direction = "Show evolution through seasons"
         task.notion_page_id = "notion_page_123"
         task.total_cost_usd = 5.00  # Previous costs from assets/composites
+        task.step_completion_metadata = None  # No partial regeneration by default
 
         # Mock channel relationship
         channel = Mock()
@@ -92,6 +93,11 @@ class TestVideoGenerationWorker:
             ) as mock_track_cost,
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
+            ),
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
+            patch(
+                "app.workers.video_generation_worker.optimize_video_for_streaming",
+                new_callable=AsyncMock,
             ),
         ):
             # Mock service
@@ -150,6 +156,7 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             # Mock service to raise CLI error
             mock_service = mock_service_class.return_value
@@ -180,6 +187,7 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             # Mock service to raise timeout
             mock_service = mock_service_class.return_value
@@ -206,6 +214,7 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             # Mock service to raise unexpected error
             mock_service = mock_service_class.return_value
@@ -254,10 +263,12 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
             ),
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
             mock_service.generate_videos = mock_generate_videos
+            mock_service.cleanup = AsyncMock()
 
             # Process task
             await process_video_generation_task(task_id)
@@ -283,6 +294,7 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
             ) as mock_notion,
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
@@ -294,6 +306,7 @@ class TestVideoGenerationWorker:
                     "total_cost_usd": Decimal("7.56"),
                 }
             )
+            mock_service.cleanup = AsyncMock()
 
             # Process task
             await process_video_generation_task(task_id)
@@ -316,6 +329,7 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
             ),
+            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))

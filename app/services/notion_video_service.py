@@ -38,7 +38,11 @@ from typing import Any
 from uuid import UUID
 
 from app.clients.notion import NotionClient
-from app.config import DEFAULT_VIDEO_DURATION_SECONDS, get_notion_tasks_collection_id, get_notion_videos_database_id
+from app.config import (
+    DEFAULT_VIDEO_DURATION_SECONDS,
+    get_notion_tasks_collection_id,
+    get_notion_videos_database_id,
+)
 from app.models import Channel
 from app.utils.logging import get_logger
 
@@ -98,6 +102,7 @@ class NotionVideoService:
                 - clip_number: int (1-18) identifies clip in sequence
                 - output_path: Path object to MP4 file
                 - duration: float (actual duration in seconds)
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Summary dict with keys:
@@ -117,9 +122,9 @@ class NotionVideoService:
             ...         {
             ...             "clip_number": 1,
             ...             "output_path": Path("/workspace/videos/clip_01.mp4"),
-            ...             "duration": 8.5
+            ...             "duration": 8.5,
             ...         }
-            ...     ]
+            ...     ],
             ... )
             >>> print(result)
             {"created": 1, "failed": 0, "storage_strategy": "r2"}
@@ -208,6 +213,7 @@ class NotionVideoService:
             video_path: Path to MP4 file
             duration: Actual duration in seconds (after trimming)
             storage_strategy: "notion" or "r2"
+            correlation_id: Optional correlation ID for request tracing
 
         Returns:
             Created page object from Notion API
@@ -220,23 +226,11 @@ class NotionVideoService:
         current_date = datetime.now(timezone.utc).isoformat()
 
         properties: dict[str, Any] = {
-            "Clip Number": {
-                "number": clip_number
-            },
-            "Duration": {
-                "number": duration
-            },
-            "Status": {
-                "select": {"name": "generated"}
-            },
-            "Generated Date": {
-                "date": {"start": current_date}
-            },
-            "Task": {
-                "relation": [
-                    {"id": notion_page_id}
-                ]
-            }
+            "Clip Number": {"number": clip_number},
+            "Duration": {"number": duration},
+            "Status": {"select": {"name": "generated"}},
+            "Generated Date": {"date": {"start": current_date}},
+            "Task": {"relation": [{"id": notion_page_id}]},
         }
 
         # Handle file storage based on strategy
@@ -263,14 +257,10 @@ class NotionVideoService:
         # Add File URL property (null if upload not implemented)
         # This property MUST exist in schema even if value is None
         if file_url:
-            properties["File URL"] = {
-                "url": file_url
-            }
+            properties["File URL"] = {"url": file_url}
         else:
             # Set to null explicitly - shows property exists but needs implementation
-            properties["File URL"] = {
-                "url": None
-            }
+            properties["File URL"] = {"url": None}
 
         # Create page in Videos database using NotionClient method (rate limited, auto-retry)
         try:

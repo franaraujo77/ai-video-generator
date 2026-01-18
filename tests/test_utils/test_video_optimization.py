@@ -47,7 +47,7 @@ def mock_subprocess_run():
         mock_run.return_value = MagicMock(
             returncode=0,
             stdout="0.000000",  # Optimized video
-            stderr=""
+            stderr="",
         )
         yield mock_run
 
@@ -120,7 +120,9 @@ class TestIsVideoOptimized:
             assert result is False
 
     @pytest.mark.asyncio
-    async def test_invalid_float_conversion_returns_false(self, mock_video_path, mock_subprocess_run):
+    async def test_invalid_float_conversion_returns_false(
+        self, mock_video_path, mock_subprocess_run
+    ):
         """[P2] should return False when start_time is not a valid float."""
         # GIVEN: ffprobe returns invalid output
         mock_subprocess_run.return_value.stdout = "N/A"
@@ -138,6 +140,7 @@ class TestOptimizeVideoForStreaming:
     @pytest.mark.asyncio
     async def test_optimize_video_success(self, mock_video_path):
         """[P1] should optimize video with faststart flag and replace original."""
+
         # GIVEN: Video is not optimized, ffmpeg succeeds
         def ffmpeg_side_effect(command, **kwargs):
             if command[0] == "ffprobe":
@@ -184,6 +187,7 @@ class TestOptimizeVideoForStreaming:
     @pytest.mark.asyncio
     async def test_force_optimization_even_if_optimized(self, mock_video_path):
         """[P2] should re-optimize video when force=True."""
+
         # GIVEN: Video is already optimized but force=True
         def ffmpeg_only_side_effect(command, **kwargs):
             # Create temp file to simulate ffmpeg output
@@ -207,7 +211,7 @@ class TestOptimizeVideoForStreaming:
         # GIVEN: Video is not optimized, ffmpeg fails
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = [
-                MagicMock(returncode=0, stdout="5.0", stderr=""),           # ffprobe: not optimized
+                MagicMock(returncode=0, stdout="5.0", stderr=""),  # ffprobe: not optimized
                 MagicMock(returncode=1, stdout="", stderr="ffmpeg error"),  # ffmpeg: failure
             ]
 
@@ -224,7 +228,7 @@ class TestOptimizeVideoForStreaming:
         # GIVEN: Video optimization fails mid-process
         with patch("subprocess.run") as mock_run:
             mock_run.side_effect = [
-                MagicMock(returncode=0, stdout="5.0", stderr=""),           # ffprobe: not optimized
+                MagicMock(returncode=0, stdout="5.0", stderr=""),  # ffprobe: not optimized
                 MagicMock(returncode=1, stdout="", stderr="ffmpeg error"),  # ffmpeg: failure
             ]
 
@@ -301,7 +305,9 @@ class TestGetVideoDuration:
         assert "format=duration" in args
 
     @pytest.mark.asyncio
-    async def test_get_duration_ffprobe_error_raises_exception(self, mock_video_path, mock_subprocess_run):
+    async def test_get_duration_ffprobe_error_raises_exception(
+        self, mock_video_path, mock_subprocess_run
+    ):
         """[P2] should raise CLIScriptError when ffprobe fails."""
         # GIVEN: ffprobe fails with non-zero exit code
         mock_subprocess_run.return_value.returncode = 1
@@ -330,11 +336,13 @@ class TestGetVideoDuration:
         # GIVEN: ffprobe times out after 10 seconds
         with patch("subprocess.run", side_effect=subprocess.TimeoutExpired("ffprobe", 10)):
             # WHEN/THEN: Getting duration raises exception
-            with pytest.raises(Exception):  # Could be TimeoutError or CLIScriptError depending on implementation
+            with pytest.raises((TimeoutError, CLIScriptError)):
                 await get_video_duration(mock_video_path)
 
     @pytest.mark.asyncio
-    async def test_get_duration_invalid_output_raises_exception(self, mock_video_path, mock_subprocess_run):
+    async def test_get_duration_invalid_output_raises_exception(
+        self, mock_video_path, mock_subprocess_run
+    ):
         """[P2] should raise ValueError when duration is not a valid float."""
         # GIVEN: ffprobe returns invalid output
         mock_subprocess_run.return_value.stdout = "N/A"

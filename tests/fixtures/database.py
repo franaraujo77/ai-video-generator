@@ -72,9 +72,9 @@ def mock_async_session(mocker):
 
     mock_session.begin = MagicMock(side_effect=begin_context)
     mock_begin.__aenter__ = AsyncMock(return_value=mock_begin)
-    mock_begin.__aexit__ = AsyncMock(side_effect=lambda *args: setattr(
-        mock_session, '_transaction_active', False
-    ))
+    mock_begin.__aexit__ = AsyncMock(
+        side_effect=lambda *args: setattr(mock_session, "_transaction_active", False)
+    )
 
     # Mock commit() and rollback()
     async def commit():
@@ -234,6 +234,7 @@ async def test_session_factory(async_test_engine):
 
 
 # Helper fixtures for common test data
+
 
 @pytest.fixture
 def sample_task_data():

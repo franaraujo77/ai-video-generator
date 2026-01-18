@@ -345,6 +345,7 @@ class TestTaskStatus26Values:
             TaskStatus.DRAFT,
             TaskStatus.QUEUED,
             TaskStatus.CLAIMED,
+            TaskStatus.CANCELLED,
             TaskStatus.GENERATING_ASSETS,
             TaskStatus.ASSETS_READY,
             TaskStatus.ASSETS_APPROVED,

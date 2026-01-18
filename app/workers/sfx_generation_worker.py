@@ -104,7 +104,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
             log.error("task_not_found", task_id=str(task_id))
             return
 
-        # Update task status to generating_sfx
+        # Update task status to generating_sfx (audio_approved → generating_sfx)
         task.status = TaskStatus.GENERATING_SFX
         await db.commit()
         log.info("task_claimed", task_id=str(task_id), status="generating_sfx")

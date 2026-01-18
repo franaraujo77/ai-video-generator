@@ -86,7 +86,7 @@ class WorkerState:
         Gemini/Kling/ElevenLabs limits are worker-local (transient API limits).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize worker state with rate limit and concurrency tracking."""
         from app.config import (
             get_max_concurrent_asset_gen,
@@ -124,14 +124,12 @@ class WorkerState:
         # Calculate next midnight PST (UTC-8 or UTC-7 depending on DST)
         # For simplicity, use UTC midnight as approximation (8 hours ahead of PST)
         tomorrow = datetime.now(timezone.utc).date() + timedelta(days=1)
-        self.gemini_quota_reset_time = datetime.combine(
-            tomorrow,
-            datetime.min.time()
-        ).replace(tzinfo=timezone.utc)
+        self.gemini_quota_reset_time = datetime.combine(tomorrow, datetime.min.time()).replace(
+            tzinfo=timezone.utc
+        )
 
         log.warning(
-            "gemini_quota_marked_exhausted",
-            reset_time=self.gemini_quota_reset_time.isoformat()
+            "gemini_quota_marked_exhausted", reset_time=self.gemini_quota_reset_time.isoformat()
         )
 
     def check_gemini_quota_available(self) -> bool:
@@ -148,7 +146,10 @@ class WorkerState:
             return True
 
         # Check if past reset time
-        if self.gemini_quota_reset_time and datetime.now(timezone.utc) >= self.gemini_quota_reset_time:
+        if (
+            self.gemini_quota_reset_time
+            and datetime.now(timezone.utc) >= self.gemini_quota_reset_time
+        ):
             self.gemini_quota_exhausted = False
             self.gemini_quota_reset_time = None
             log.info("gemini_quota_auto_reset")
@@ -173,7 +174,7 @@ class WorkerState:
         log.debug(
             "video_tasks_incremented",
             active_tasks=self.active_video_tasks,
-            max_concurrent=self.max_concurrent_video
+            max_concurrent=self.max_concurrent_video,
         )
 
     def decrement_video_tasks(self) -> None:
@@ -186,7 +187,7 @@ class WorkerState:
         log.debug(
             "video_tasks_decremented",
             active_tasks=self.active_video_tasks,
-            max_concurrent=self.max_concurrent_video
+            max_concurrent=self.max_concurrent_video,
         )
 
     def can_claim_asset_task(self) -> bool:
@@ -210,7 +211,7 @@ class WorkerState:
         log.debug(
             "asset_tasks_incremented",
             active_tasks=self.active_asset_tasks,
-            max_concurrent=self.max_concurrent_asset_gen
+            max_concurrent=self.max_concurrent_asset_gen,
         )
 
     def decrement_asset_tasks(self) -> None:
@@ -225,7 +226,7 @@ class WorkerState:
         log.debug(
             "asset_tasks_decremented",
             active_tasks=self.active_asset_tasks,
-            max_concurrent=self.max_concurrent_asset_gen
+            max_concurrent=self.max_concurrent_asset_gen,
         )
 
     def can_claim_audio_task(self) -> bool:
@@ -249,7 +250,7 @@ class WorkerState:
         log.debug(
             "audio_tasks_incremented",
             active_tasks=self.active_audio_tasks,
-            max_concurrent=self.max_concurrent_audio_gen
+            max_concurrent=self.max_concurrent_audio_gen,
         )
 
     def decrement_audio_tasks(self) -> None:
@@ -264,7 +265,7 @@ class WorkerState:
         log.debug(
             "audio_tasks_decremented",
             active_tasks=self.active_audio_tasks,
-            max_concurrent=self.max_concurrent_audio_gen
+            max_concurrent=self.max_concurrent_audio_gen,
         )
 
     def reload_config(self) -> None:
@@ -293,14 +294,16 @@ class WorkerState:
         self.max_concurrent_video = self.max_concurrent_video_gen
 
         # Log only if values changed
-        if (old_asset != self.max_concurrent_asset_gen or
-            old_video != self.max_concurrent_video_gen or
-            old_audio != self.max_concurrent_audio_gen):
+        if (
+            old_asset != self.max_concurrent_asset_gen
+            or old_video != self.max_concurrent_video_gen
+            or old_audio != self.max_concurrent_audio_gen
+        ):
             log.info(
                 "worker_config_reloaded",
                 asset_gen=self.max_concurrent_asset_gen,
                 video_gen=self.max_concurrent_video_gen,
-                audio_gen=self.max_concurrent_audio_gen
+                audio_gen=self.max_concurrent_audio_gen,
             )
 
 

@@ -15,14 +15,13 @@ Architecture:
 import hashlib
 import hmac
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from datetime import datetime, timezone
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
@@ -57,7 +56,7 @@ def _extract_clip_numbers(text: str) -> list[int]:
     import re
 
     # Find all numbers in the text
-    numbers = re.findall(r'\b(\d+)\b', text)
+    numbers = re.findall(r"\b(\d+)\b", text)
 
     # Convert to integers and filter to valid clip range (1-18)
     clip_numbers = []
@@ -197,7 +196,7 @@ async def _handle_approval_status_change(
         return
 
     try:
-        internal_status = TaskStatus(internal_status_str)
+        TaskStatus(internal_status_str)  # Validate status string
     except ValueError:
         log.error(
             "invalid_internal_status",
@@ -215,9 +214,7 @@ async def _handle_approval_status_change(
 
     async with async_session_factory() as session, session.begin():
         # Find task by notion_page_id
-        result = await session.execute(
-            select(Task).where(Task.notion_page_id == page_id)
-        )
+        result = await session.execute(select(Task).where(Task.notion_page_id == page_id))
         task = result.scalar_one_or_none()
 
         if not task:
@@ -239,9 +236,14 @@ async def _handle_approval_status_change(
         else:
             duration = None
 
-        # Re-queue task so pipeline can resume from next step (Story 5.3 Task 4.2)
-        # The pipeline orchestrator will check step completion metadata and skip
-        # completed steps, resuming from the next step after the approved gate
+        # Two-step transition: *_READY → *_APPROVED → QUEUED
+        # SQLAlchemy validators only check the immediate transition, so we can
+        # transition through the approval state to QUEUED in the same transaction
+        # First transition to approved state
+        # (ASSETS_APPROVED, VIDEO_APPROVED, AUDIO_APPROVED, or APPROVED)
+        internal_status = TaskStatus(internal_status_str)
+        task.status = internal_status
+        # Then immediately transition to queued (both changes committed together)
         task.status = TaskStatus.QUEUED
 
         log.info(
@@ -315,9 +317,7 @@ async def _handle_rejection_status_change(
 
     async with async_session_factory() as session, session.begin():
         # Find task by notion_page_id
-        result = await session.execute(
-            select(Task).where(Task.notion_page_id == page_id)
-        )
+        result = await session.execute(select(Task).where(Task.notion_page_id == page_id))
         task = result.scalar_one_or_none()
 
         if not task:
@@ -375,7 +375,9 @@ async def _handle_rejection_status_change(
             old_status=old_status.value,
             new_status=internal_status.value,
             review_duration_seconds=duration,
-            rejection_reason=rejection_reason[:200] if rejection_reason else None,  # Truncate for logging
+            rejection_reason=rejection_reason[:200]
+            if rejection_reason
+            else None,  # Truncate for logging
         )
 
 

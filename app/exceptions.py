@@ -4,6 +4,11 @@ This module contains exception classes used across multiple services
 to avoid cross-domain dependencies between services.
 """
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.models import TaskStatus
+
 
 class ConfigurationError(Exception):
     """Raised when required configuration is missing.

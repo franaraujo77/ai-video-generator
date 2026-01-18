@@ -123,6 +123,7 @@ async def test_bulk_approve_validation_failure_rollback(async_session):
 
     # Now query to verify no changes were persisted
     from sqlalchemy import select
+
     result = await async_session.execute(select(Task).where(Task.id.in_(task_ids)))
     refreshed_tasks = list(result.scalars().all())
 
@@ -170,9 +171,10 @@ async def test_bulk_approve_partial_notion_failure(async_session):
     mock_notion_client.update_task_status = AsyncMock(side_effect=mock_update)
 
     # Use patch context manager for proper mocking
-    with patch("app.services.review_service.get_notion_api_token", return_value="test-token"), \
-         patch("app.services.review_service.NotionClient", return_value=mock_notion_client):
-
+    with (
+        patch("app.services.review_service.get_notion_api_token", return_value="test-token"),
+        patch("app.services.review_service.NotionClient", return_value=mock_notion_client),
+    ):
         # Bulk approve
         review_service = ReviewService()
         task_ids = [task.id for task in tasks]
@@ -396,6 +398,7 @@ async def test_bulk_reject_validation_error(async_session):
 
     # Now query to verify no changes were persisted
     from sqlalchemy import select
+
     result = await async_session.execute(select(Task).where(Task.id.in_(task_ids)))
     refreshed_tasks = list(result.scalars().all())
 
@@ -461,9 +464,12 @@ async def test_bulk_approve_shared_notion_client(async_session):
     mock_notion_client = MagicMock()
     mock_notion_client.update_task_status = AsyncMock(return_value=None)
 
-    with patch("app.services.review_service.get_notion_api_token", return_value="test-token"), \
-         patch("app.services.review_service.NotionClient", return_value=mock_notion_client) as mock_client_constructor:
-
+    with (
+        patch("app.services.review_service.get_notion_api_token", return_value="test-token"),
+        patch(
+            "app.services.review_service.NotionClient", return_value=mock_notion_client
+        ) as mock_client_constructor,
+    ):
         review_service = ReviewService()
         result = await review_service.bulk_approve_tasks(
             db=async_session,

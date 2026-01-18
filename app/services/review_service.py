@@ -93,7 +93,7 @@ class ReviewService:
     - Logs all review decisions for audit trail
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize ReviewService with shared NotionClient for rate limiting."""
         self._notion_client: NotionClient | None = None
 
@@ -140,9 +140,7 @@ class ReviewService:
         Example:
             >>> async with async_session_factory() as db, db.begin():
             ...     result = await service.approve_videos(
-            ...         db=db,
-            ...         task_id=task_id,
-            ...         notion_page_id="abc123..."
+            ...         db=db, task_id=task_id, notion_page_id="abc123..."
             ...     )
             >>> print(result)
             {"status": "approved", "previous_status": "video_ready", "new_status": "video_approved"}
@@ -246,10 +244,11 @@ class ReviewService:
             ...         db=db,
             ...         task_id=task_id,
             ...         reason="Low video quality, regenerate with better prompts",
-            ...         notion_page_id="abc123..."
+            ...         notion_page_id="abc123...",
             ...     )
             >>> print(result)
-            {"status": "rejected", "previous_status": "video_ready", "new_status": "video_error", "reason": "..."}
+            {"status": "rejected", "previous_status": "video_ready",
+             "new_status": "video_error", "reason": "..."}
         """
         if not reason or not reason.strip():
             raise ValueError("Rejection reason is required")
@@ -355,9 +354,7 @@ class ReviewService:
         Example:
             >>> async with async_session_factory() as db, db.begin():
             ...     result = await service.approve_audio(
-            ...         db=db,
-            ...         task_id=task_id,
-            ...         notion_page_id="abc123..."
+            ...         db=db, task_id=task_id, notion_page_id="abc123..."
             ...     )
             >>> print(result)
             {"status": "approved", "previous_status": "audio_ready", "new_status": "audio_approved"}
@@ -467,10 +464,12 @@ class ReviewService:
             ...         task_id=task_id,
             ...         reason="Audio quality issues on clips 3, 7, 12",
             ...         failed_clip_numbers=[3, 7, 12],
-            ...         notion_page_id="abc123..."
+            ...         notion_page_id="abc123...",
             ...     )
             >>> print(result)
-            {"status": "rejected", "previous_status": "audio_ready", "new_status": "audio_error", "reason": "...", "failed_clip_numbers": [3, 7, 12]}
+            {"status": "rejected", "previous_status": "audio_ready",
+             "new_status": "audio_error", "reason": "...",
+             "failed_clip_numbers": [3, 7, 12]}
 
         Story: 5.5 - Audio Review Interface (Task 5: Rejection Flow with Partial Regeneration)
         """
@@ -507,7 +506,9 @@ class ReviewService:
             # Append rejection reason to error log (preserves history)
             rejection_message = f"Audio rejected: {reason}"
             if failed_clip_numbers:
-                rejection_message += f" (clips {', '.join(map(str, failed_clip_numbers))} need regeneration)"
+                rejection_message += (
+                    f" (clips {', '.join(map(str, failed_clip_numbers))} need regeneration)"
+                )
 
             if task.error_log:
                 task.error_log += f"\n\n{rejection_message}"
@@ -586,7 +587,8 @@ class ReviewService:
             BulkOperationResult with success/failure counts and error details
 
         Raises:
-            InvalidStateTransitionError: If ANY task has invalid transition (rolls back entire operation)
+            InvalidStateTransitionError: If ANY task has invalid transition
+                (rolls back entire operation)
             ValueError: If more than 100 tasks or channel_id mismatch
 
         Transaction Pattern:
@@ -604,9 +606,12 @@ class ReviewService:
             ...     db=db,
             ...     task_ids=task_ids,
             ...     target_status=TaskStatus.VIDEO_APPROVED,
-            ...     channel_id="test-channel"
+            ...     channel_id="test-channel",
             ... )
-            >>> print(f"Updated {result.success_count} tasks, {result.notion_failure_count} Notion failures")
+            >>> print(
+            ...     f"Updated {result.success_count} tasks, "
+            ...     f"{result.notion_failure_count} Notion failures"
+            ... )
         """
         total_count = len(task_ids)
 
@@ -631,9 +636,10 @@ class ReviewService:
 
         # Step 1: Fetch all tasks in single query
         # Use populate_existing to ensure all attributes are loaded (avoid lazy loads in validator)
+        # Filter by channel_id to enforce multi-tenant isolation (security requirement)
         result = await db.execute(
             select(Task)
-            .where(Task.id.in_(task_ids))
+            .where(Task.id.in_(task_ids), Task.channel_id == channel_id)
             .execution_options(populate_existing=True)
         )
         tasks = list(result.scalars().all())
@@ -755,7 +761,8 @@ class ReviewService:
             BulkOperationResult with success/failure counts and error details
 
         Raises:
-            InvalidStateTransitionError: If ANY task has invalid transition (rolls back entire operation)
+            InvalidStateTransitionError: If ANY task has invalid transition
+                (rolls back entire operation)
             ValueError: If reason is empty or more than 100 tasks
 
         Transaction Pattern:
@@ -768,7 +775,7 @@ class ReviewService:
             ...     task_ids=task_ids,
             ...     reason="Poor video quality in clips 5, 12",
             ...     target_status=TaskStatus.VIDEO_ERROR,
-            ...     channel_id="test-channel"
+            ...     channel_id="test-channel",
             ... )
         """
         if not reason or not reason.strip():
@@ -798,11 +805,7 @@ class ReviewService:
 
         # Step 1: Fetch all tasks in single query (filtered by channel_id for security)
         result = await db.execute(
-            select(Task)
-            .where(
-                Task.id.in_(task_ids),
-                Task.channel_id == channel_id
-            )
+            select(Task).where(Task.id.in_(task_ids), Task.channel_id == channel_id)
         )
         tasks = list(result.scalars().all())
 
@@ -967,7 +970,7 @@ class ReviewService:
         except Exception as e:
             # Log error but don't fail the review operation
             # Notion sync is best-effort, not critical
-            error_msg = f"Notion API error: {str(e)}"
+            error_msg = f"Notion API error: {e!s}"
             log.error(
                 "notion_status_update_failed",
                 correlation_id=correlation_id,

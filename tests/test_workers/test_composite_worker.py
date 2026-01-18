@@ -77,7 +77,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest documentary",
             story_direction="Show evolution through seasons",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -139,7 +139,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -192,7 +192,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -243,7 +243,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -291,7 +291,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -344,7 +344,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
@@ -406,7 +406,7 @@ class TestProcessCompositeCreationTask:
             title="Test Video",
             topic="Bulbasaur forest",
             story_direction="Nature documentary",
-            status=TaskStatus.QUEUED,
+            status=TaskStatus.ASSETS_APPROVED,
         )
         async_session.add(task)
         await async_session.commit()
