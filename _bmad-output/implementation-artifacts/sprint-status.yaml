@@ -104,8 +104,8 @@ development_status:
   6-5-detailed-error-logging: done  # All 8 tasks complete, 15+ passing tests, Railway documentation created
   6-6-alert-system-for-terminal-failures: done  # All 8 tasks complete, 41 passing tests, Discord webhook alerting integrated
   6-7-manual-retry-trigger: done  # Code review complete - All 8 tasks ✅, 18 passing tests, webhook integration ✅, enqueue fix ✅
-  6-8-api-quota-monitoring: backlog
-  6-9-retry-state-visibility: backlog
+  6-8-api-quota-monitoring: review  # Core quota tracking complete - 15 passing tests, alert integration ✅, service integration deferred
+  6-9-retry-state-visibility: done
   6-10-auto-recovery-success-rate-tracking: backlog
   epic-6-retrospective: optional
 
