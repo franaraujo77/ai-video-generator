@@ -381,6 +381,86 @@ async def _handle_rejection_status_change(
         )
 
 
+async def _handle_manual_retry_detection(
+    page_id: str,
+    current_notion_status: str,
+    correlation_id: str,
+) -> None:
+    """Detect and handle manual retry transitions from Notion (Story 6.7).
+
+    When user manually changes status in Notion from an error status to a
+    retry-triggering status (QUEUED or approval status), this function:
+    1. Finds the task by notion_page_id
+    2. Gets the old status from database
+    3. Checks if old_status → new_status is a manual retry transition
+    4. If yes, calls handle_manual_retry() to reset retry metadata and re-enqueue
+
+    Args:
+        page_id: Notion page ID
+        current_notion_status: Current status from Notion webhook
+        correlation_id: Correlation ID for logging
+
+    Story 6.7 Task 3: Integrate with Notion sync service
+    """
+    from app.services.notion_sync import is_manual_retry_transition, handle_manual_retry
+    from app.constants import NOTION_TO_INTERNAL_STATUS
+
+    # Map Notion status to internal TaskStatus
+    internal_status_str = NOTION_TO_INTERNAL_STATUS.get(current_notion_status)
+    if not internal_status_str:
+        # Unknown status, skip manual retry check
+        return
+
+    try:
+        new_status = TaskStatus(internal_status_str)
+    except ValueError:
+        log.error(
+            "manual_retry_invalid_status",
+            correlation_id=correlation_id,
+            internal_status_str=internal_status_str,
+        )
+        return
+
+    if async_session_factory is None:
+        log.error(
+            "manual_retry_database_not_configured",
+            correlation_id=correlation_id,
+        )
+        return
+
+    async with async_session_factory() as session, session.begin():
+        # Find task by notion_page_id to get old status
+        result = await session.execute(
+            select(Task).where(Task.notion_page_id == page_id)
+        )
+        task = result.scalar_one_or_none()
+
+        if not task:
+            # Task doesn't exist yet (new page creation), not a manual retry
+            return
+
+        old_status = task.status
+
+        # Check if this is a manual retry transition
+        if is_manual_retry_transition(old_status, new_status):
+            log.info(
+                "manual_retry_detected",
+                correlation_id=correlation_id,
+                task_id=str(task.id),
+                page_id=page_id,
+                old_status=old_status.value,
+                new_status=new_status.value,
+            )
+
+            # Handle manual retry
+            await handle_manual_retry(
+                task=task,
+                old_status=old_status,
+                new_status=new_status,
+                session=session,
+            )
+
+
 async def process_notion_webhook_event(payload: NotionWebhookPayload) -> None:
     """Process Notion webhook event in background.
 
@@ -515,6 +595,14 @@ async def process_notion_webhook_event(payload: NotionWebhookPayload) -> None:
             page=page,
         )
         return
+
+    # Handle manual retry transitions - Story 6.7: Manual Retry Trigger
+    # Check if this is a manual retry transition (error → retry status)
+    await _handle_manual_retry_detection(
+        page_id=payload.page_id,
+        current_notion_status=status,
+        correlation_id=correlation_id,
+    )
 
     # Status not relevant to task lifecycle
     log.info(

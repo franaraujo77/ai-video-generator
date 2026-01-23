@@ -23,7 +23,6 @@ from datetime import date, datetime, timezone
 from typing import Any, ClassVar
 
 from sqlalchemy import (
-    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -37,7 +36,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, JSON, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.exceptions import InvalidStateTransitionError
@@ -552,6 +551,63 @@ class Task(Base):
     error_log: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
+    )
+
+    # Retry tracking (Story 6.2 - Exponential Backoff Retry Logic)
+    # Number of retry attempts made for this task (0 = no retries yet)
+    # Max retries is 5 (enforced in retry_orchestrator.py)
+    retry_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Next retry timestamp (UTC timezone-aware)
+    # Set when task fails with transient error and should be retried
+    # Workers poll for tasks where next_retry_at <= now()
+    # Cleared when task is claimed for retry
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,  # Index for efficient retry polling
+    )
+
+    # Manual retry flag (Story 6.7 Task 6 - Manual Retry Monitoring)
+    # True if this task was triggered by manual retry (user changed status in Notion)
+    # False for automatic retries (triggered by exponential backoff)
+    # Used for analytics to distinguish manual vs automatic retry patterns
+    is_manual_retry: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    # Checkpoint tracking (Story 6.3 - Resume from Failure Point)
+    # List of completed pipeline step checkpoints for resume on retry
+    # Each checkpoint: {"step_name": str, "completed_at": ISO datetime, "outputs": dict}
+    # Example: [{"step_name": "asset_generation", "completed_at": "2026-01-18T10:30:00Z",
+    #            "outputs": {"total_assets": 22, "assets_generated": 22}}]
+    # Stored as JSONB in PostgreSQL (JSON in SQLite for tests) with GIN indexing
+    completed_steps: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=list,
+        server_default="[]",
+    )
+
+    # Step-level progress metadata (Story 6.3 - Resume from Failure Point)
+    # Fine-grained progress tracking within current step (e.g., video clip indices)
+    # Example: {"completed_video_clips": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    #           "completed_assets": ["character_1", "environment_1", ...]}
+    # Cleared when step is re-run from beginning (old sub-step data invalid)
+    # Stored as JSONB in PostgreSQL (JSON in SQLite for tests) for flexible schema
+    step_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSON,
+        nullable=False,
+        default=dict,
+        server_default="{}",
     )
 
     # YouTube output
