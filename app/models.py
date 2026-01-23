@@ -343,6 +343,23 @@ class Channel(Base):
         server_default="2",
     )
 
+    # Quota exhaustion flags (Story 6.8 - FR34, NFR-I4)
+    # Set to True when daily quota hits 100%, automatically reset at midnight UTC
+    youtube_quota_exhausted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        index=True,  # Index for worker quota checks (WHERE NOT youtube_quota_exhausted)
+    )
+    gemini_quota_exhausted: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        index=True,  # Index for worker quota checks (WHERE NOT gemini_quota_exhausted)
+    )
+
     # Relationship to tasks (one-to-many)
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="channel")
 
@@ -958,5 +975,105 @@ class YouTubeQuotaUsage(Base):
         return (
             f"<YouTubeQuotaUsage(channel_id={self.channel_id!s:.8}, "
             f"date={self.date!s}, usage={self.units_used}/{self.daily_limit} "
+            f"({percentage:.1f}%))>"
+        )
+
+
+class GeminiQuotaUsage(Base):
+    """Gemini API quota tracking per channel per day.
+
+    Tracks Gemini API (image generation) quota consumption to prevent service
+    disruption. Gemini uses request-based quotas with daily limits.
+
+    Composite Primary Key:
+        (channel_id, date) - One row per channel per day for quota isolation.
+
+    Quota Limits:
+        - Default: 1,500 requests per day (Gemini Free Tier)
+        - Can be customized per channel via daily_limit field
+
+    Quota Reset:
+        Gemini quotas reset at midnight Pacific Time (PST/PDT) daily.
+
+    Alert Thresholds:
+        - 80% usage: WARNING alert to Discord webhook
+        - 100% usage: CRITICAL alert, asset generation tasks paused
+
+    Attributes:
+        channel_id: Foreign key to channels.id (part of composite PK).
+        date: Date of quota tracking (part of composite PK).
+        requests_used: Accumulated API requests made today (default: 0).
+        daily_limit: Daily request limit (default: 1,500).
+
+    Indexes:
+        - Composite PK on (channel_id, date) for fast lookups
+        - Index on date for cleanup queries (delete rows older than 7 days)
+
+    Constraints:
+        - requests_used >= 0 (no negative usage)
+        - daily_limit > 0 (positive limit required)
+
+    Usage:
+        # Check quota before asset generation
+        quota = await db.get(GeminiQuotaUsage, (channel_id, date.today()))
+        if quota and (quota.requests_used + 1) > quota.daily_limit:
+            # Quota exhausted - skip asset generation task
+            ...
+
+    Related:
+        - Story 6.8: API Quota Monitoring (FR34)
+        - NFR-I4: Gemini quota exhaustion recovery
+    """
+
+    __tablename__ = "gemini_quota_usage"
+
+    # Composite primary key: (channel_id, date)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+
+    date: Mapped[date] = mapped_column(
+        Date,
+        primary_key=True,
+        nullable=False,
+    )
+
+    # Quota tracking
+    requests_used: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    daily_limit: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1500,  # Gemini Free Tier default
+        server_default="1500",
+    )
+
+    # Relationship to channel
+    channel: Mapped["Channel"] = relationship("Channel")
+
+    __table_args__ = (
+        # Composite primary key constraint (explicit name)
+        PrimaryKeyConstraint("channel_id", "date", name="pk_gemini_quota"),
+        # Index for cleanup queries (delete WHERE date < CURRENT_DATE - 7)
+        Index("ix_gemini_quota_date", "date"),
+        # Check constraints for data integrity
+        CheckConstraint("requests_used >= 0", name="ck_gemini_quota_non_negative"),
+        CheckConstraint("daily_limit > 0", name="ck_gemini_quota_limit_positive"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        percentage = (self.requests_used / self.daily_limit * 100) if self.daily_limit > 0 else 0
+        return (
+            f"<GeminiQuotaUsage(channel_id={self.channel_id!s:.8}, "
+            f"date={self.date!s}, usage={self.requests_used}/{self.daily_limit} "
             f"({percentage:.1f}%))>"
         )

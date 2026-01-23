@@ -67,24 +67,38 @@ async def async_engine():
 
 
 @pytest_asyncio.fixture
-async def async_session(async_engine):
+async def async_session_factory(async_engine):
+    """Create an async session factory for testing.
+
+    Provides a session factory that can create multiple independent sessions
+    for testing concurrent operations.
+
+    Args:
+        async_engine: Test database engine fixture.
+
+    Yields:
+        async_sessionmaker: Session factory for creating test sessions.
+    """
+    return async_sessionmaker(
+        bind=async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+
+@pytest_asyncio.fixture
+async def async_session(async_session_factory):
     """Create an async session for testing.
 
     Provides a session bound to the test engine with expire_on_commit=False
     to match production configuration.
 
     Args:
-        async_engine: Test database engine fixture.
+        async_session_factory: Session factory fixture.
 
     Yields:
         AsyncSession: Database session for test operations.
     """
-    async_session_factory = async_sessionmaker(
-        bind=async_engine,
-        class_=AsyncSession,
-        expire_on_commit=False,
-    )
-
     async with async_session_factory() as session:
         yield session
 
