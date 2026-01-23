@@ -1,5 +1,10 @@
 """Video Generation Service for Kling-powered video animation.
 
+Environment Variables:
+    KLING_COST_PER_CLIP_USD: Cost per 10-second clip in USD (default: "0.42")
+        Source: Kling pricing as of 2026-01-15 (~$7.56 per 18-clip video)
+        Update this when Kling pricing changes
+
 This module implements the third stage of the 8-step video generation pipeline.
 It orchestrates the animation of 18 photorealistic composite images into
 10-second video clips via Kling 2.5 Pro API (via KIE.ai), following the
@@ -37,6 +42,7 @@ Usage:
 """
 
 import asyncio
+import os
 import re
 from dataclasses import dataclass
 from decimal import Decimal
@@ -46,7 +52,7 @@ from typing import Any
 import httpx
 from tenacity import (
     retry,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -57,6 +63,27 @@ from app.utils.filesystem import get_composite_dir, get_video_dir
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def _is_retriable_http_error(exception: BaseException) -> bool:
+    """Check if HTTP error is retriable (AC7: 401/403 Unauthorized/Forbidden is NOT retriable).
+
+    Args:
+        exception: Exception to check
+
+    Returns:
+        True if error should be retried, False otherwise
+
+    Non-retriable HTTP errors:
+        - 401 Unauthorized (invalid API key, retrying won't help)
+        - 403 Forbidden (permission denied, retrying won't help)
+    """
+    if isinstance(exception, httpx.HTTPStatusError):
+        # AC7: Do NOT retry 401 (invalid API key) or 403 (forbidden)
+        if exception.response.status_code in (401, 403):
+            return False
+    # Retry all other HTTP errors and timeouts
+    return isinstance(exception, (httpx.HTTPError, asyncio.TimeoutError))
 
 
 def _validate_identifier(value: str, name: str) -> None:
@@ -285,13 +312,16 @@ class VideoGenerationService:
         return motion_prompts[prompt_index]
 
     async def generate_videos(
-        self, manifest: VideoManifest, resume: bool = False, max_concurrent: int = 5
+        self,
+        manifest: VideoManifest,
+        resume: bool = False,
+        max_concurrent: int = 5,
     ) -> dict[str, Any]:
         """Generate all video clips in manifest by invoking CLI script.
 
         Orchestration Flow:
         1. For each clip in manifest:
-           a. Check if video exists (if resume=True, skip existing)
+           a. Check if video exists on filesystem (if resume=True, skip regeneration)
            b. Upload composite to catbox.moe (get public URL)
            c. Call `scripts/generate_video.py`:
               - Pass catbox URL, motion prompt, output path
@@ -304,7 +334,7 @@ class VideoGenerationService:
 
         Args:
             manifest: VideoManifest with 18 clip definitions
-            resume: If True, skip clips that already exist on filesystem
+            resume: If True, skip existing videos on filesystem (default False)
             max_concurrent: Maximum concurrent Kling API requests (default 5)
 
         Returns:
@@ -319,9 +349,9 @@ class VideoGenerationService:
             partial resume. Check 'failed' count in return dict to detect errors.
 
         Example:
-            >>> result = await service.generate_videos(manifest, resume=False, max_concurrent=5)
+            >>> result = await service.generate_videos(manifest, resume=True)
             >>> print(result)
-            {"generated": 18, "skipped": 0, "failed": 0, "total_cost_usd": Decimal("7.56")}
+            {"generated": 8, "skipped": 10, "failed": 0, "total_cost_usd": Decimal("3.36")}
         """
         generated = 0
         skipped = 0
@@ -335,10 +365,10 @@ class VideoGenerationService:
             nonlocal generated, skipped, failed
 
             async with semaphore:
-                # Check if video already exists (resume support)
+                # Check if video already exists (filesystem-based resume)
                 if resume and self.check_video_exists(clip.output_path):
                     self.log.info(
-                        "video_clip_skipped",
+                        "video_clip_skipped_filesystem_check",
                         clip_number=clip.clip_number,
                         output_path=str(clip.output_path),
                     )
@@ -403,7 +433,7 @@ class VideoGenerationService:
         }
 
     @retry(
-        retry=retry_if_exception_type((httpx.HTTPError, asyncio.TimeoutError)),
+        retry=retry_if_exception(_is_retriable_http_error),
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=1, max=10),
         reraise=True,
@@ -414,9 +444,10 @@ class VideoGenerationService:
         catbox.moe is a free image hosting service that provides public URLs.
         Kling API requires publicly accessible image URLs as seed images.
 
-        Retry Strategy:
-            - Retriable errors: httpx.HTTPError, asyncio.TimeoutError
-            - Max attempts: 3
+        Retry Strategy (AC7):
+            - Retriable errors: httpx.HTTPError (except 401/403), asyncio.TimeoutError
+            - Non-retriable errors: 401 Unauthorized, 403 Forbidden, FileNotFoundError
+            - Max attempts: 3 (for retriable errors only)
             - Backoff: 1s, 2s, 4s (exponential)
 
         Args:
@@ -426,7 +457,8 @@ class VideoGenerationService:
             Public catbox.moe URL (e.g., "https://files.catbox.moe/abc123.png")
 
         Raises:
-            httpx.HTTPError: If catbox.moe upload fails after 3 attempts
+            httpx.HTTPError: If catbox.moe upload fails after 3 attempts (retriable errors)
+            httpx.HTTPStatusError: If 401/403 error (non-retriable, raised immediately)
             FileNotFoundError: If composite file doesn't exist (non-retriable)
 
         Example:
@@ -438,7 +470,18 @@ class VideoGenerationService:
         if self._catbox_client is None:
             self._catbox_client = CatboxClient()
 
-        return await self._catbox_client.upload_image(composite_path)
+        try:
+            return await self._catbox_client.upload_image(composite_path)
+        except httpx.HTTPStatusError as e:
+            # AC7: Log 401/403 as non-retriable before re-raising
+            if e.response.status_code in (401, 403):
+                self.log.error(
+                    "catbox_upload_auth_error_non_retriable",
+                    status_code=e.response.status_code,
+                    composite_path=str(composite_path),
+                    error=str(e),
+                )
+            raise
 
     def check_video_exists(self, video_path: Path) -> bool:
         """Check if video file exists on filesystem with size validation.
@@ -477,6 +520,7 @@ class VideoGenerationService:
         Kling Pricing Model (as of 2026-01-15):
         - Approximately $5-10 per complete video (18 clips)
         - ~$0.42 per 10-second clip ($7.56 / 18 clips)
+        - Configurable via KLING_COST_PER_CLIP_USD environment variable
 
         Args:
             clip_count: Number of clips generated
@@ -484,12 +528,16 @@ class VideoGenerationService:
         Returns:
             Total cost in USD (Decimal type for precision)
 
+        Environment Variables:
+            KLING_COST_PER_CLIP_USD: Cost per clip (default "0.42")
+
         Example:
             >>> cost = service.calculate_kling_cost(18)
             >>> print(cost)
             Decimal('7.56')
         """
-        cost_per_clip = Decimal("0.42")
+        cost_per_clip_str = os.getenv("KLING_COST_PER_CLIP_USD", "0.42")
+        cost_per_clip = Decimal(cost_per_clip_str)
         return cost_per_clip * clip_count
 
     async def cleanup(self) -> None:
