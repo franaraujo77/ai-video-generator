@@ -440,6 +440,157 @@ Create these saved queries in your Railway dashboard:
    error_category="quota_exceeded" AND timestamp>="now-7d"
    ```
 
+## Alert Delivery Monitoring (Story 6.6)
+
+Track Discord webhook alert delivery and troubleshoot alerting issues.
+
+### All Alert Deliveries
+
+View all alerts sent to Discord:
+
+```bash
+event="alert_sent"
+```
+
+**Sample output:**
+```json
+{
+  "event": "alert_sent",
+  "alert_type": "terminal_failure",
+  "severity": "CRITICAL",
+  "title": "Task Failed Permanently: poke1 - video_error",
+  "correlation_id": "abc-123",
+  "webhook_response_status": 200
+}
+```
+
+### Failed Alert Deliveries
+
+Find alerts that failed to send:
+
+```bash
+event="alert_failed" OR event="alert_system_error"
+```
+
+**Sample output:**
+```json
+{
+  "event": "alert_failed",
+  "alert_type": "terminal_failure",
+  "severity": "CRITICAL",
+  "error": "HTTPStatusError: 400 Bad Request",
+  "correlation_id": "abc-123"
+}
+```
+
+### Suppressed Alerts (Batching)
+
+View alerts that were suppressed due to batching rules:
+
+```bash
+event="alert_suppressed"
+```
+
+**Sample output:**
+```json
+{
+  "event": "alert_suppressed",
+  "alert_type": "terminal_failure",
+  "channel_id": "poke1",
+  "elapsed_seconds": 45,
+  "batch_window_seconds": 60
+}
+```
+
+### Alert Type Filtering
+
+Filter by alert type:
+
+```bash
+# Terminal failure alerts
+alert_type="terminal_failure"
+
+# Quota warning alerts
+alert_type="quota_warning"
+
+# Quota exhausted alerts
+alert_type="quota_exhausted"
+```
+
+### Quota Alert Monitoring
+
+Track YouTube quota threshold alerts:
+
+```bash
+# All quota alerts
+alert_type="quota_warning" OR alert_type="quota_exhausted"
+
+# Quota exhaustion only (100%)
+alert_type="quota_exhausted" AND severity="CRITICAL"
+
+# Quota warnings only (80%)
+alert_type="quota_warning" AND severity="WARNING"
+```
+
+### Alert Webhook Issues
+
+Troubleshoot webhook delivery problems:
+
+```bash
+# Webhook not configured
+message="*DISCORD_WEBHOOK_URL not set*"
+
+# Webhook timeouts
+event="discord_webhook_timeout"
+
+# Webhook HTTP errors
+event="discord_webhook_http_error"
+```
+
+**Sample troubleshooting query:**
+```bash
+event="alert_*" AND level="ERROR"
+```
+
+This catches all alert system errors including:
+- `alert_failed` (HTTP errors)
+- `alert_system_error` (unexpected errors)
+- `discord_webhook_timeout`
+- `discord_webhook_http_error`
+
+### Complete Alert Trace
+
+Track an alert from terminal failure through delivery:
+
+```bash
+correlation_id="abc-123" AND (event="task_terminal_failure" OR event="alert_sent" OR event="alert_failed")
+```
+
+Shows:
+1. Terminal failure logged → `task_terminal_failure`
+2. Alert sent attempt → `alert_sent` (success) OR `alert_failed` (failure)
+
+### Alert Field Reference
+
+**`alert_sent` event:**
+- `alert_type`: Type of alert (terminal_failure, quota_warning, quota_exhausted)
+- `severity`: Alert severity (CRITICAL, WARNING, INFO)
+- `title`: Alert title shown in Discord
+- `correlation_id`: Task correlation ID
+- `webhook_response_status`: HTTP status code from Discord (200 = success)
+
+**`alert_failed` event:**
+- `alert_type`: Type of alert that failed
+- `severity`: Alert severity
+- `error`: Error message/exception
+- `correlation_id`: Task correlation ID
+
+**`alert_suppressed` event:**
+- `alert_type`: Type of alert suppressed
+- `channel_id`: Channel identifier
+- `elapsed_seconds`: Time since last alert of this type
+- `batch_window_seconds`: Batching window duration (default: 60)
+
 ---
 
 **Related Documentation:**
@@ -448,3 +599,4 @@ Create these saved queries in your Railway dashboard:
 - Story 6.3: Checkpoint-Based Resume
 - Story 6.4: Granular Error Status Updates
 - Story 6.5: Detailed Error Logging (this guide)
+- Story 6.6: Alert System for Terminal Failures

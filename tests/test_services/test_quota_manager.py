@@ -159,7 +159,7 @@ class TestRecordYouTubeQuota:
 
     async def test_create_new_quota_record(self, async_session: AsyncSession, channel: Channel):
         """Scenario 6: First operation creates new quota record."""
-        with patch("app.services.quota_manager.send_alert") as mock_alert:
+        with patch("app.services.quota_manager.send_quota_alert") as mock_alert:
             await record_youtube_quota(channel.id, "upload", async_session)
 
         # Verify quota record created
@@ -187,7 +187,7 @@ class TestRecordYouTubeQuota:
         async_session.add(quota)
         await async_session.commit()
 
-        with patch("app.services.quota_manager.send_alert") as mock_alert:
+        with patch("app.services.quota_manager.send_quota_alert") as mock_alert:
             await record_youtube_quota(channel.id, "upload", async_session)
 
         # Verify quota incremented
@@ -209,7 +209,7 @@ class TestRecordYouTubeQuota:
         async_session.add(quota)
         await async_session.commit()
 
-        with patch("app.services.quota_manager.send_alert") as mock_alert:
+        with patch("app.services.quota_manager.send_quota_alert") as mock_alert:
             # Upload costs 1600 → 7000 + 1600 = 8600 (86%)
             await record_youtube_quota(channel.id, "upload", async_session)
 
@@ -219,9 +219,11 @@ class TestRecordYouTubeQuota:
 
         # Verify WARNING alert sent
         mock_alert.assert_called_once()
-        call_args = mock_alert.call_args[1]
-        assert call_args["level"] == "WARNING"
-        assert "86%" in call_args["message"] or "86.0%" in call_args["message"]
+        call_args = mock_alert.call_args.kwargs
+        assert str(channel.id) == call_args["channel_id"]
+        assert call_args["current_usage"] == 8600
+        assert call_args["daily_limit"] == 10000
+        assert call_args["is_exhausted"] is False
 
     async def test_critical_alert_at_100_percent(
         self, async_session: AsyncSession, channel: Channel
@@ -237,7 +239,7 @@ class TestRecordYouTubeQuota:
         async_session.add(quota)
         await async_session.commit()
 
-        with patch("app.services.quota_manager.send_alert") as mock_alert:
+        with patch("app.services.quota_manager.send_quota_alert") as mock_alert:
             # Upload costs 1600 → 9000 + 1600 = 10600 (106% - over limit!)
             await record_youtube_quota(channel.id, "upload", async_session)
 
@@ -247,9 +249,11 @@ class TestRecordYouTubeQuota:
 
         # Verify CRITICAL alert sent
         mock_alert.assert_called_once()
-        call_args = mock_alert.call_args[1]
-        assert call_args["level"] == "CRITICAL"
-        assert "exhausted" in call_args["message"].lower()
+        call_args = mock_alert.call_args.kwargs
+        assert str(channel.id) == call_args["channel_id"]
+        assert call_args["current_usage"] == 10600
+        assert call_args["daily_limit"] == 10000
+        assert call_args["is_exhausted"] is True
 
     async def test_invalid_operation_raises_error(
         self, async_session: AsyncSession, channel: Channel
@@ -260,7 +264,7 @@ class TestRecordYouTubeQuota:
 
     async def test_operation_costs(self, async_session: AsyncSession, channel: Channel):
         """Scenario 11: Different operations have different costs."""
-        with patch("app.services.quota_manager.send_alert"):
+        with patch("app.services.quota_manager.send_quota_alert"):
             # Upload: 1600 units
             await record_youtube_quota(channel.id, "upload", async_session)
 
