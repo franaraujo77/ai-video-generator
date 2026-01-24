@@ -482,10 +482,13 @@ class TestPartialResumeLogging:
             assert result["skipped"] == 10
 
             # Verify skipped log messages (one per skipped clip)
+            # Epic 6.3 changed event names to be more specific
             skipped_logs = [
                 call
                 for call in mock_log.call_args_list
-                if call[1].get("clip_number") is not None and call[0][0] == "sfx_clip_skipped"
+                if call[1].get("clip_number") is not None
+                and call[0][0]
+                in ("sfx_clip_skipped_from_checkpoint", "sfx_clip_skipped_filesystem_check")
             ]
             assert len(skipped_logs) == 10
 

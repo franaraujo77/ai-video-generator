@@ -449,6 +449,10 @@ async def test_push_task_to_notion_api_error_raised():
     task.status = TaskStatus.QUEUED
     task.priority = PriorityLevel.NORMAL
     task.title = "Test Video"
+    # Story 6.9: Add retry-related attributes
+    task.retry_count = 0
+    task.next_retry_at = None
+    task.max_retry_attempts = 5
 
     # Mock NotionClient to raise NotionAPIError
     mock_client = AsyncMock(spec=NotionClient)
@@ -1304,6 +1308,9 @@ async def test_rejection_transition_moves_to_error_and_allows_retry(async_sessio
         story_direction="Test Story",
         status=TaskStatus.VIDEO_READY,
         error_log="",
+        retry_count=0,
+        next_retry_at=None,
+        max_retry_attempts=5,
     )
     task.review_started_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     async_session.add(task)
@@ -1372,6 +1379,10 @@ async def test_push_task_to_notion_includes_updated_at():
     task.status = TaskStatus.QUEUED
     task.priority = PriorityLevel.NORMAL
     task.updated_at = datetime(2026, 1, 17, 14, 30, 0, tzinfo=timezone.utc)
+    # Story 6.9: Add retry-related attributes
+    task.retry_count = 0
+    task.next_retry_at = None
+    task.max_retry_attempts = 5
 
     # Mock Notion client
     mock_client = AsyncMock(spec=NotionClient)
@@ -1406,6 +1417,10 @@ async def test_push_task_to_notion_formats_updated_at_as_iso8601():
     task.status = TaskStatus.GENERATING_ASSETS  # Use valid status
     task.priority = PriorityLevel.HIGH
     task.updated_at = datetime(2026, 1, 17, 9, 15, 30, tzinfo=timezone.utc)
+    # Story 6.9: Add retry-related attributes
+    task.retry_count = 0
+    task.next_retry_at = None
+    task.max_retry_attempts = 5
 
     # Mock Notion client
     mock_client = AsyncMock(spec=NotionClient)
@@ -1435,6 +1450,10 @@ async def test_push_task_to_notion_handles_none_updated_at():
     task.status = TaskStatus.DRAFT
     task.priority = PriorityLevel.LOW
     task.updated_at = None  # Explicitly set to None
+    # Story 6.9: Add retry-related attributes
+    task.retry_count = 0
+    task.next_retry_at = None
+    task.max_retry_attempts = 5
 
     # Mock Notion client
     mock_client = AsyncMock(spec=NotionClient)

@@ -266,22 +266,18 @@ class TestPartialRegeneration:
             mock_service.get_video_path = MagicMock()
             mock_service.cleanup = AsyncMock()
 
-            # Mock Notion population
-            with patch(
-                "app.workers.video_generation_worker.get_notion_api_token", return_value=None
-            ):
-                # Act
-                await process_video_generation_task(task.id)
+            # Act
+            await process_video_generation_task(task.id)
 
-                # Assert: Only 3 clips should be in manifest (not all 18)
-                filtered_clips = mock_manifest.clips
-                assert len(filtered_clips) == 3
-                assert all(c.clip_number in [5, 12, 17] for c in filtered_clips)
+            # Assert: Only 3 clips should be in manifest (not all 18)
+            filtered_clips = mock_manifest.clips
+            assert len(filtered_clips) == 3
+            assert all(c.clip_number in [5, 12, 17] for c in filtered_clips)
 
-                # Cost should reflect 3 clips, not 18
-                result = mock_service.generate_videos.call_args[1]
-                # Verify manifest was filtered
-                assert mock_service.generate_videos.called
+            # Cost should reflect 3 clips, not 18
+            result = mock_service.generate_videos.call_args[1]
+            # Verify manifest was filtered
+            assert mock_service.generate_videos.called
 
         # Verify failed_clip_numbers cleared after successful regeneration
         await async_session.refresh(task)
