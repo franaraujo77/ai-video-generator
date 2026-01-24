@@ -333,6 +333,81 @@ def signal_handler(signum: int, frame: object) -> None:
     shutdown_requested = True
 
 
+async def retry_task_poller(pgq: "PgQueuer") -> None:
+    """Background task that periodically polls for tasks ready for retry.
+
+    Story 6.2: claim_retry_tasks() integration with worker (epic6-ai-3)
+
+    Polls every 60 seconds for tasks where next_retry_at <= now, and re-enqueues
+    them into PgQueuer for processing. This integrates the retry orchestrator
+    with the worker event loop.
+
+    Args:
+        pgq: PgQueuer instance to enqueue retry tasks
+
+    Behavior:
+        - Runs in background alongside PgQueuer worker loop
+        - Polls database for retry-ready tasks every 60 seconds
+        - Re-enqueues tasks into PgQueuer using process_video entrypoint
+        - Exits gracefully when shutdown_requested is set
+
+    Error Handling:
+        - Catches exceptions to prevent background task crash
+        - Logs errors but continues polling
+    """
+    from app.database import AsyncSessionLocal
+    from app.services.retry_orchestrator import claim_retry_tasks
+
+    worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
+    log.info("retry_task_poller_started", worker_id=worker_id, poll_interval_seconds=60)
+
+    while not shutdown_requested:
+        try:
+            # Poll for retry-ready tasks (short transaction)
+            async with AsyncSessionLocal() as db:  # type: ignore[misc]
+                retry_tasks = await claim_retry_tasks(db)
+                await db.commit()
+
+            # Re-enqueue claimed tasks into PgQueuer
+            if retry_tasks:
+                for task in retry_tasks:
+                    await pgq.add("process_video", str(task.id).encode())
+                    log.info(
+                        "retry_task_enqueued",
+                        task_id=str(task.id),
+                        retry_count=task.retry_count,
+                        channel_id=str(task.channel_id),
+                    )
+
+                log.info(
+                    "retry_task_poll_completed",
+                    worker_id=worker_id,
+                    tasks_enqueued=len(retry_tasks),
+                )
+
+            # Wait 60 seconds before next poll (or until shutdown)
+            for _ in range(60):
+                if shutdown_requested:
+                    break
+                await asyncio.sleep(1)
+
+        except asyncio.CancelledError:
+            log.info("retry_task_poller_cancelled", worker_id=worker_id)
+            break
+        except Exception as e:
+            log.error(
+                "retry_task_poller_error",
+                worker_id=worker_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            # Continue polling despite errors
+            await asyncio.sleep(60)
+
+    log.info("retry_task_poller_stopped", worker_id=worker_id)
+
+
 async def worker_main_loop() -> None:
     """Main worker event loop with PgQueuer task claiming.
 
@@ -343,6 +418,7 @@ async def worker_main_loop() -> None:
         - Initialize PgQueuer with asyncpg connection pool
         - Import entrypoints to register task handlers
         - Run PgQueuer worker loop (handles polling, LISTEN/NOTIFY, claiming)
+        - Run retry task poller in background (Story 6.2)
         - Exit gracefully on shutdown signal
 
     Error Handling:
@@ -358,6 +434,9 @@ async def worker_main_loop() -> None:
     worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
     log.info("worker_started_with_pgqueuer", worker_id=worker_id)
 
+    # Background task handle
+    retry_poller_task = None
+
     try:
         # Import queue initialization
         from app.entrypoints import register_entrypoints
@@ -371,6 +450,9 @@ async def worker_main_loop() -> None:
 
         # Register entrypoints with PgQueuer
         register_entrypoints(pgq)
+
+        # Start retry task poller in background (Story 6.2, epic6-ai-3)
+        retry_poller_task = asyncio.create_task(retry_task_poller(pgq))
 
         # Run PgQueuer worker loop
         # Handles: polling, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED, retry logic
@@ -389,6 +471,14 @@ async def worker_main_loop() -> None:
         )
         raise
     finally:
+        # Cancel background retry poller
+        if retry_poller_task and not retry_poller_task.done():
+            retry_poller_task.cancel()
+            try:
+                await retry_poller_task
+            except asyncio.CancelledError:
+                pass
+
         log.info(
             "worker_shutdown",
             worker_id=worker_id,

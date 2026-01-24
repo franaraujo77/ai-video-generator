@@ -60,8 +60,9 @@ epic_6_retro_2026_01_24:
     owner: "Alice + Charlie"
     priority: "HIGH"
     blocking: "Epic 7"
-    status: "pending"
+    status: "completed"
     effort_estimate: "8-12 hours"
+    completed_in: "Epic 4 (2026-01-18)"
     timeline: "Week 1 of preparation sprint"
     deliverable: "/docs/worker-orchestration.md"
     content:
@@ -73,15 +74,16 @@ epic_6_retro_2026_01_24:
       - "Code examples and diagrams"
       - "Troubleshooting section"
     success_criteria: "Comprehensive guide reviewed and approved, prevents Story 6.2-type blockers"
-    notes: "MANDATORY before Epic 7. Story 6.2 blocker demonstrates concrete need."
+    notes: "COMPLETED 2026-01-18. Document exists (858 lines), marked APPROVED. Comprehensive guide includes all 4 patterns with code examples."
 
   - id: epic6-ai-2
     title: "Lint Error Leakage Investigation"
     owner: "Charlie"
     priority: "HIGH"
     blocking: "Epic 7"
-    status: "pending"
+    status: "completed"
     effort_estimate: "4-6 hours"
+    completed_in: "Epic 6 (2026-01-24)"
     timeline: "Week 2 of preparation sprint"
     deliverable: "Zero lint errors at push time"
     steps:
@@ -90,20 +92,21 @@ epic_6_retro_2026_01_24:
       - "Implement fix (enforce hooks, align configs, add CI safety net)"
       - "Verify with test scenario"
     success_criteria: "Lint errors caught locally before push, verified with test scenario"
-    notes: "Francis identified this issue - lint errors still slipping through to push"
+    notes: "COMPLETED 2026-01-24. Pre-push hooks working correctly (verified with test). CI safety net in place (.github/workflows/pr-checks.yml). All lint errors fixed. Documentation: docs/lint-error-prevention.md"
 
   - id: epic6-ai-3
     title: "Complete Story 6.2 Worker Integration"
     owner: "Charlie"
     priority: "HIGH"
     blocking: "Epic 7"
-    status: "pending"
+    status: "completed"
     effort_estimate: "6-8 hours"
+    completed_in: "Epic 6 Preparation Sprint (2026-01-24)"
     timeline: "Week 2 of preparation sprint"
     deliverable: "Retry orchestrator connected to PgQueuer workers"
     context: "Story 6.2 marked 'in-progress' - claim_retry_tasks() not connected to workers"
     success_criteria: "Exponential backoff retry logic works end-to-end in worker environment"
-    notes: "Story 6.2 blocker due to PgQueuer architecture misunderstanding"
+    notes: "COMPLETED 2026-01-24. Added retry_task_poller() background task to worker.py. Polls every 60s for retry-ready tasks and re-enqueues them into PgQueuer. Story 6.2 now marked 'done'."
 
   - id: epic6-ai-4
     title: "Create Action Items Tracking System"
@@ -121,10 +124,10 @@ epic_6_preparation_stories:
     owner: "Elena (primary) + Charlie (pairing)"
     priority: "HIGH"
     blocking: "Epic 7"
-    status: "pending"
+    status: "ready-for-dev"
     effort_estimate: "6-10 hours"
     timeline: "Week 2-3 of preparation sprint"
-    story_file: "Will be created in _bmad-output/implementation-artifacts/7-0-automated-quota-reset.md"
+    story_file: "_bmad-output/implementation-artifacts/7-0-automated-quota-reset.md"
     acceptance_criteria:
       - "YouTube quotas reset at midnight Pacific Time"
       - "Other service quotas reset at midnight UTC (or per-service config)"
