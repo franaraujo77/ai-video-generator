@@ -69,7 +69,8 @@ If you need to create a new database:
 | Property Name | Type | Description |
 |--------------|------|-------------|
 | Story Direction | Rich Text | Narrative guidance for AI generation |
-| Error Log | Rich Text | System error messages (auto-populated) |
+| Error Log | Rich Text | System error messages with retry details (auto-populated) |
+| Progress | Rich Text | Checkpoint progress for resumability (auto-populated) |
 | YouTube URL | URL | Published video URL (auto-populated) |
 
 ### Status Select Options (23 total)

@@ -5,11 +5,20 @@ Tests cover:
 - Exception inheritance from base Exception class
 - Exception message handling and retrieval
 - Raise and catch behavior
+- TransientAPIError and PermanentAPIError hierarchy (Story 6.1)
+- RateLimitError with retry_after field
+- ValidationError for client errors
 """
 
 import pytest
 
-from app.exceptions import ConfigurationError
+from app.exceptions import (
+    ConfigurationError,
+    PermanentAPIError,
+    RateLimitError,
+    TransientAPIError,
+    ValidationError,
+)
 
 
 class TestConfigurationError:
@@ -116,3 +125,128 @@ class TestConfigurationError:
         # THEN: Multiline message is preserved
         assert str(exc_info.value) == error_message
         assert "\n" in str(exc_info.value)
+
+
+class TestTransientAPIError:
+    """Test TransientAPIError base class (Story 6.1)."""
+
+    def test_transient_api_error_creation(self) -> None:
+        """Verify TransientAPIError can be created and raised."""
+        error = TransientAPIError("Service temporarily unavailable")
+
+        assert str(error) == "Service temporarily unavailable"
+        assert isinstance(error, Exception)
+
+    def test_transient_api_error_is_exception(self) -> None:
+        """Verify TransientAPIError inherits from Exception."""
+        error = TransientAPIError("test")
+
+        assert isinstance(error, Exception)
+
+
+class TestPermanentAPIError:
+    """Test PermanentAPIError base class (Story 6.1)."""
+
+    def test_permanent_api_error_creation(self) -> None:
+        """Verify PermanentAPIError can be created and raised."""
+        error = PermanentAPIError("Invalid API key")
+
+        assert str(error) == "Invalid API key"
+        assert isinstance(error, Exception)
+
+    def test_permanent_api_error_is_exception(self) -> None:
+        """Verify PermanentAPIError inherits from Exception."""
+        error = PermanentAPIError("test")
+
+        assert isinstance(error, Exception)
+
+
+class TestRateLimitError:
+    """Test RateLimitError for 429 responses (Story 6.1)."""
+
+    def test_rate_limit_error_creation_basic(self) -> None:
+        """Verify RateLimitError with basic message."""
+        error = RateLimitError("Rate limit exceeded")
+
+        assert str(error) == "Rate limit exceeded"
+        assert isinstance(error, TransientAPIError)
+        assert error.retry_after is None
+
+    def test_rate_limit_error_with_retry_after(self) -> None:
+        """Verify RateLimitError stores retry_after field."""
+        error = RateLimitError("Rate limit exceeded", retry_after=60)
+
+        assert error.retry_after == 60
+        assert isinstance(error, TransientAPIError)
+
+    def test_rate_limit_error_inheritance(self) -> None:
+        """Verify RateLimitError inherits from TransientAPIError."""
+        error = RateLimitError("test")
+
+        assert isinstance(error, TransientAPIError)
+        assert isinstance(error, Exception)
+
+    def test_rate_limit_error_retry_after_none_by_default(self) -> None:
+        """Verify retry_after defaults to None when not provided."""
+        error = RateLimitError("Rate limit")
+
+        assert error.retry_after is None
+
+
+class TestValidationError:
+    """Test ValidationError for 400/422 responses (Story 6.1)."""
+
+    def test_validation_error_creation(self) -> None:
+        """Verify ValidationError can be created and raised."""
+        error = ValidationError("Invalid request payload")
+
+        assert str(error) == "Invalid request payload"
+        assert isinstance(error, PermanentAPIError)
+
+    def test_validation_error_inheritance(self) -> None:
+        """Verify ValidationError inherits from PermanentAPIError."""
+        error = ValidationError("test")
+
+        assert isinstance(error, PermanentAPIError)
+        assert isinstance(error, Exception)
+
+
+class TestExceptionHierarchy:
+    """Test exception hierarchy relationships (Story 6.1)."""
+
+    def test_hierarchy_transient_vs_permanent(self) -> None:
+        """Verify TransientAPIError and PermanentAPIError are separate hierarchies."""
+        transient = TransientAPIError("transient")
+        permanent = PermanentAPIError("permanent")
+
+        assert not isinstance(transient, PermanentAPIError)
+        assert not isinstance(permanent, TransientAPIError)
+
+    def test_rate_limit_error_is_transient(self) -> None:
+        """Verify RateLimitError is classified as transient."""
+        error = RateLimitError("rate limit")
+
+        assert isinstance(error, TransientAPIError)
+        assert not isinstance(error, PermanentAPIError)
+
+    def test_validation_error_is_permanent(self) -> None:
+        """Verify ValidationError is classified as permanent."""
+        error = ValidationError("validation failed")
+
+        assert isinstance(error, PermanentAPIError)
+        assert not isinstance(error, TransientAPIError)
+
+    def test_exception_catching_transient(self) -> None:
+        """Verify catching TransientAPIError catches RateLimitError."""
+        try:
+            raise RateLimitError("rate limit", retry_after=30)
+        except TransientAPIError as e:
+            assert isinstance(e, RateLimitError)
+            assert e.retry_after == 30  # type: ignore
+
+    def test_exception_catching_permanent(self) -> None:
+        """Verify catching PermanentAPIError catches ValidationError."""
+        try:
+            raise ValidationError("bad request")
+        except PermanentAPIError as e:
+            assert isinstance(e, ValidationError)

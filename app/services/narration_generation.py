@@ -46,6 +46,7 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
 from tenacity import (
     retry,
     retry_if_exception_type,
@@ -53,6 +54,9 @@ from tenacity import (
     wait_exponential,
 )
 
+from app.database import async_session_factory
+from app.services.checkpoint_service import update_step_metadata
+from app.services.error_classifier import ErrorContext, classify_error
 from app.utils.cli_wrapper import CLIScriptError, run_cli_script
 from app.utils.filesystem import get_audio_dir
 from app.utils.logging import get_logger
@@ -102,36 +106,25 @@ def _validate_voice_id(voice_id: str) -> None:
 
 
 def _is_retriable_error(error: CLIScriptError) -> bool:
-    """Check if CLI script error is retriable (rate limit, timeout, server error).
+    """Check if CLI script error is retriable using centralized error classifier.
 
-    Retriable errors:
-    - HTTP 429 (rate limit) - wait and retry
-    - HTTP 5xx (server error) - temporary issue
-    - Timeout errors - ElevenLabs took too long
+    DEPRECATED: This function delegates to centralized error_classifier.classify_error().
+    Use classify_error() directly for new code.
 
-    Non-retriable errors:
-    - HTTP 401 (auth error) - invalid API key
-    - HTTP 403 (forbidden) - permission issue
-    - HTTP 400 (bad request) - invalid input
+    This wrapper maintained for backward compatibility during Story 6.1 refactoring.
+    TODO(Story 6.2): Remove this wrapper once direct classify_error() usage is validated.
+    Removal tracked in Epic 6 completion review.
 
     Args:
         error: CLIScriptError from CLI wrapper
 
     Returns:
         True if error should be retried, False otherwise
+
+    Story Reference: 6.1 - Transient Failure Detection (Task 3)
     """
-    stderr_lower = error.stderr.lower()
-
-    # Check for rate limit (429)
-    if "429" in error.stderr or "rate limit" in stderr_lower:
-        return True
-
-    # Check for server errors (5xx)
-    if any(code in error.stderr for code in ["500", "502", "503", "504"]):
-        return True
-
-    # Check for timeout and return directly
-    return "timeout" in stderr_lower
+    analysis = classify_error(error)
+    return analysis.retry_recommended
 
 
 @dataclass
@@ -280,6 +273,8 @@ class NarrationGenerationService:
         resume: bool = False,
         max_concurrent: int = 10,
         clips_to_regenerate: list[int] | None = None,
+        task_id: str | None = None,  # Story 6.3 Task 5
+        db: AsyncSession | None = None,  # Story 6.3 Task 5
     ) -> dict[str, Any]:
         """Generate all narration audio clips in manifest by invoking CLI script.
 
@@ -302,15 +297,15 @@ class NarrationGenerationService:
             resume: If True, skip clips that already exist on filesystem
             max_concurrent: Maximum concurrent ElevenLabs API requests (default 10)
             clips_to_regenerate: Optional list of clip numbers (1-18) to regenerate.
-                If provided, only these clips will be generated
-                (partial regeneration for Story 5.5).
+                If provided, only these clips will be generated (partial regeneration).
                 If None, all clips in manifest will be generated.
+            task_id: Optional task ID for checkpoint tracking (Story 6.3)
+            db: Optional database session for checkpoint persistence (Story 6.3)
 
         Returns:
             Summary dict with keys:
                 - generated: Number of newly generated audio clips
-                - skipped: Number of existing audio clips
-                  (if resume=True or not in clips_to_regenerate)
+                - skipped: Number of existing audio clips (if resume=True or excluded)
                 - failed: Number of failed audio clips
                 - total_cost_usd: Total ElevenLabs API cost (Decimal)
 
@@ -330,6 +325,23 @@ class NarrationGenerationService:
         """
         # Validate voice_id before starting
         _validate_voice_id(manifest.voice_id)
+
+        # Story 6.3 Task 5: Load completed narration clips from step_metadata
+        completed_narration_clips: list[int] = []
+        if resume and task_id and db:
+            from uuid import UUID
+
+            from app.models import Task
+
+            task = await db.get(Task, UUID(task_id) if isinstance(task_id, str) else task_id)
+            if task and task.step_metadata:
+                completed_narration_clips = task.step_metadata.get("completed_narration_clips", [])
+                self.log.info(
+                    "loaded_completed_narration_clips",
+                    task_id=task_id,
+                    completed_count=len(completed_narration_clips),
+                    completed_clips=completed_narration_clips,
+                )
 
         # Filter clips for partial regeneration (Story 5.5)
         clips_to_generate = manifest.clips
@@ -358,6 +370,8 @@ class NarrationGenerationService:
 
         # Semaphore limits concurrent ElevenLabs API requests
         semaphore = asyncio.Semaphore(max_concurrent)
+        # Lock for checkpoint updates (Story 6.3 Task 5)
+        checkpoint_lock = asyncio.Lock()
 
         @retry(
             retry=retry_if_exception_type(CLIScriptError),
@@ -411,14 +425,34 @@ class NarrationGenerationService:
             Returns:
                 True if generated, False if skipped or failed
             """
-            nonlocal generated, skipped, failed
+            nonlocal generated, skipped, failed, completed_narration_clips
 
             async with semaphore:
-                # Check if audio exists (for resume functionality)
-                if resume and self.check_audio_exists(clip.output_path):
+                # Story 6.3 Task 5 Subtask 5.2: Check if clip already in completed list
+                if resume and task_id and db and clip.clip_number in completed_narration_clips:
+                    # Story 6.3 Task 5 Subtask 5.4: Safety check - verify file exists
+                    if not self.check_audio_exists(clip.output_path):
+                        self.log.warning(
+                            "narration_clip_checkpoint_exists_but_file_missing",
+                            clip_number=clip.clip_number,
+                            output_path=str(clip.output_path),
+                            action="regenerating",
+                        )
+                        # File missing, regenerate (fall through to generation logic)
+                    else:
+                        self.log.info(
+                            "narration_clip_skipped_from_checkpoint",
+                            clip_number=clip.clip_number,
+                            path=str(clip.output_path),
+                        )
+                        skipped += 1
+                        return False
+
+                # Legacy resume support (filesystem check only, no checkpoint)
+                elif resume and self.check_audio_exists(clip.output_path):
                     skipped += 1
                     self.log.info(
-                        "audio_clip_skipped",
+                        "audio_clip_skipped_filesystem_check",
                         clip_number=clip.clip_number,
                         path=str(clip.output_path),
                         reason="already_exists",
@@ -468,26 +502,129 @@ class NarrationGenerationService:
                             error=str(e),
                         )
 
+                    # Story 6.3 Task 5 Subtask 5.3: Update step_metadata with completed clip
+                    if task_id:
+                        from uuid import UUID
+
+                        from app.models import Task
+
+                        # Lock to serialize checkpoint updates
+                        async with checkpoint_lock:
+                            # Create new session for each checkpoint update
+                            # to avoid concurrent commit conflicts
+                            # In tests, async_session_factory may be None,
+                            # so use provided db session
+                            if async_session_factory is not None and db is None:
+                                # Production: Create new session (short transaction pattern)
+                                async with async_session_factory() as checkpoint_db:
+                                    task_obj = await checkpoint_db.get(
+                                        Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                                    )
+                                    if task_obj:
+                                        current_completed = (
+                                            task_obj.step_metadata.get(
+                                                "completed_narration_clips", []
+                                            )
+                                            if task_obj.step_metadata
+                                            else []
+                                        )
+
+                                        # Append clip number to completed list (avoid duplicates)
+                                        if clip.clip_number not in current_completed:
+                                            current_completed.append(clip.clip_number)
+                                            await update_step_metadata(
+                                                task_id,
+                                                "completed_narration_clips",
+                                                current_completed,
+                                                checkpoint_db,
+                                            )
+                                            # Update local list for skip logic
+                                            completed_narration_clips = current_completed
+
+                                            self.log.info(
+                                                "narration_clip_checkpoint_saved",
+                                                clip_number=clip.clip_number,
+                                                total_completed=len(current_completed),
+                                            )
+                            elif db is not None:
+                                # Test environment: Use provided session with lock
+                                # to serialize commits
+                                task_obj = await db.get(
+                                    Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                                )
+                                if task_obj:
+                                    current_completed = (
+                                        task_obj.step_metadata.get("completed_narration_clips", [])
+                                        if task_obj.step_metadata
+                                        else []
+                                    )
+
+                                    # Append clip number to completed list (avoid duplicates)
+                                    if clip.clip_number not in current_completed:
+                                        current_completed.append(clip.clip_number)
+                                        await update_step_metadata(
+                                            task_id,
+                                            "completed_narration_clips",
+                                            current_completed,
+                                            db,
+                                        )
+                                        # Update local list for skip logic
+                                        completed_narration_clips = current_completed
+
+                                        self.log.info(
+                                            "narration_clip_checkpoint_saved",
+                                            clip_number=clip.clip_number,
+                                            total_completed=len(current_completed),
+                                        )
+
                     generated += 1
                     return True
 
                 except CLIScriptError as e:
                     failed += 1
+
+                    # Story 6.4 Task 3: Capture failure context for error classification
+                    context = ErrorContext(
+                        step_name="narration_generation",
+                        task_id=task_id or "unknown",
+                        channel_id=self.channel_id,
+                        clip_index=clip.clip_number,
+                        total_clips=18,
+                    )
+                    error_analysis = classify_error(e, context)
+
                     self.log.error(
                         "audio_generation_failed",
                         clip_number=clip.clip_number,
                         script=e.script,
                         exit_code=e.exit_code,
                         stderr=e.stderr[:500],  # Truncate stderr
+                        error_category=error_analysis.category.value,
+                        api_service=error_analysis.api_service,
+                        retry_recommended=error_analysis.retry_recommended,
                     )
                     raise  # Re-raise to stop generation on failure
 
                 except Exception as e:
                     failed += 1
+
+                    # Story 6.4 Task 3: Capture failure context for error classification
+                    context = ErrorContext(
+                        step_name="narration_generation",
+                        task_id=task_id or "unknown",
+                        channel_id=self.channel_id,
+                        clip_index=clip.clip_number,
+                        total_clips=18,
+                    )
+                    error_analysis = classify_error(e, context)
+
                     self.log.error(
                         "audio_generation_unexpected_error",
                         clip_number=clip.clip_number,
                         error=str(e),
+                        error_category=error_analysis.category.value,
+                        api_service=error_analysis.api_service,
+                        retry_recommended=error_analysis.retry_recommended,
                     )
                     raise  # Re-raise to stop generation on failure
 

@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import YouTubeQuotaUsage
-from app.utils.alerts import send_alert
+from app.services.alert_service import send_quota_alert
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -203,33 +203,24 @@ async def record_youtube_quota(channel_id: UUID, operation: str, db: AsyncSessio
         percentage=f"{percentage * 100:.1f}%",
     )
 
+    # Story 6.6: Discord alerts for quota thresholds (FR32, FR34)
     # Trigger alerts (with throttling to prevent spam)
     if percentage >= YOUTUBE_QUOTA_CRITICAL_THRESHOLD:
         if _should_send_alert(channel_id, "CRITICAL"):
-            await send_alert(
-                level="CRITICAL",
-                message=f"YouTube quota exhausted for channel {channel_id}",
-                details={
-                    "channel_id": str(channel_id),
-                    "usage": str(quota.units_used),
-                    "limit": str(quota.daily_limit),
-                    "percentage": f"{percentage * 100:.0f}%",
-                    "action": "Upload tasks paused until midnight PST reset",
-                },
+            await send_quota_alert(
+                channel_id=str(channel_id),  # Use UUID string as channel identifier
+                current_usage=quota.units_used,
+                daily_limit=quota.daily_limit,
+                is_exhausted=True,
             )
     elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD and _should_send_alert(
         channel_id, "WARNING"
     ):
-        await send_alert(
-            level="WARNING",
-            message=f"YouTube quota at {percentage * 100:.0f}% for channel {channel_id}",
-            details={
-                "channel_id": str(channel_id),
-                "usage": str(quota.units_used),
-                "limit": str(quota.daily_limit),
-                "percentage": f"{percentage * 100:.0f}%",
-                "remaining": str(quota.daily_limit - quota.units_used),
-            },
+        await send_quota_alert(
+            channel_id=str(channel_id),  # Use UUID string as channel identifier
+            current_usage=quota.units_used,
+            daily_limit=quota.daily_limit,
+            is_exhausted=False,
         )
 
 

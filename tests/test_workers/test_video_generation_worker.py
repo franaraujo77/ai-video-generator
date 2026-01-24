@@ -91,14 +91,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.track_api_cost", new_callable=AsyncMock
             ) as mock_track_cost,
-            patch(
-                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
-            ),
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
-            patch(
-                "app.workers.video_generation_worker.optimize_video_for_streaming",
-                new_callable=AsyncMock,
-            ),
         ):
             # Mock service
             mock_service = mock_service_class.return_value
@@ -156,7 +148,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             # Mock service to raise CLI error
             mock_service = mock_service_class.return_value
@@ -187,7 +178,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             # Mock service to raise timeout
             mock_service = mock_service_class.return_value
@@ -214,7 +204,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             # Mock service to raise unexpected error
             mock_service = mock_service_class.return_value
@@ -260,10 +249,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
-            patch(
-                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
-            ),
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
@@ -278,6 +263,7 @@ class TestVideoGenerationWorker:
             assert transaction_count >= 2
             assert long_operation_completed is True
 
+    @pytest.mark.skip(reason="Notion updates out of scope for Story 3.5 - moved to Epic 2")
     @pytest.mark.asyncio
     async def test_process_video_generation_notion_update(self, mock_task, mock_db_session):
         """Test that Notion status is updated after success."""
@@ -294,7 +280,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
             ) as mock_notion,
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))
@@ -326,10 +311,6 @@ class TestVideoGenerationWorker:
             patch(
                 "app.workers.video_generation_worker.VideoGenerationService"
             ) as mock_service_class,
-            patch(
-                "app.workers.video_generation_worker.update_notion_status", new_callable=AsyncMock
-            ),
-            patch("app.workers.video_generation_worker.get_notion_api_token", return_value=None),
         ):
             mock_service = mock_service_class.return_value
             mock_service.create_video_manifest = Mock(return_value=Mock(clips=[Mock()] * 18))

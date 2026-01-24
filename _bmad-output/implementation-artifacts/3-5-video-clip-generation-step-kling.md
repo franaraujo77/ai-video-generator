@@ -3,11 +3,12 @@ story_key: '3-5-video-clip-generation-step-kling'
 epic_id: '3'
 story_id: '5'
 title: 'Video Clip Generation Step (Kling)'
-status: 'ready-for-dev'
+status: 'in-progress'
 priority: 'critical'
 story_points: 5
 created_at: '2026-01-15'
-assigned_to: 'TBD'
+updated_at: '2026-01-23'
+assigned_to: 'Claude Code (Code Review in Progress)'
 dependencies: ['3-1-cli-script-wrapper-async-execution', '3-2-filesystem-organization-path-helpers', '3-3-asset-generation-step-gemini', '3-4-composite-creation-step']
 blocks: ['3-6-narration-generation-step-elevenlabs', '3-7-sound-effects-generation-step', '3-8-video-assembly-step-ffmpeg']
 ready_for_dev: true
@@ -1333,7 +1334,14 @@ Implementation completed successfully following TDD (Red-Green-Refactor):
 
 ## Status
 
-**Status:** completed
+**Status:** in-progress (Code review fixes being applied)
 **Created:** 2026-01-15 via BMad Method workflow
-**Completed:** 2026-01-15 by Claude Sonnet 4.5
-**All Acceptance Criteria Met:** ✅ AC1-AC12
+**Initial Implementation:** 2026-01-15 by Claude Sonnet 4.5
+**Code Review:** 2026-01-23 by Claude Code (15 issues identified)
+**Fixes in Progress:** Removing out-of-scope features (Stories 5.4, 6.3, 6.4), implementing AC7, adding security validation
+
+**Outstanding Work:**
+- Remove Story 6.3 checkpoint code from service layer
+- Remove Story 6.4 error classification code
+- Verify test coverage after fixes
+- Re-validate all Acceptance Criteria

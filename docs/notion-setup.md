@@ -15,12 +15,13 @@
 3. [View 1: Kanban by Status (Primary View)](#view-1-kanban-by-status-primary-view)
 4. [View 2: Needs Review (Actionable Items)](#view-2-needs-review-actionable-items)
 5. [View 3: All Errors (Troubleshooting)](#view-3-all-errors-troubleshooting)
-6. [View 4: Published (Completed Work)](#view-4-published-completed-work)
-7. [View 5: High Priority (Optional)](#view-5-high-priority-optional)
-8. [View 6: In Progress (Monitoring)](#view-6-in-progress-monitoring)
-9. [Per-Channel Views (Optional)](#per-channel-views-optional)
-10. [Time in Status Formula](#time-in-status-formula)
-11. [Troubleshooting](#troubleshooting)
+6. [View 4: Retrying Tasks (Auto-Recovery Monitoring)](#view-4-retrying-tasks-auto-recovery-monitoring)
+7. [View 5: Published (Completed Work)](#view-5-published-completed-work)
+8. [View 6: High Priority (Optional)](#view-6-high-priority-optional)
+9. [View 7: In Progress (Monitoring)](#view-7-in-progress-monitoring)
+10. [Per-Channel Views (Optional)](#per-channel-views-optional)
+11. [Time in Status Formula](#time-in-status-formula)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -37,7 +38,8 @@ Before configuring views, ensure your Notion database has these properties:
 - **Updated** (date) - Auto-updated on every status change
 - **Topic** (text) - Video category/subject
 - **Story Direction** (rich text) - Detailed video description from Notion
-- **Error Log** (text) - Append-only error history (nullable)
+- **Error Log** (rich text) - Structured error details with retry information (nullable, auto-populated)
+- **Progress** (rich text) - Checkpoint progress for resumability (nullable, auto-populated)
 - **YouTube URL** (url) - Populated after publish (nullable)
 
 **Calculated Property:**
@@ -239,7 +241,156 @@ The Status property MUST contain exactly 27 status values in this workflow order
 
 ---
 
-## View 4: Published (Completed Work)
+## View 4: Retrying Tasks (Auto-Recovery Monitoring)
+
+**Purpose:** Monitor automatic retry progress and identify tasks stuck in retry loops (Story 6.9 - FR57)
+
+### Configuration Steps
+
+1. **Create New View:**
+   - Click "+ Add View" in your Notion database
+   - Select **Table** view type
+   - Name: "Retrying Tasks"
+
+2. **Filter:**
+   - Add compound filter (AND logic):
+     - **Status** → **is one of:**
+       - Asset Error
+       - Video Error
+       - Audio Error
+       - Upload Error
+     - **Error Log** → **contains** → **"Attempt"**
+   - Rationale: Show only error tasks that have retry information scheduled
+
+3. **Sort:**
+   - Primary sort: **Updated** (ascending - soonest retry first)
+   - Alternative: Sort by retry attempt to group by attempt number
+   - Rationale: Show which tasks will retry next, surface tasks approaching terminal failure
+
+4. **Display Columns:**
+   - Title
+   - Channel
+   - Status (error type)
+   - **Error Log** (shows retry countdown: "Attempt 3/5 - Next: 15 min")
+   - Updated (last retry attempt time)
+   - Time in Status (time since last retry)
+
+5. **Column Width:**
+   - Make **Error Log** column wide (~300-400px) to show full retry status
+   - Error Log format from retry_state_service: "Retrying in 15 min (Attempt 3/5)"
+
+6. **Optional Board View with Retry Attempt Grouping:**
+
+   To visualize retry distribution across attempt levels:
+
+   a. **Create Board View:**
+      - Click "+ Add View" in database
+      - Select **Board** view type
+      - Name: "Retrying Tasks (Board)"
+      - Copy filter from Table view (Status errors + Error Log contains "Attempt")
+
+   b. **Group by Status:**
+      - Board views require grouping by a select/status property
+      - Group by: **Status**
+      - This creates columns: Asset Error, Video Error, Audio Error, Upload Error
+
+   c. **Sort within Groups:**
+      - Sort by: **Updated** (ascending - soonest retry first within each error type)
+
+   d. **Card Preview Settings:**
+      - Show: Title, Error Log (retry countdown), Updated
+      - Card size: Small (fits more cards on screen)
+
+   e. **Visual Scan Pattern:**
+      - Each column represents an error type
+      - Within each column, cards show retry attempt in Error Log
+      - Quick scan: Look for "Attempt 4/5" or "Attempt 5/5" cards (approaching terminal failure)
+
+   **Why Board View is Useful:**
+   - Visual distribution of errors by type
+   - Easier to spot patterns (e.g., all Video Errors at Attempt 3/5 = Kling API rate limit)
+   - Drag-and-drop to change status if needed
+
+   **Note:** Notion doesn't support grouping by computed fields like retry attempt number extracted from Error Log. The Error Log text displays the attempt count, but you'll need to visually scan cards to see retry distribution.
+
+### Retry Status Indicators
+
+The **Error Log** column displays auto-generated retry information:
+
+- **"No retries"** - Task hasn't failed yet (shouldn't appear in this view)
+- **"Retrying in 15 min (Attempt 3/5)"** - Active retry scheduled, countdown timer
+- **"Retry in progress... (Attempt 4/5)"** - Worker is attempting retry now
+- **"Attempt 5/5"** - Terminal failure, no retry countdown (needs manual intervention)
+
+### Color Coding Suggestions
+
+To set up visual color coding for the **Status** select property:
+
+1. **Open Database Settings:**
+   - Click the "..." menu at top-right of database
+   - Select "Customize Database"
+
+2. **Edit Status Property:**
+   - Find "Status" property in the property list
+   - Click "Edit Property"
+   - Select "Edit Options"
+
+3. **Assign Colors to Error Statuses:**
+
+   **Recommended color scheme for quick visual scanning:**
+
+   - **Asset Error** → **Yellow**
+     - Rationale: Gemini quota limits are transient, usually resolve in 1-2 retries
+     - Visual meaning: Caution, but low urgency
+
+   - **Video Error** → **Orange**
+     - Rationale: Kling API rate limits or timeouts, resolve in 2-3 retries typically
+     - Visual meaning: Moderate urgency, watch for escalation
+
+   - **Audio Error** → **Orange**
+     - Rationale: ElevenLabs rate limits similar to video errors
+     - Visual meaning: Same as Video Error
+
+   - **Upload Error** → **Red**
+     - Rationale: YouTube quota exhaustion requires 24hr wait or manual intervention
+     - Visual meaning: High urgency, likely needs human action
+
+4. **Visual Scan Strategy:**
+   - Yellow cards = transient, ignore unless stuck at high retry attempt
+   - Orange cards = monitor, check if progressing through retries
+   - Red cards = investigate immediately, especially if at Attempt 4/5 or 5/5
+
+**Note:** These are default Status property colors. The Error Log shows the actual retry attempt level (e.g., "Attempt 4/5") which indicates urgency regardless of status color.
+
+### Exponential Backoff Schedule
+
+Retry timing follows exponential backoff (Story 6.2):
+
+- **Attempt 1 → 2:** Wait 1 minute
+- **Attempt 2 → 3:** Wait 5 minutes
+- **Attempt 3 → 4:** Wait 15 minutes
+- **Attempt 4 → 5:** Wait 1 hour
+- **Attempt 5:** Terminal failure (no more automatic retries)
+
+### Usage Tips
+
+- **Countdown updates:** Retry countdown refreshes every ~10 seconds (Notion sync latency)
+- **Normal pattern:** Most tasks resolve at Attempt 1 or 2 (transient errors)
+- **Concern pattern:** Task at Attempt 4/5 = investigate root cause before terminal failure
+- **Terminal failures:** Tasks showing "Attempt 5/5" with no countdown need manual retry via review interface
+- **Empty view = healthy:** No tasks in retry = no errors or all errors resolved
+- **Cross-reference with "All Errors":** Use both views together - "All Errors" shows all error tasks, "Retrying Tasks" shows only auto-retry candidates
+
+### Integration with Error Dashboard
+
+This view complements "All Errors" (View 3):
+- **All Errors:** Complete error inventory (includes terminal failures)
+- **Retrying Tasks:** Active retry monitoring (excludes permanent failures)
+- **Use case:** Check "Retrying Tasks" first for auto-recovery status, then "All Errors" for permanent failures requiring intervention
+
+---
+
+## View 5: Published (Completed Work)
 
 **Purpose:** Archive of completed videos with YouTube links
 
@@ -277,7 +428,7 @@ The Status property MUST contain exactly 27 status values in this workflow order
 
 ---
 
-## View 5: High Priority (Optional)
+## View 6: High Priority (Optional)
 
 **Purpose:** Surface urgent/time-sensitive content across all statuses
 
@@ -313,7 +464,7 @@ The Status property MUST contain exactly 27 status values in this workflow order
 
 ---
 
-## View 6: In Progress (Monitoring)
+## View 7: In Progress (Monitoring)
 
 **Purpose:** Identify bottlenecks and stuck tasks currently being processed
 
@@ -561,7 +712,7 @@ After configuring all views:
 
 ---
 
-**Last Updated:** 2026-01-17
-**Document Version:** 1.0
+**Last Updated:** 2026-01-23
+**Document Version:** 1.1 (Added View 4: Retrying Tasks for Story 6.9)
 **Author:** AI Video Generator Platform
 **Status:** Complete

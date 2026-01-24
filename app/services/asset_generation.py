@@ -35,11 +35,17 @@ Usage:
     print(f"Generated {result['generated']} assets, cost: ${result['total_cost_usd']}")
 """
 
+import asyncio
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.database import async_session_factory
+from app.services.checkpoint_service import update_step_metadata
+from app.services.error_classifier import ErrorContext, classify_error
 from app.utils.cli_wrapper import run_cli_script
 from app.utils.filesystem import (
     get_character_dir,
@@ -199,7 +205,11 @@ class AssetGenerationService:
         return AssetManifest(global_atmosphere=global_atmosphere, assets=assets)
 
     async def generate_assets(
-        self, manifest: AssetManifest, resume: bool = False
+        self,
+        manifest: AssetManifest,
+        resume: bool = False,
+        task_id: str | None = None,  # Story 6.3 Task 4
+        db: AsyncSession | None = None,  # Story 6.3 Task 4
     ) -> dict[str, Any]:
         """Generate all assets in manifest by invoking CLI script.
 
@@ -217,6 +227,8 @@ class AssetGenerationService:
         Args:
             manifest: AssetManifest with prompts and paths
             resume: If True, skip assets that already exist on filesystem
+            task_id: Optional task ID for checkpoint tracking (Story 6.3)
+            db: Optional database session for checkpoint persistence (Story 6.3)
 
         Returns:
             Summary dict with keys:
@@ -237,12 +249,55 @@ class AssetGenerationService:
         skipped = 0
         failed = 0
 
-        for asset in manifest.assets:
-            # Skip if asset exists and resume=True
-            if resume and self.check_asset_exists(asset.output_path):
+        # Story 6.3 Task 4: Load completed assets from step_metadata
+        completed_assets: list[str] = []
+        if resume and task_id and db:
+            from uuid import UUID
+
+            from app.models import Task
+
+            task = await db.get(Task, UUID(task_id) if isinstance(task_id, str) else task_id)
+            if task and task.step_metadata:
+                completed_assets = task.step_metadata.get("completed_assets", [])
+                self.log.info(
+                    "loaded_completed_assets",
+                    task_id=task_id,
+                    completed_count=len(completed_assets),
+                    completed_assets=completed_assets,
+                )
+
+        # Lock for checkpoint updates (Story 6.3 Task 4)
+        checkpoint_lock = asyncio.Lock()
+
+        # Story 6.4 Task 3: Track asset_index for error context
+        for asset_index, asset in enumerate(manifest.assets, start=1):
+            # Story 6.3 Task 4 Subtask 4.2: Check if asset already in completed list
+            if resume and task_id and db and asset.name in completed_assets:
+                # Story 6.3 Task 4 Subtask 4.4: Safety check - verify file exists
+                if not self.check_asset_exists(asset.output_path):
+                    self.log.warning(
+                        "asset_checkpoint_exists_but_file_missing",
+                        name=asset.name,
+                        type=asset.asset_type,
+                        output_path=str(asset.output_path),
+                        action="regenerating",
+                    )
+                    # File missing, regenerate (fall through to generation logic)
+                else:
+                    self.log.info(
+                        "asset_skipped_from_checkpoint",
+                        name=asset.name,
+                        type=asset.asset_type,
+                        path=str(asset.output_path),
+                    )
+                    skipped += 1
+                    continue
+
+            # Legacy resume support (filesystem check only, no checkpoint)
+            elif resume and self.check_asset_exists(asset.output_path):
                 skipped += 1
                 self.log.info(
-                    "asset_skipped",
+                    "asset_skipped_filesystem_check",
                     name=asset.name,
                     type=asset.asset_type,
                     path=str(asset.output_path),
@@ -274,8 +329,129 @@ class AssetGenerationService:
                     path=str(asset.output_path),
                 )
 
+                # Story 6.8 Task 7.3: Record Gemini API quota usage
+                if task_id and db:
+                    from uuid import UUID
+
+                    from app.models import Task
+                    from app.services.quota_service import record_gemini_operation
+
+                    try:
+                        task_obj = await db.get(
+                            Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                        )
+                        if task_obj and task_obj.channel_id:
+                            await record_gemini_operation(
+                                channel_id=task_obj.channel_id,
+                                task_id=task_obj.id,
+                                asset_name=asset.name,
+                                db=db,
+                            )
+                            self.log.debug(
+                                "gemini_quota_recorded",
+                                task_id=str(task_id),
+                                channel_id=str(task_obj.channel_id),
+                                asset_name=asset.name,
+                            )
+                    except Exception as e:
+                        # Story 6.8: Don't fail asset generation
+                        # if quota recording fails
+                        self.log.error(
+                            "gemini_quota_recording_failed",
+                            task_id=str(task_id),
+                            asset_name=asset.name,
+                            error=str(e),
+                        )
+
+                # Story 6.3 Task 4 Subtask 4.3: Update step_metadata with completed asset
+                if task_id:
+                    from uuid import UUID
+
+                    from app.models import Task
+
+                    # Lock to serialize checkpoint updates
+                    async with checkpoint_lock:
+                        # Create new session for each checkpoint update
+                        # to avoid concurrent commit conflicts
+                        # In tests, async_session_factory may be None,
+                        # so use provided db session
+                        if async_session_factory is not None and db is None:
+                            # Production: Create new session
+                            # (short transaction pattern)
+                            async with async_session_factory() as checkpoint_db:
+                                task_obj = await checkpoint_db.get(
+                                    Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                                )
+                                if task_obj:
+                                    current_completed = (
+                                        task_obj.step_metadata.get("completed_assets", [])
+                                        if task_obj.step_metadata
+                                        else []
+                                    )
+
+                                    # Append asset name to completed list (avoid duplicates)
+                                    if asset.name not in current_completed:
+                                        current_completed.append(asset.name)
+                                        await update_step_metadata(
+                                            task_id,
+                                            "completed_assets",
+                                            current_completed,
+                                            checkpoint_db,
+                                        )
+                                        # Update local list for skip logic
+                                        completed_assets = current_completed
+
+                                        self.log.info(
+                                            "asset_checkpoint_saved",
+                                            name=asset.name,
+                                            type=asset.asset_type,
+                                            total_completed=len(current_completed),
+                                        )
+                        elif db is not None:
+                            # Test environment: Use provided session with lock to serialize commits
+                            task_obj = await db.get(
+                                Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                            )
+                            if task_obj:
+                                current_completed = (
+                                    task_obj.step_metadata.get("completed_assets", [])
+                                    if task_obj.step_metadata
+                                    else []
+                                )
+
+                                # Append asset name to completed list (avoid duplicates)
+                                if asset.name not in current_completed:
+                                    current_completed.append(asset.name)
+                                    await update_step_metadata(
+                                        task_id,
+                                        "completed_assets",
+                                        current_completed,
+                                        db,
+                                    )
+                                    # Update local list for skip logic
+                                    completed_assets = current_completed
+
+                                    self.log.info(
+                                        "asset_checkpoint_saved",
+                                        name=asset.name,
+                                        type=asset.asset_type,
+                                        total_completed=len(current_completed),
+                                    )
+
             except Exception as e:
                 failed += 1
+
+                # Story 6.4 Task 3: Capture failure context for error classification
+                context = ErrorContext(
+                    step_name="asset_generation",
+                    task_id=task_id or "unknown",
+                    channel_id=self.channel_id,
+                    asset_index=asset_index,
+                    total_assets=len(manifest.assets),
+                    asset_name=asset.name,
+                )
+                error_analysis = classify_error(e, context)
+
                 # Sanitize prompt in log (may contain sensitive context)
                 self.log.error(
                     "asset_generation_failed",
@@ -283,6 +459,9 @@ class AssetGenerationService:
                     type=asset.asset_type,
                     error=str(e),
                     prompt_preview=combined_prompt[:100],
+                    error_category=error_analysis.category.value,
+                    api_service=error_analysis.api_service,
+                    retry_recommended=error_analysis.retry_recommended,
                 )
                 # Re-raise to allow worker to handle (mark task failed, retry, etc.)
                 raise

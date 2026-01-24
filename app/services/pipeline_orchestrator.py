@@ -56,16 +56,29 @@ from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any
+from uuid import UUID
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
 from app.database import async_session_factory
 from app.models import Channel, Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
+from app.services.checkpoint_service import (
+    clear_step_metadata,
+    is_step_complete,
+    save_step_checkpoint,
+)
 from app.services.composite_creation import CompositeCreationService
+from app.services.error_logger import (
+    log_pipeline_step_completed,
+    log_pipeline_step_started,
+    log_structured_error,
+)
 from app.services.narration_generation import NarrationGenerationService
 from app.services.notion_asset_service import NotionAssetService
-from app.services.notion_sync import TaskSyncData, push_task_to_notion
+from app.services.notion_audio_service import NotionAudioService
+from app.services.notion_sync import TaskSyncData, push_error_payload_to_notion, push_task_to_notion
+from app.services.retry_orchestrator import schedule_retry
 from app.services.sfx_generation import SFXGenerationService
 from app.services.video_assembly import VideoAssemblyService
 from app.services.video_generation import VideoGenerationService
@@ -251,7 +264,6 @@ class PipelineOrchestrator:
         """
         self.task_id = task_id
         self.log = get_logger(__name__)
-        self.step_completions: dict[PipelineStep, StepCompletion] = {}
 
     async def execute_pipeline(self) -> None:
         """Execute complete video generation pipeline from start to finish.
@@ -322,9 +334,6 @@ class PipelineOrchestrator:
             # Record pipeline start time in database
             await self._update_pipeline_start_time(datetime.now(timezone.utc))
 
-            # Load step completion metadata for partial resume
-            self.step_completions = await self.load_step_completion_metadata()
-
             # Define pipeline steps in execution order
             steps = [
                 PipelineStep.ASSET_GENERATION,
@@ -350,15 +359,32 @@ class PipelineOrchestrator:
                     # Save current progress and exit gracefully
                     return
 
-                # Check if step already complete (partial resume)
-                if step in self.step_completions and self.step_completions[step].completed:
-                    self.log.info("step_skipped", step=step.value, reason="already_complete")
-                    continue
+                # Story 6.3: Check if step already complete using checkpoint service
+                async with async_session_factory() as db:  # type: ignore[misc]
+                    if await is_step_complete(self.task_id, step.value, db):
+                        self.log.info("step_skipped", step=step.value, reason="checkpoint_exists")
+                        continue
+
+                # Story 6.3 Issue #12: Clear old sub-step metadata when starting step from scratch
+                # If we reach here, the step checkpoint doesn't exist, so we're starting fresh.
+                # Clear stale sub-step data (completed_video_clips, completed_assets, etc.)
+                # from previous failed attempts to prevent confusion.
+                async with async_session_factory() as db:  # type: ignore[misc]
+                    await clear_step_metadata(self.task_id, db)
 
                 # Update status to step's in-progress state
                 await self.update_task_status(STEP_STATUS_MAP[step])
 
+                # Story 6.5: Log step start with structured logging
+                await log_pipeline_step_started(
+                    task_id=UUID(self.task_id),
+                    correlation_id=UUID(self.task_id),  # Use task.id as correlation_id
+                    channel_id=channel_id,
+                    step_name=step.value,
+                )
+
                 # Execute step via service layer
+                step_start_time = time.time()
                 try:
                     completion = await self.execute_step(
                         step,
@@ -370,12 +396,34 @@ class PipelineOrchestrator:
                         sfx_descriptions,
                         voice_id,
                     )
-                    await self.save_step_completion(step, completion)
+
+                    # Story 6.3: Save checkpoint using checkpoint service
+                    async with async_session_factory() as db:  # type: ignore[misc]
+                        await save_step_checkpoint(
+                            self.task_id,
+                            step.value,
+                            {
+                                "completed": completion.completed,
+                                "duration_seconds": completion.duration_seconds,
+                                "partial_progress": completion.partial_progress,
+                            },
+                            db,
+                        )
 
                     self.log.info(
                         "step_completed",
                         step=step.value,
                         duration_seconds=completion.duration_seconds,
+                    )
+
+                    # Story 6.5: Log step completion with structured logging
+                    step_duration = time.time() - step_start_time
+                    await log_pipeline_step_completed(
+                        task_id=UUID(self.task_id),
+                        correlation_id=UUID(self.task_id),
+                        channel_id=channel_id,
+                        step_name=step.value,
+                        duration_seconds=step_duration,
                     )
 
                     # Story 5.3: Populate assets in Notion after asset generation
@@ -417,20 +465,69 @@ class PipelineOrchestrator:
                             return
 
                 except Exception as e:
-                    # Classify error as transient (retry) or permanent (fail)
-                    is_transient, error_type = self.classify_error(e)
-
+                    # Story 6.4 Task 8: Structured error logging with retry orchestration
                     self.log.error(
                         "step_failed",
                         step=step.value,
-                        error_type=error_type,
-                        is_transient=is_transient,
+                        error_type=type(e).__name__,
                         error_message=str(e),
                     )
 
-                    # Update task status to appropriate error state
+                    # Update task status to appropriate error state first
                     error_status = STEP_ERROR_MAP.get(step, TaskStatus.ASSET_ERROR)
                     await self.update_task_status(error_status, error_message=str(e))
+
+                    # Story 6.5: Log structured error before scheduling retry
+                    async with async_session_factory() as db_error:  # type: ignore[misc]
+                        await log_structured_error(
+                            exception=e,
+                            task_id=UUID(self.task_id),
+                            channel_id=channel_id,
+                            correlation_id=UUID(self.task_id),
+                            step_name=step.value,
+                            # Initial failure, retry_count incremented by schedule_retry
+                            retry_attempt=0,
+                            db=db_error,
+                            # Services already built context during exception
+                            context=None,
+                        )
+
+                    # Schedule retry and build ErrorPayload (Story 6.2 + 6.4)
+                    # schedule_retry() classifies error, calculates backoff,
+                    # and returns ErrorPayload
+                    async with async_session_factory() as db:  # type: ignore[misc]
+                        error_payload = await schedule_retry(
+                            task_id=UUID(self.task_id),
+                            exception=e,
+                            db=db,
+                            context=None,
+                        )
+
+                    # Story 6.4 Task 5: Push rich error details to Notion immediately
+                    if error_payload:
+                        notion_api_token = get_notion_api_token()
+                        if notion_api_token:
+                            try:
+                                notion_client = NotionClient(auth_token=notion_api_token)
+                                await push_error_payload_to_notion(
+                                    task_id=UUID(self.task_id),
+                                    error_payload=error_payload,
+                                    notion_client=notion_client,
+                                )
+                                self.log.info(
+                                    "error_payload_pushed_to_notion",
+                                    step=step.value,
+                                    error_category=error_payload.error_category,
+                                    retry_scheduled=error_payload.next_retry_at is not None,
+                                )
+                            except Exception as notion_error:
+                                # Log but don't fail - error is already logged in DB
+                                self.log.error(
+                                    "notion_error_push_failed",
+                                    step=step.value,
+                                    error=str(notion_error),
+                                    exc_info=True,
+                                )
 
                     # Halt pipeline execution
                     return
@@ -471,10 +568,30 @@ class PipelineOrchestrator:
                 "pipeline_execution_error",
                 error_type=type(e).__name__,
                 error_message=str(e),
+                exc_info=True,
             )
-            # Attempt to mark task as failed (suppress errors during cleanup)
+
+            # Story 6.4 Task 8: Structured error logging for pipeline-level errors
+            # Attempt to schedule retry and push error to Notion (suppress errors during cleanup)
             with contextlib.suppress(Exception):
                 await self.update_task_status(TaskStatus.ASSET_ERROR, error_message=str(e))
+
+                # Schedule retry and build ErrorPayload
+                async with async_session_factory() as db:  # type: ignore[misc]
+                    error_payload = await schedule_retry(
+                        task_id=UUID(self.task_id), exception=e, db=db, context=None
+                    )
+
+                # Push to Notion if we have error payload
+                if error_payload:
+                    notion_api_token = get_notion_api_token()
+                    if notion_api_token:
+                        notion_client = NotionClient(auth_token=notion_api_token)
+                        await push_error_payload_to_notion(
+                            task_id=UUID(self.task_id),
+                            error_payload=error_payload,
+                            notion_client=notion_client,
+                        )
 
     async def execute_step(
         self,
@@ -533,7 +650,12 @@ class PipelineOrchestrator:
         if step == PipelineStep.ASSET_GENERATION:
             asset_service = AssetGenerationService(channel_id, project_id)
             manifest = asset_service.create_asset_manifest(topic, story_direction)
-            result = await asset_service.generate_assets(manifest, resume=True)
+
+            # Story 6.3 Task 4: Pass task_id and db session for sub-step checkpointing
+            async with async_session_factory() as db:  # type: ignore[misc]
+                result = await asset_service.generate_assets(
+                    manifest, resume=True, task_id=self.task_id, db=db
+                )
 
             # Store asset files for Notion population (Story 5.3)
             asset_files = [
@@ -578,6 +700,8 @@ class PipelineOrchestrator:
         elif step == PipelineStep.VIDEO_GENERATION:
             video_service = VideoGenerationService(channel_id, project_id)
             video_manifest = video_service.create_video_manifest(topic, story_direction)
+
+            # Story 6.3: Video checkpointing (future enhancement)
             result = await video_service.generate_videos(video_manifest, resume=True)
 
             return StepCompletion(
@@ -605,9 +729,52 @@ class PipelineOrchestrator:
                 voice_id=voice_id,
             )
 
-            # TODO Story 5.5: Support partial regeneration for failed audio clips
-            # Requires task object in execute_step signature
-            result = await narration_service.generate_narration(narration_manifest, resume=True)
+            # Story 6.3 Task 5: Pass task_id and db for narration clip checkpointing
+            async with async_session_factory() as db:  # type: ignore[misc]
+                # Load task to check for failed clips metadata
+                task = await db.get(Task, self.task_id)
+
+                # Story 5.5: Support partial regeneration for failed audio clips
+                # Extract failed clip numbers from task metadata (populated by reject_audio)
+                failed_narration_clips = None
+                if (
+                    task
+                    and task.step_completion_metadata
+                    and "failed_audio_clip_numbers" in task.step_completion_metadata
+                ):
+                    failed_narration_clips = task.step_completion_metadata[
+                        "failed_audio_clip_numbers"
+                    ]
+                    self.log.info(
+                        "partial_narration_regeneration_requested",
+                        correlation_id=self.task_id,
+                        task_id=str(task.id),
+                        failed_clips=failed_narration_clips,
+                    )
+
+                result = await narration_service.generate_narration(
+                    narration_manifest,
+                    resume=True,
+                    clips_to_regenerate=failed_narration_clips,
+                    task_id=self.task_id,
+                    db=db,
+                )
+
+                # Clear failed clips from metadata after successful regeneration
+                if task and failed_narration_clips and task.step_completion_metadata:
+                    task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
+                    await db.commit()
+                    self.log.info(
+                        "cleared_failed_audio_clip_numbers",
+                        correlation_id=self.task_id,
+                        task_id=str(task.id),
+                    )
+
+                # Store task data before closing DB connection
+                task_notion_page_id = task.notion_page_id if task else None
+                task_channel_id = task.channel_id if task else None
+
+            # Database connection closed here - short transaction pattern
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build narration file list from audio directory
@@ -626,8 +793,45 @@ class PipelineOrchestrator:
                         }
                     )
 
-            # TODO Story 5.5: Populate Notion Audio database with narration clips
-            # Requires task, notion_client, channel objects in execute_step signature
+            # Populate Notion Audio database with narration clips
+            if narration_files and task_notion_page_id:
+                try:
+                    # Load channel and notion client outside DB transaction
+                    async with async_session_factory() as db_notion:  # type: ignore[misc]
+                        channel = await db_notion.get(Channel, task_channel_id)
+                        if not channel:
+                            self.log.error(
+                                "channel_not_found_for_notion_population",
+                                channel_id=task_channel_id,
+                            )
+                        else:
+                            notion_token = get_notion_api_token()
+                            if notion_token:
+                                notion_client = NotionClient(notion_token)
+                                notion_audio_service = NotionAudioService(notion_client, channel)
+                                audio_result = await notion_audio_service.populate_audio(
+                                    task_id=UUID(self.task_id),
+                                    notion_page_id=task_notion_page_id,
+                                    narration_files=narration_files,
+                                    sfx_files=[],  # Only narration at this step
+                                    correlation_id=self.task_id,
+                                )
+                                self.log.info(
+                                    "narration_notion_population_complete",
+                                    correlation_id=self.task_id,
+                                    task_id=self.task_id,
+                                    narration_created=audio_result.get("narration_count", 0),
+                                )
+                except Exception as e:
+                    # Log error but don't fail the pipeline
+                    # Notion population is non-critical for pipeline continuation
+                    self.log.error(
+                        "narration_notion_population_failed",
+                        correlation_id=self.task_id,
+                        task_id=self.task_id,
+                        error=str(e),
+                        exc_info=True,
+                    )
 
             return StepCompletion(
                 step=step,
@@ -652,9 +856,45 @@ class PipelineOrchestrator:
                 sfx_descriptions=sfx_descriptions,
             )
 
-            # TODO Story 5.5: Support partial regeneration for failed SFX clips
-            # Requires task object in execute_step signature
-            result = await sfx_service.generate_sfx(sfx_manifest, resume=True)
+            # Load task to check for failed clips metadata
+            async with async_session_factory() as db:  # type: ignore[misc]
+                task = await db.get(Task, self.task_id)
+
+                # Story 5.5: Support partial regeneration for failed SFX clips
+                # Extract failed clip numbers from task metadata (populated by reject_audio)
+                failed_sfx_clips = None
+                if (
+                    task
+                    and task.step_completion_metadata
+                    and "failed_audio_clip_numbers" in task.step_completion_metadata
+                ):
+                    failed_sfx_clips = task.step_completion_metadata["failed_audio_clip_numbers"]
+                    self.log.info(
+                        "partial_sfx_regeneration_requested",
+                        correlation_id=self.task_id,
+                        task_id=str(task.id),
+                        failed_clips=failed_sfx_clips,
+                    )
+
+                # Clear failed clips from metadata after successful regeneration
+                if task and failed_sfx_clips and task.step_completion_metadata:
+                    task.step_completion_metadata.pop("failed_audio_clip_numbers", None)
+                    await db.commit()
+                    self.log.info(
+                        "cleared_failed_audio_clip_numbers",
+                        correlation_id=self.task_id,
+                        task_id=str(task.id),
+                    )
+
+                # Store task data before closing DB connection
+                task_notion_page_id = task.notion_page_id if task else None
+                task_channel_id = task.channel_id if task else None
+
+            # Database connection closed here - short transaction pattern
+
+            result = await sfx_service.generate_sfx(
+                sfx_manifest, resume=True, clips_to_regenerate=failed_sfx_clips
+            )
 
             # Story 5.5: Populate audio entries in Notion after generation
             # Build SFX file list from SFX directory
@@ -686,11 +926,54 @@ class PipelineOrchestrator:
                             "duration": duration,
                         }
                     )
-                    # Legacy WAV format detected - consider MP3 regeneration for web optimization
-                    pass
+                    msg = "Using legacy WAV file (consider regenerating for MP3)"
+                    self.log.warning(
+                        "sfx_legacy_wav_format_detected",
+                        correlation_id=self.task_id,
+                        task_id=self.task_id,
+                        clip_number=i,
+                        message=msg,
+                    )
 
-            # TODO Story 5.5: Populate Notion Audio database with SFX clips
-            # Requires task, notion_client, channel objects in execute_step signature
+            # Populate Notion Audio database with SFX clips
+            if sfx_files and task_notion_page_id:
+                try:
+                    # Load channel and notion client outside DB transaction
+                    async with async_session_factory() as db_notion:  # type: ignore[misc]
+                        channel = await db_notion.get(Channel, task_channel_id)
+                        if not channel:
+                            self.log.error(
+                                "channel_not_found_for_notion_population",
+                                channel_id=task_channel_id,
+                            )
+                        else:
+                            notion_token = get_notion_api_token()
+                            if notion_token:
+                                notion_client = NotionClient(notion_token)
+                                notion_audio_service = NotionAudioService(notion_client, channel)
+                                audio_result = await notion_audio_service.populate_audio(
+                                    task_id=UUID(self.task_id),
+                                    notion_page_id=task_notion_page_id,
+                                    narration_files=[],  # Only SFX at this step
+                                    sfx_files=sfx_files,
+                                    correlation_id=self.task_id,
+                                )
+                                self.log.info(
+                                    "sfx_notion_population_complete",
+                                    correlation_id=self.task_id,
+                                    task_id=self.task_id,
+                                    sfx_created=audio_result.get("sfx_count", 0),
+                                )
+                except Exception as e:
+                    # Log error but don't fail the pipeline
+                    # Notion population is non-critical for pipeline continuation
+                    self.log.error(
+                        "sfx_notion_population_failed",
+                        correlation_id=self.task_id,
+                        task_id=self.task_id,
+                        error=str(e),
+                        exc_info=True,
+                    )
 
             return StepCompletion(
                 step=step,
@@ -725,6 +1008,9 @@ class PipelineOrchestrator:
 
     async def load_step_completion_metadata(self) -> dict[PipelineStep, StepCompletion]:
         """Load step completion metadata from database for partial resume.
+
+        DEPRECATED: Story 6.3 - Use checkpoint_service.is_step_complete() instead
+        This method is kept for backward compatibility with existing step_completion_metadata.
 
         Metadata Storage:
         - Stored in Task.step_completion_metadata (JSONB column)
@@ -858,18 +1144,15 @@ class PipelineOrchestrator:
                     self.log.error(
                         "task_not_found_for_notion_population",
                         task_id=self.task_id,
-                        correlation_id=None,
+                        correlation_id=self.task_id,
                     )
                     return
-
-                # FIXED (Code Review Issue #9): Use task_id as correlation ID
-                correlation_id = str(task.id)
 
                 if not task.notion_page_id:
                     self.log.warning(
                         "task_missing_notion_page_id",
                         task_id=self.task_id,
-                        correlation_id=correlation_id,
+                        correlation_id=self.task_id,
                         message="Cannot populate assets in Notion without notion_page_id",
                     )
                     return
@@ -880,7 +1163,7 @@ class PipelineOrchestrator:
                     self.log.error(
                         "channel_not_found",
                         channel_id=task.channel_id,
-                        correlation_id=correlation_id,
+                        correlation_id=self.task_id,
                     )
                     return
 
@@ -892,44 +1175,37 @@ class PipelineOrchestrator:
 
             # Create Notion client and asset service outside DB transaction
             notion_token = get_notion_api_token()
-            if not notion_token:
-                self.log.warning(
-                    "notion_token_missing",
-                    correlation_id=None,
-                    message="Skipping Notion asset population - no API token configured",
+            if notion_token:
+                notion_client = NotionClient(notion_token)
+                asset_service = NotionAssetService(notion_client, channel)
+
+                # Populate assets in Notion (no DB connection held during API calls)
+                result = await asset_service.populate_assets(
+                    task_id=task_id,
+                    notion_page_id=notion_page_id,
+                    asset_files=asset_files,
+                    correlation_id=self.task_id,
                 )
-                return
 
-            notion_client = NotionClient(notion_token)
-            asset_service = NotionAssetService(notion_client, channel)
-
-            # Populate assets in Notion (no DB connection held during API calls)
-            # FIXED (Code Review Issue #9): Pass correlation_id for distributed tracing
-            correlation_id = str(task_id)  # Use task_id as correlation ID
-            result = await asset_service.populate_assets(
-                task_id=task_id,
-                notion_page_id=notion_page_id,
-                asset_files=asset_files,
-                correlation_id=correlation_id,
-                # Disabled until idempotency fully tested
-                # (query_database exists but needs integration test)
-                skip_existing=False,
-            )
-
-            self.log.info(
-                "notion_assets_created",
-                task_id=self.task_id,
-                correlation_id=None,
-                created=result.get("created", 0),
-                failed=result.get("failed", 0),
-                storage_strategy=result.get("storage_strategy"),
-            )
+                self.log.info(
+                    "notion_assets_created",
+                    task_id=self.task_id,
+                    correlation_id=self.task_id,
+                    created=result.get("created", 0),
+                    failed=result.get("failed", 0),
+                    storage_strategy=result.get("storage_strategy"),
+                )
+            else:
+                self.log.warning(
+                    "notion_token_not_configured_skipping_asset_population",
+                    task_id=self.task_id,
+                )
 
         except DatabaseError as e:
             self.log.error(
                 "database_error_during_asset_population",
                 task_id=self.task_id,
-                correlation_id=None,
+                correlation_id=self.task_id,
                 error=str(e),
                 exc_info=True,
             )
@@ -998,6 +1274,9 @@ class PipelineOrchestrator:
         completion: StepCompletion,
     ) -> None:
         """Save step completion metadata to database.
+
+        DEPRECATED: Story 6.3 - Use checkpoint_service.save_step_checkpoint() instead
+        This method is kept for backward compatibility with existing step_completion_metadata.
 
         Metadata Format:
         {
@@ -1123,7 +1402,20 @@ class PipelineOrchestrator:
             )
 
     def classify_error(self, exception: Exception) -> tuple[bool, str]:
-        """Classify exception as transient (retriable) or permanent (non-retriable).
+        """DEPRECATED: Use app.services.error_classifier.classify_error() instead.
+
+        This method is deprecated as of Story 6.4 Task 8. The pipeline now uses
+        the comprehensive error_classifier from Story 6.1 which provides:
+        - Detailed error categorization (TRANSIENT, PERMANENT, CONFIGURATION, etc.)
+        - API service identification (Gemini, Kling, ElevenLabs)
+        - Retry recommendations
+        - ErrorContext integration for failure location tracking
+
+        Migration:
+            Old: is_transient, error_type = self.classify_error(exception)
+            New: error_analysis = classify_error(exception, context)
+
+        Kept for backward compatibility only.
 
         Transient Errors (retry eligible):
         - TimeoutError, asyncio.TimeoutError

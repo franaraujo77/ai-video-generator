@@ -32,6 +32,7 @@ from app.constants import (
 )
 from app.database import async_session_factory
 from app.models import PriorityLevel, Task, TaskStatus
+from app.schemas.error_payload import ErrorPayload
 
 log = structlog.get_logger()
 
@@ -115,6 +116,115 @@ def is_rejection_transition(old_status: TaskStatus, new_status: TaskStatus) -> b
     return (old_status, new_status) in rejection_transitions
 
 
+def is_manual_retry_transition(old_status: TaskStatus, new_status: TaskStatus) -> bool:
+    """Detect if status change represents manual retry trigger (Story 6.7, Task 1).
+
+    Manual retries occur when users change status in Notion from an error status
+    to a retry-triggering status (QUEUED or specific approval statuses). This allows
+    users to re-attempt failed tasks after fixing root causes.
+
+    Manual Retry Transitions:
+        - ASSET_ERROR → QUEUED (full retry from asset generation)
+        - ASSET_ERROR → GENERATING_ASSETS (resume asset generation)
+        - VIDEO_ERROR → QUEUED (full retry from video generation)
+        - VIDEO_ERROR → ASSETS_APPROVED (resume from video generation)
+        - VIDEO_ERROR → GENERATING_VIDEO (resume video generation)
+        - AUDIO_ERROR → QUEUED (full retry from audio generation)
+        - AUDIO_ERROR → VIDEO_APPROVED (resume from audio generation)
+        - AUDIO_ERROR → GENERATING_AUDIO (resume audio generation)
+        - UPLOAD_ERROR → QUEUED (full retry from upload)
+        - UPLOAD_ERROR → APPROVED (resume from upload)
+        - UPLOAD_ERROR → UPLOADING (resume upload)
+
+    Args:
+        old_status: Previous task status (error status)
+        new_status: New task status (retry-triggering status)
+
+    Returns:
+        True if this is a manual retry transition, False otherwise
+
+    Example:
+        >>> is_manual_retry_transition(TaskStatus.VIDEO_ERROR, TaskStatus.QUEUED)
+        True
+        >>> is_manual_retry_transition(TaskStatus.VIDEO_ERROR, TaskStatus.ASSETS_APPROVED)
+        True
+        >>> is_manual_retry_transition(TaskStatus.GENERATING_VIDEO, TaskStatus.VIDEO_READY)
+        False
+
+    Integration:
+        - Story 6.1: Works for both transient and permanent failures
+        - Story 6.2: Manual retry resets retry_count to 0
+        - Story 6.3: Uses checkpoint logic to resume from failure point
+        - Story 6.5: Logs manual retry trigger with correlation_id
+
+    Related:
+        - Story 6.7 Task 1: Manual retry transition detection
+        - Subtasks 1.1-1.3: Detect retry-triggering status changes
+    """
+    # Map error statuses to valid retry target statuses
+    manual_retry_map = {
+        TaskStatus.ASSET_ERROR: {TaskStatus.QUEUED, TaskStatus.GENERATING_ASSETS},
+        TaskStatus.VIDEO_ERROR: {
+            TaskStatus.QUEUED,
+            TaskStatus.ASSETS_APPROVED,
+            TaskStatus.GENERATING_VIDEO,
+        },
+        TaskStatus.AUDIO_ERROR: {
+            TaskStatus.QUEUED,
+            TaskStatus.VIDEO_APPROVED,
+            TaskStatus.GENERATING_AUDIO,
+        },
+        TaskStatus.UPLOAD_ERROR: {TaskStatus.QUEUED, TaskStatus.APPROVED, TaskStatus.UPLOADING},
+    }
+
+    # Check if old_status is an error status and new_status is a valid retry target
+    if old_status in manual_retry_map:
+        return new_status in manual_retry_map[old_status]
+
+    return False
+
+
+def get_failed_step_from_status(error_status: TaskStatus) -> str | None:
+    """Map error status to failed step name for checkpoint clearing (Story 6.7, Task 5).
+
+    This function determines which pipeline step failed based on the error status,
+    allowing the manual retry handler to clear only the failed step's checkpoint
+    while preserving completed steps.
+
+    Args:
+        error_status: Error status enum value
+
+    Returns:
+        Pipeline step name or None for terminal FAILED status
+
+    Example:
+        >>> get_failed_step_from_status(TaskStatus.VIDEO_ERROR)
+        'video_generation'
+        >>> get_failed_step_from_status(TaskStatus.ASSET_ERROR)
+        'asset_generation'
+        >>> get_failed_step_from_status(TaskStatus.FAILED)
+        None  # Full restart, clear all checkpoints
+
+    Integration:
+        - Story 6.3: Uses checkpoint service to clear specific step metadata
+        - Story 6.7 Task 2: Retry reset logic needs step name for checkpoint clearing
+
+    Related:
+        - Story 6.7 Task 5: Smart retry routing
+        - Subtask 5.5: Validate checkpoint data before routing
+    """
+    # Map error status to failed step name
+    # Step names match checkpoint service conventions
+    status_to_step_map = {
+        TaskStatus.ASSET_ERROR: "asset_generation",
+        TaskStatus.VIDEO_ERROR: "video_generation",
+        TaskStatus.AUDIO_ERROR: "audio_generation",
+        TaskStatus.UPLOAD_ERROR: "youtube_upload",
+    }
+
+    return status_to_step_map.get(error_status)
+
+
 @dataclass
 class TaskSyncData:
     """Minimal task data for syncing to Notion.
@@ -130,6 +240,12 @@ class TaskSyncData:
         priority: Task priority level
         title: Video title (for logging)
         updated_at: Timestamp of last task update (Story 5.6, AC2, FR55)
+        retry_count: Number of retry attempts (Story 6.2)
+        next_retry_at: Timestamp for next retry attempt (Story 6.2)
+        max_retry_attempts: Maximum retry attempts before terminal failure (Story 6.9)
+        last_error_timestamp: Timestamp of most recent error (Story 6.9)
+        completed_steps: Step-level checkpoints (Story 6.3, Task 9)
+        step_metadata: Sub-step checkpoints (Story 6.3, Task 9)
     """
 
     id: uuid.UUID
@@ -138,6 +254,12 @@ class TaskSyncData:
     priority: PriorityLevel
     title: str
     updated_at: datetime
+    retry_count: int = 0
+    next_retry_at: datetime | None = None
+    max_retry_attempts: int = 5
+    last_error_timestamp: datetime | None = None
+    completed_steps: list[dict[str, Any]] | None = None
+    step_metadata: dict[str, Any] | None = None
 
 
 # Property extraction helpers
@@ -423,6 +545,117 @@ async def handle_rejection_transition(
     )
 
 
+async def handle_manual_retry(
+    task: Task,
+    old_status: TaskStatus,
+    new_status: TaskStatus,
+    session: AsyncSession,
+) -> None:
+    """Handle manual retry triggered by Notion status change (Story 6.7, Task 2).
+
+    When a user manually changes status in Notion from an error status to a
+    retry-triggering status (QUEUED or approval status), this function:
+    1. Resets retry_count to 0 (Story 6.2 integration)
+    2. Preserves error log with manual retry marker (Story 6.5 integration)
+    3. Clears checkpoint for failed step (Story 6.3 integration)
+    4. Preserves completed step checkpoints (Story 6.3 integration)
+    5. Re-enqueues task for worker processing
+    6. Logs manual retry event (Story 6.5 integration)
+
+    Args:
+        task: Task instance to retry
+        old_status: Previous error status
+        new_status: New retry-triggering status
+        session: Active async database session
+
+    Example:
+        # User changes VIDEO_ERROR → QUEUED in Notion
+        >>> await handle_manual_retry(
+        ...     task=task,
+        ...     old_status=TaskStatus.VIDEO_ERROR,
+        ...     new_status=TaskStatus.QUEUED,
+        ...     session=db,
+        ... )
+        # Result:
+        # - retry_count reset to 0
+        # - error_log preserved with "MANUAL RETRY TRIGGERED" marker
+        # - video_generation checkpoint cleared
+        # - asset_generation checkpoint preserved
+        # - task status set to QUEUED for worker claiming
+
+    Integration:
+        - Story 6.1: Works for both transient and permanent failures
+        - Story 6.2: Resets retry_count to bypass exhausted automatic retries
+        - Story 6.3: Clears failed step checkpoint, preserves completed steps
+        - Story 6.5: Logs manual retry trigger with correlation_id
+        - Story 6.6: Manual retries don't trigger alerts (user-initiated)
+
+    Related:
+        - Task 2: Implement retry reset logic
+        - Subtasks 2.1-2.5: Reset metadata, preserve history, clear checkpoints
+        - Task 3: Integrate with Notion sync service
+        - Task 4: Add error log preservation
+        - Task 5: Implement smart retry routing
+    """
+    from app.services.checkpoint_service import clear_step_checkpoint_for_retry
+
+    correlation_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+
+    # Reset retry metadata (Story 6.7 Task 2)
+    original_retry_count = task.retry_count
+    task.retry_count = 0
+    task.next_retry_at = None
+    task.is_manual_retry = True
+
+    # Preserve error log with manual retry marker (Story 6.7 Task 4)
+    manual_retry_marker = (
+        f"\n\n--- MANUAL RETRY TRIGGERED ---\n"
+        f"Timestamp: {now.isoformat()}\n"
+        f"Previous Status: {old_status.value}\n"
+        f"New Status: {new_status.value}\n"
+        f"Retry Attempt: Manual (reset automatic retry counter from {original_retry_count} to 0)\n"
+    )
+
+    if task.error_log:
+        task.error_log += manual_retry_marker
+    else:
+        task.error_log = manual_retry_marker.strip()
+
+    # Clear checkpoint for failed step only (Story 6.7 Task 5)
+    failed_step = get_failed_step_from_status(old_status)
+    await clear_step_checkpoint_for_retry(task_id=str(task.id), step_name=failed_step, db=session)
+
+    # Update status if not already set (handles both direct calls and caller-set status)
+    # Only set if different to avoid validation error on same-status transition
+    if task.status != new_status:
+        task.status = new_status
+
+    # Update timestamp and flush
+    task.updated_at = now
+    await session.flush()
+
+    # Re-enqueue task for worker claiming
+    from app.services.task_service import enqueue_task_to_pgqueuer
+
+    await enqueue_task_to_pgqueuer(task)
+
+    # Log manual retry event for analytics (Story 6.7 Task 6)
+    log.info(
+        "manual_retry_triggered",
+        correlation_id=correlation_id,
+        task_id=str(task.id),
+        notion_page_id=task.notion_page_id,
+        channel_id=task.channel_id,
+        old_status=old_status.value,
+        new_status=new_status.value,
+        failed_step=failed_step or "all_steps",
+        original_retry_count=original_retry_count,
+        is_manual_retry=True,
+        message="Manual retry triggered by user - task re-enqueued",
+    )
+
+
 async def sync_notion_page_to_task(
     notion_page: dict[str, Any],
     session: AsyncSession,
@@ -528,6 +761,10 @@ async def sync_notion_page_to_task(
         if is_rejection_transition(old_status, status_enum):
             await handle_rejection_transition(existing_task, notion_page, session)
 
+        # Story 6.7 Task 3: Check for manual retry transition and handle appropriately
+        if is_manual_retry_transition(old_status, status_enum):
+            await handle_manual_retry(existing_task, old_status, status_enum, session)
+
         return existing_task
     else:
         # NOTE: This is a simplified implementation for Story 2.3
@@ -542,7 +779,125 @@ async def sync_notion_page_to_task(
         )
 
 
-async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionClient) -> None:
+def format_retry_display(retry_count: int, next_retry_at: datetime) -> str:
+    """Format retry info for user display in Notion.
+
+    Args:
+        retry_count: Current retry attempt number (1-5)
+        next_retry_at: Timestamp when next retry will occur
+
+    Returns:
+        Formatted string like "Retrying in 15 min (Attempt 3/5)"
+
+    Example:
+        >>> from datetime import datetime, timedelta, timezone
+        >>> next_retry = datetime.now(timezone.utc) + timedelta(minutes=15)
+        >>> format_retry_display(3, next_retry)
+        'Retrying in 15 min (Attempt 3/5)'
+    """
+    from app.services.retry_orchestrator import MAX_RETRY_ATTEMPTS
+
+    now = datetime.now(timezone.utc)
+
+    # Handle timezone-naive datetimes (SQLite compatibility)
+    retry_time = next_retry_at
+    if retry_time.tzinfo is None:
+        retry_time = retry_time.replace(tzinfo=timezone.utc)
+
+    time_remaining = retry_time - now
+
+    # Format time remaining
+    total_seconds = time_remaining.total_seconds()
+    if total_seconds < 60:
+        time_str = f"{int(total_seconds)}s"
+    elif total_seconds < 3600:
+        time_str = f"{int(total_seconds / 60)} min"
+    else:
+        hours = int(total_seconds / 3600)
+        time_str = f"{hours} hr" if hours == 1 else f"{hours} hrs"
+
+    return f"Retrying in {time_str} (Attempt {retry_count}/{MAX_RETRY_ATTEMPTS})"
+
+
+def format_checkpoint_progress(
+    step_metadata: dict[str, Any] | None,
+    status: TaskStatus,
+) -> str | None:
+    """Format checkpoint progress for Notion Progress field (Story 6.3, Task 9).
+
+    Creates a human-readable progress summary showing completed sub-steps
+    for the current pipeline step. This helps users see exactly which clips/assets
+    completed before a failure, enabling them to understand resume-from-failure behavior.
+
+    Args:
+        step_metadata: Sub-step checkpoint data (completed clips/assets)
+        status: Current task status to determine which progress to show
+
+    Returns:
+        Formatted progress string or None if no relevant checkpoints
+
+    Examples:
+        >>> # Video generation with 10/18 clips complete
+        >>> format_checkpoint_progress(
+        ...     {"completed_video_clips": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}, TaskStatus.VIDEO_ERROR
+        ... )
+        'Video: 10/18 clips ✓'
+
+        >>> # Audio generation with 5/18 clips complete
+        >>> format_checkpoint_progress(
+        ...     {"completed_narration_clips": [1, 2, 3, 4, 5]}, TaskStatus.AUDIO_ERROR
+        ... )
+        'Audio: 5/18 clips ✓'
+
+        >>> # Asset generation with 15 assets complete
+        >>> format_checkpoint_progress(
+        ...     {"completed_assets": ["char_1", "char_2", ...]},  # 15 items
+        ...     TaskStatus.ASSET_ERROR,
+        ... )
+        'Assets: 15 complete ✓'
+
+    Related:
+        - Story 6.3 Task 9: Show checkpoint progress in Notion
+        - Tasks 3-5: Sub-step checkpointing implementation
+    """
+    if not step_metadata:
+        return None
+
+    # Video generation progress (18 clips total)
+    if status == TaskStatus.VIDEO_ERROR and "completed_video_clips" in step_metadata:
+        completed = len(step_metadata["completed_video_clips"])
+        return f"Video: {completed}/18 clips ✓"
+
+    # Audio generation progress (18 clips total)
+    # AUDIO_ERROR can come from either narration or SFX generation (both produce audio)
+    if status == TaskStatus.AUDIO_ERROR:
+        # Check for narration progress
+        if "completed_narration_clips" in step_metadata:
+            completed = len(step_metadata["completed_narration_clips"])
+            # If SFX also in progress, show both
+            if "completed_sfx_clips" in step_metadata:
+                sfx_completed = len(step_metadata["completed_sfx_clips"])
+                return f"Audio: {completed}/18 clips ✓ | SFX: {sfx_completed}/18 clips ✓"
+            return f"Audio: {completed}/18 clips ✓"
+
+        # Check for SFX progress (if narration complete, only SFX in progress)
+        if "completed_sfx_clips" in step_metadata:
+            completed = len(step_metadata["completed_sfx_clips"])
+            return f"SFX: {completed}/18 clips ✓"
+
+    # Asset generation progress (variable count)
+    if status == TaskStatus.ASSET_ERROR and "completed_assets" in step_metadata:
+        completed = len(step_metadata["completed_assets"])
+        return f"Assets: {completed} complete ✓"
+
+    return None
+
+
+async def push_task_to_notion(
+    task: Task | TaskSyncData,
+    notion_client: NotionClient,
+    error_payload: ErrorPayload | None = None,
+) -> None:
     """Push Task status/priority updates back to Notion.
 
     This function implements the Database → Notion sync direction.
@@ -556,6 +911,7 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
     Args:
         task: Task instance or TaskSyncData to sync to Notion
         notion_client: NotionClient with rate limiting
+        error_payload: Optional ErrorPayload with rich error context (Story 6.4 Task 5)
 
     Raises:
         NotionAPIError: On non-retriable API errors
@@ -594,7 +950,7 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
     notion_priority = priority_map[task.priority]
 
     # Build properties dict with Status, Priority, and Updated timestamp
-    properties = {
+    properties: dict[str, Any] = {
         "Status": {"select": {"name": notion_status}},
         "Priority": {"select": {"name": notion_priority}},
     }
@@ -603,6 +959,45 @@ async def push_task_to_notion(task: Task | TaskSyncData, notion_client: NotionCl
     # Format as ISO 8601 for Notion date property
     if task.updated_at:
         properties["Updated"] = {"date": {"start": task.updated_at.isoformat()}}
+
+    # Story 6.4 Task 5: Add rich error details if ErrorPayload provided
+    # ErrorPayload contains: failure location, error category, API service,
+    # retry info, checkpoint progress, and actionable recommendations
+    if error_payload:
+        # Format ErrorPayload as Notion-compatible markdown
+        error_markdown = error_payload.format_for_notion()
+        properties["Error Log"] = {"rich_text": [{"text": {"content": error_markdown}}]}
+    # Story 6.2 & 6.9: Fallback to retry display with history if no ErrorPayload
+    # Only show Error Log for active retries (next_retry_at set) to filter terminal failures
+    # from "Retrying Tasks" view (Story 6.9, View 4 filter)
+    elif task.retry_count > 0 and task.next_retry_at:
+        from app.services.error_logger import format_retry_history
+
+        # Build detailed retry history (Story 6.9, Task 7)
+        retry_history = format_retry_history(
+            retry_attempt=task.retry_count,
+            last_error_timestamp=task.last_error_timestamp,
+            next_retry_at=task.next_retry_at,
+            error_message=None,  # Detailed error in ErrorPayload case only
+        )
+
+        # Also include short display format for quick visibility
+        retry_summary = format_retry_display(task.retry_count, task.next_retry_at)
+        combined_display = f"{retry_summary}\n\n{retry_history}"
+
+        properties["Error Log"] = {"rich_text": [{"text": {"content": combined_display}}]}
+    # Terminal failures (retry_count > 0 but next_retry_at=None) don't get Error Log
+    # This filters them OUT of "Retrying Tasks" view (Story 6.9, View 4)
+
+    # Add checkpoint progress if available (Story 6.3, Task 9)
+    # Display as "Video: 10/18 clips ✓" in Notion Progress field
+    # This shows users which sub-steps completed before failure, helping them
+    # understand resume-from-failure behavior
+    checkpoint_progress = format_checkpoint_progress(
+        getattr(task, "step_metadata", None), task.status
+    )
+    if checkpoint_progress:
+        properties["Progress"] = {"rich_text": [{"text": {"content": checkpoint_progress}}]}
 
     # Update Notion page properties
     try:
@@ -728,6 +1123,93 @@ async def sync_notion_queued_to_database(
         )
 
 
+async def push_error_payload_to_notion(
+    task_id: uuid.UUID,
+    error_payload: ErrorPayload,
+    notion_client: NotionClient,
+) -> None:
+    """Push rich ErrorPayload to Notion for a specific task (Story 6.4 Task 5).
+
+    This function is called by pipeline_orchestrator when an error occurs, to immediately
+    sync rich error context to Notion without waiting for the regular sync loop.
+
+    Architecture:
+    - Short transaction to load task
+    - No DB connection held during Notion API call
+    - Fire-and-forget pattern (logs errors but doesn't fail pipeline)
+
+    Args:
+        task_id: UUID of task that failed
+        error_payload: Rich error context from retry_orchestrator
+        notion_client: NotionClient with rate limiting
+
+    Example:
+        >>> # In pipeline_orchestrator after error
+        >>> error_payload = await schedule_retry(task_id, exception, db, context)
+        >>> await push_error_payload_to_notion(task_id, error_payload, notion_client)
+    """
+    correlation_id = str(uuid.uuid4())
+
+    try:
+        # Step 1: Load task in short transaction
+        if async_session_factory is None:
+            raise RuntimeError("Database not configured")
+        async with async_session_factory() as session:
+            result = await session.execute(select(Task).where(Task.id == task_id))
+            task = result.scalar_one_or_none()
+
+            if not task:
+                log.error(
+                    "task_not_found_for_notion_sync",
+                    correlation_id=correlation_id,
+                    task_id=str(task_id),
+                )
+                return
+
+            # Extract minimal data for sync
+            task_sync = TaskSyncData(
+                id=task.id,
+                notion_page_id=task.notion_page_id,
+                status=task.status,
+                priority=task.priority,
+                title=task.title,
+                updated_at=task.updated_at,
+                retry_count=task.retry_count,
+                next_retry_at=task.next_retry_at,
+                max_retry_attempts=task.max_retry_attempts,
+                last_error_timestamp=task.last_error_timestamp,
+                completed_steps=task.completed_steps,
+                step_metadata=task.step_metadata,
+            )
+
+        # Step 2: Push to Notion with ErrorPayload (NO DB connection held)
+        await push_task_to_notion(task_sync, notion_client, error_payload)
+
+        log.info(
+            "error_payload_synced_to_notion",
+            correlation_id=correlation_id,
+            task_id=str(task_id),
+            notion_page_id=task_sync.notion_page_id,
+            error_category=error_payload.error_category,
+            api_service=error_payload.api_service,
+            failure_location=error_payload.failure_location.format()
+            if error_payload.failure_location
+            else None,
+        )
+
+    except (NotionAPIError, ValueError, KeyError, AttributeError, RuntimeError) as e:
+        # Fire-and-forget pattern: log error but don't fail pipeline
+        # Pipeline should continue even if Notion sync fails
+        log.error(
+            "error_payload_notion_sync_failed",
+            correlation_id=correlation_id,
+            task_id=str(task_id),
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
+
+
 async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
     """Push task status updates back to Notion (Database → Notion direction).
 
@@ -760,6 +1242,12 @@ async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
                 priority=task.priority,
                 title=task.title,
                 updated_at=task.updated_at,
+                retry_count=task.retry_count,
+                next_retry_at=task.next_retry_at,
+                max_retry_attempts=task.max_retry_attempts,  # Story 6.9, Task 4: Retry tracking
+                last_error_timestamp=task.last_error_timestamp,  # Story 6.9, Task 4: Retry tracking
+                completed_steps=task.completed_steps,  # Story 6.3, Task 9: Checkpoint fields
+                step_metadata=task.step_metadata,  # Story 6.3, Task 9: Checkpoint fields
             )
             for task in tasks
         ]

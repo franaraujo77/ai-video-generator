@@ -17,6 +17,7 @@ from tests.support.factories.image_factory import (
     create_ultrawide_image,
     save_test_image,
 )
+from tests.support.factories.task_factory import create_task
 
 __all__ = [
     # Channel factories
@@ -34,4 +35,6 @@ __all__ = [
     "create_ultrawide_image",
     "create_tall_image",
     "save_test_image",
+    # Task factories
+    "create_task",
 ]
