@@ -102,7 +102,7 @@ class TestVideoGenerationErrorContext:
                 # Verify classify_error was called with ErrorContext
                 mock_classify.assert_called_once()
                 call_args = mock_classify.call_args
-                exception, context = call_args[0]
+                _exception, context = call_args[0]
 
                 # Verify ErrorContext fields
                 assert context.step_name == "video_generation"
@@ -165,7 +165,7 @@ class TestAssetGenerationErrorContext:
                 # Verify classify_error was called with ErrorContext
                 mock_classify.assert_called_once()
                 call_args = mock_classify.call_args
-                exception, context = call_args[0]
+                _exception, context = call_args[0]
 
                 # Verify ErrorContext fields
                 assert context.step_name == "asset_generation"
@@ -227,7 +227,7 @@ class TestNarrationGenerationErrorContext:
                     # Verify classify_error was called with ErrorContext
                     mock_classify.assert_called_once()
                     call_args = mock_classify.call_args
-                    exception, context = call_args[0]
+                    _exception, context = call_args[0]
 
                     # Verify ErrorContext fields
                     assert context.step_name == "narration_generation"
@@ -287,7 +287,7 @@ class TestSFXGenerationErrorContext:
                     # Verify classify_error was called with ErrorContext
                     mock_classify.assert_called_once()
                     call_args = mock_classify.call_args
-                    exception, context = call_args[0]
+                    _exception, context = call_args[0]
 
                     # Verify ErrorContext fields
                     assert context.step_name == "sfx_generation"

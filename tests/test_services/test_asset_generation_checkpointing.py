@@ -372,6 +372,6 @@ async def test_partial_resume_assets_1_to_10_complete(async_session, tmp_path):
 
     stmt = select(TaskModel).where(TaskModel.id == task.id)
     result_task = (await async_session.execute(stmt)).scalar_one()
-    assert set(result_task.step_metadata["completed_assets"]) == set(
-        [f"asset_{i}" for i in range(1, 16)]
-    )
+    assert set(result_task.step_metadata["completed_assets"]) == {
+        f"asset_{i}" for i in range(1, 16)
+    }

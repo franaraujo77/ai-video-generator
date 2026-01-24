@@ -571,7 +571,10 @@ async def handle_manual_retry(
     Example:
         # User changes VIDEO_ERROR → QUEUED in Notion
         >>> await handle_manual_retry(
-        ...     task=task, old_status=TaskStatus.VIDEO_ERROR, new_status=TaskStatus.QUEUED, session=db
+        ...     task=task,
+        ...     old_status=TaskStatus.VIDEO_ERROR,
+        ...     new_status=TaskStatus.QUEUED,
+        ...     session=db,
         ... )
         # Result:
         # - retry_count reset to 0

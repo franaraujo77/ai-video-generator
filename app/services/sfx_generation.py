@@ -264,6 +264,8 @@ class SFXGenerationService:
                 If provided, only these clips will be generated
                 (partial regeneration for Story 5.5).
                 If None, all clips in manifest will be generated.
+            task_id: Optional task ID for checkpoint tracking (Story 6.3)
+            db: Optional database session for checkpoint persistence (Story 6.3)
 
         Returns:
             Summary dict with keys:
@@ -465,11 +467,13 @@ class SFXGenerationService:
 
                     generated += 1
 
-                    # Story 6.3 Task 5 Subtask 5.3: Update step_metadata with completed SFX clip
+                    # Story 6.3 Task 5 Subtask 5.3:
+                    # Update step_metadata with completed SFX clip
                     if task_id and db:
                         # Lock to serialize checkpoint updates
                         async with checkpoint_lock:
-                            # Create new session for each checkpoint update to avoid concurrent commit conflicts
+                            # Create new session for each checkpoint update
+                            # to avoid concurrent commit conflicts
                             from uuid import UUID
 
                             from app.database import async_session_factory
@@ -480,7 +484,8 @@ class SFXGenerationService:
                                     Task, UUID(task_id) if isinstance(task_id, str) else task_id
                                 )
                                 if task_obj:
-                                    # Get current completed list (may have been updated by other clips)
+                                    # Get current completed list
+                                    # (may have been updated by other clips)
                                     current_completed = (
                                         task_obj.step_metadata.get("completed_sfx_clips", [])
                                         if task_obj.step_metadata

@@ -356,9 +356,9 @@ class TestErrorAnalysisStructure:
 
         for exception in test_cases:
             analysis = classify_error(exception)
-            assert (
-                0.0 <= analysis.confidence <= 1.0
-            ), f"Confidence out of range: {analysis.confidence}"
+            assert 0.0 <= analysis.confidence <= 1.0, (
+                f"Confidence out of range: {analysis.confidence}"
+            )
 
 
 class TestErrorClassifierRobustness:

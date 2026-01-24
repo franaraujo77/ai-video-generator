@@ -97,7 +97,8 @@ def calculate_next_retry_time(
 
     # Check if attempt index out of range for backoff schedule
     # Convert retry_attempt (1-based) to array index (0-based)
-    # Example: retry_attempt=1 (first retry) → schedule_index=0 → RETRY_BACKOFF_SCHEDULE[0] = 1 minute
+    # Example: retry_attempt=1 (first retry) → schedule_index=0
+    # → RETRY_BACKOFF_SCHEDULE[0] = 1 minute
     schedule_index = retry_attempt - 1
     if schedule_index < 0 or schedule_index >= len(RETRY_BACKOFF_SCHEDULE):
         log.warning(
@@ -175,7 +176,8 @@ def get_retry_status_message(
     # Retry time has arrived or passed - worker is processing the retry now
     if next_retry_at <= now:
         # Show next attempt number (retry_attempt counts completed attempts)
-        # Example: retry_attempt=1 means "1 retry scheduled", now processing attempt 2 (original + 1 retry)
+        # Example: retry_attempt=1 means "1 retry scheduled"
+        # Now processing attempt 2 (original + 1 retry)
         return f"Attempt {retry_attempt + 1}/{max_attempts} - Retry in progress..."
 
     # Calculate countdown to next retry

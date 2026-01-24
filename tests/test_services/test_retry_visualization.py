@@ -53,9 +53,9 @@ class TestRetryVisualizationDataFormat:
 
         assert "Error Log" in properties
         error_log_content = properties["Error Log"]["rich_text"][0]["text"]["content"]
-        assert (
-            "Attempt" in error_log_content
-        ), "Error Log must contain 'Attempt' keyword for view filtering"
+        assert "Attempt" in error_log_content, (
+            "Error Log must contain 'Attempt' keyword for view filtering"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_status_shows_attempt_count(self):
@@ -88,9 +88,9 @@ class TestRetryVisualizationDataFormat:
         properties = call_args[0][1]
         error_log_content = properties["Error Log"]["rich_text"][0]["text"]["content"]
 
-        assert (
-            "Attempt 3/5" in error_log_content
-        ), "Must show attempt count for grouping in Notion views"
+        assert "Attempt 3/5" in error_log_content, (
+            "Must show attempt count for grouping in Notion views"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_status_shows_countdown_time(self):
@@ -123,9 +123,9 @@ class TestRetryVisualizationDataFormat:
         error_log_content = properties["Error Log"]["rich_text"][0]["text"]["content"]
 
         # Must contain time information for sorting/filtering
-        assert any(
-            unit in error_log_content for unit in ["min", "hr", "sec"]
-        ), "Must show countdown time for sorting in Notion views"
+        assert any(unit in error_log_content for unit in ["min", "hr", "sec"]), (
+            "Must show countdown time for sorting in Notion views"
+        )
 
     @pytest.mark.asyncio
     async def test_terminal_failure_distinguishable(self):
@@ -158,9 +158,9 @@ class TestRetryVisualizationDataFormat:
 
         # Terminal failures without next_retry_at don't get Error Log retry display
         # They should be filtered OUT of "Retrying Tasks" view
-        assert (
-            "Error Log" not in properties or properties.get("Error Log") is None
-        ), "Terminal failures should not show in 'Retrying Tasks' view filter"
+        assert "Error Log" not in properties or properties.get("Error Log") is None, (
+            "Terminal failures should not show in 'Retrying Tasks' view filter"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_states_for_color_coding(self):
@@ -218,9 +218,9 @@ class TestRetryVisualizationDataFormat:
             properties = call_args[0][1]
             error_log_content = properties["Error Log"]["rich_text"][0]["text"]["content"]
 
-            assert (
-                case["expected_attempt"] in error_log_content
-            ), f"{case['name']}: Must show {case['expected_attempt']} for color coding"
+            assert case["expected_attempt"] in error_log_content, (
+                f"{case['name']}: Must show {case['expected_attempt']} for color coding"
+            )
 
     @pytest.mark.asyncio
     async def test_view_filter_simulation(self):

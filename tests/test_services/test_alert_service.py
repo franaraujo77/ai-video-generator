@@ -121,7 +121,7 @@ async def test_send_discord_alert_severity_colors(mock_httpx_client):
     assert payload["embeds"][0]["color"] == 0xF39C12  # Orange
     assert "⚠️" in payload["embeds"][0]["title"]
 
-    # Test INFO (Blue, ℹ️)
+    # Test INFO (Blue, blue circle emoji)
     await send_discord_alert(
         alert_type="worker_down",
         severity="INFO",
@@ -132,7 +132,7 @@ async def test_send_discord_alert_severity_colors(mock_httpx_client):
     )
     payload = mock_httpx_client.post.call_args.kwargs["json"]
     assert payload["embeds"][0]["color"] == 0x3498DB  # Blue
-    assert "ℹ️" in payload["embeds"][0]["title"]
+    assert "🔵" in payload["embeds"][0]["title"]
 
 
 @pytest.mark.asyncio

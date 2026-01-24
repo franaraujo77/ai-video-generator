@@ -81,12 +81,9 @@ def should_retry_task(error_analysis: ErrorAnalysis, retry_count: int) -> bool:
     if retry_count >= MAX_RETRY_ATTEMPTS:
         return False  # No more retries allowed
 
-    # Permanent errors never retry
-    if error_analysis.category == ErrorCategory.PERMANENT:
-        return False  # Fail fast on auth errors, bad requests, etc.
-
+    # Permanent errors never retry (fail fast on auth errors, bad requests, etc.)
     # Retry transient and unknown errors (conservative approach)
-    return True
+    return error_analysis.category != ErrorCategory.PERMANENT
 
 
 def calculate_next_retry(retry_count: int) -> datetime:

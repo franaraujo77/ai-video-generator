@@ -317,9 +317,9 @@ class TestNotionSyncRetryHistory:
         call_args = notion_client.update_page_properties.call_args
         properties = call_args[0][1]
 
-        assert (
-            "Error Log" not in properties or properties.get("Error Log") is None
-        ), "Terminal failures without ErrorPayload should not have Error Log (filtered from 'Retrying Tasks' view)"
+        assert "Error Log" not in properties or properties.get("Error Log") is None, (
+            "Terminal failures without ErrorPayload should not have Error Log (filtered from 'Retrying Tasks' view)"
+        )
 
     @pytest.mark.asyncio
     async def test_notion_sync_no_retry_history_for_fresh_tasks(self):

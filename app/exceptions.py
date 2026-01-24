@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from app.models import TaskStatus
 
 
-
 class TransientAPIError(Exception):
     """Base class for transient API errors that should be retried.
 
@@ -88,7 +87,6 @@ class ValidationError(PermanentAPIError):
     """
 
     pass
-
 
 
 class ConfigurationError(Exception):

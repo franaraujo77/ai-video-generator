@@ -1148,9 +1148,6 @@ class PipelineOrchestrator:
                     )
                     return
 
-                # FIXED (Code Review Issue #9): Use task_id as correlation ID
-                correlation_id = str(task.id)
-
                 if not task.notion_page_id:
                     self.log.warning(
                         "task_missing_notion_page_id",
