@@ -21,7 +21,7 @@ from uuid import UUID
 log = structlog.get_logger()
 
 AlertSeverity = Literal["INFO", "WARNING", "CRITICAL"]
-AlertType = Literal["terminal_failure", "quota_warning", "quota_exhausted", "worker_down"]
+AlertType = Literal["terminal_failure", "quota_warning", "quota_exhausted", "worker_down", "low_recovery_rate"]
 
 # In-memory alert batching tracker
 _alert_history: dict[tuple[str, str], datetime] = {}

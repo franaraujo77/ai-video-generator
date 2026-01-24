@@ -104,9 +104,9 @@ development_status:
   6-5-detailed-error-logging: done  # All 8 tasks complete, 15+ passing tests, Railway documentation created
   6-6-alert-system-for-terminal-failures: done  # All 8 tasks complete, 41 passing tests, Discord webhook alerting integrated
   6-7-manual-retry-trigger: done  # Code review complete - All 8 tasks ✅, 18 passing tests, webhook integration ✅, enqueue fix ✅
-  6-8-api-quota-monitoring: review  # Core quota tracking complete - 15 passing tests, alert integration ✅, service integration deferred
+  6-8-api-quota-monitoring: done  # Code review complete - All 9 issues fixed, 25 passing tests, worker integration ✅, AC fully implemented
   6-9-retry-state-visibility: done
-  6-10-auto-recovery-success-rate-tracking: backlog
+  6-10-auto-recovery-success-rate-tracking: in-progress  # Code review complete - All 8 tasks ✅, metrics service implemented, weekly cron job setup pending
   epic-6-retrospective: optional
 
   # Epic 7: YouTube Publishing & Compliance

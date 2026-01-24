@@ -39,6 +39,7 @@ from pgqueuer.models import Job
 from app.database import AsyncSessionLocal
 from app.models import Task, TaskStatus
 from app.services.quota_manager import check_youtube_quota, get_required_api
+from app.services.retry_orchestrator import mark_task_recovered
 from app.utils.logging import get_logger
 from app.worker import worker_state
 
@@ -109,6 +110,39 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 channel_id=task.channel_id,
                 pgqueuer_job_id=str(job.id),
             )
+
+            # Step 1.4: Retry eligibility check (Story 6.9, Task 5)
+            # Don't claim tasks that are waiting for their retry time
+            from app.services.retry_state_service import should_retry
+            from app.services.error_logger import log_retry_started
+
+            # Check if task has retry_count > 0 (indicating it's in retry state)
+            if task.retry_count > 0:
+                # Use should_retry to check eligibility (retry time must have arrived)
+                if not should_retry(
+                    retry_attempt=task.retry_count,
+                    next_retry_at=task.next_retry_at,
+                    max_attempts=task.max_retry_attempts,
+                ):
+                    # Task is waiting for retry - release back to queue
+                    log.info(
+                        "task_retry_not_ready_releasing",
+                        task_id=task_id,
+                        retry_count=task.retry_count,
+                        next_retry_at=task.next_retry_at.isoformat() if task.next_retry_at else None,
+                        max_retry_attempts=task.max_retry_attempts,
+                    )
+                    # Return early - don't process this task yet
+                    return
+
+                # Retry time has arrived - log retry started (Story 6.9, Task 7)
+                await log_retry_started(
+                    task_id=task.id,
+                    correlation_id=task.id,  # Use task.id as correlation_id
+                    channel_id=task.channel_id,
+                    retry_attempt=task.retry_count,
+                    step_name=task.status.value,  # Current step being retried
+                )
 
             # Step 1.5: Rate limit awareness - double-check quota (Story 4.5)
             # Determine which API this task requires based on its status
@@ -271,8 +305,12 @@ def register_entrypoints(pgq: PgQueuer) -> None:
             if not task:
                 raise ValueError(f"Task disappeared during processing: {task_id}")
 
-            # Mark as published (terminal success state) for placeholder testing
             task.status = TaskStatus.PUBLISHED
+
+            # Story 6.10: Mark auto-recovery if task recovered from error via retry
+            if task.retry_count > 0:
+                await mark_task_recovered(task_id, db)
+
             await db.commit()
 
             # Log completion with priority context (Story 4.3)
@@ -281,6 +319,8 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 worker_id=worker_id,
                 task_id=task_id,
                 priority=task.priority,  # Story 4.3: Include priority in completion log
+                auto_recovered=task.auto_recovered,  # Story 6.10: Log recovery status
+                retry_count=task.retry_count,
             )
 
 
