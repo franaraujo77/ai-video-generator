@@ -596,11 +596,12 @@ async def process_notion_webhook_event(payload: NotionWebhookPayload) -> None:
 
     # Handle manual retry transitions - Story 6.7: Manual Retry Trigger
     # Check if this is a manual retry transition (error → retry status)
-    await _handle_manual_retry_detection(
-        page_id=payload.page_id,
-        current_notion_status=status,
-        correlation_id=correlation_id,
-    )
+    if status:
+        await _handle_manual_retry_detection(
+            page_id=payload.page_id,
+            current_notion_status=status,
+            correlation_id=correlation_id,
+        )
 
     # Status not relevant to task lifecycle
     log.info(

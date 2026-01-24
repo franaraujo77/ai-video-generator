@@ -432,7 +432,7 @@ def extract_partial_progress_for_error(task: Task, step_name: str) -> dict[str, 
         - Story 6.4 Task 5: Notion sync displays partial progress
         - Story 6.3: Checkpoint service design
     """
-    partial_progress = {}
+    partial_progress: dict[str, Any] = {}
 
     if not task.step_metadata:
         return partial_progress

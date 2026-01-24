@@ -107,6 +107,12 @@ async def send_discord_alert(
             "WARNING": "⚠️",
             "CRITICAL": "🔴",
         }
+
+        # Build footer text with optional correlation ID
+        footer_text = f"Alert Type: {alert_type} | {datetime.now(timezone.utc).isoformat()}"
+        if correlation_id:
+            footer_text += f" | Correlation ID: {correlation_id}"
+
         embed = {
             "title": f"{severity_emoji[severity]} {title}",
             "description": description,
@@ -114,13 +120,9 @@ async def send_discord_alert(
             "fields": [
                 {"name": key, "value": value, "inline": True} for key, value in fields.items()
             ],
-            "footer": {"text": f"Alert Type: {alert_type} | {datetime.now(timezone.utc).isoformat()}"},
+            "footer": {"text": footer_text},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-
-        # Add correlation ID to footer if provided
-        if correlation_id:
-            embed["footer"]["text"] += f" | Correlation ID: {correlation_id}"
 
         payload = {"embeds": [embed], "username": "AI Video Generator Alerts"}
 

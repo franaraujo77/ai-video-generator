@@ -75,6 +75,9 @@ async def record_youtube_operation(
     if operation not in YOUTUBE_OPERATION_COSTS:
         raise ValueError(f"Unknown YouTube operation: {operation}")
 
+    if db is None:
+        raise ValueError("Database session required for quota tracking")
+
     cost = YOUTUBE_OPERATION_COSTS[operation]
     today = datetime.now(timezone.utc).date()
 
@@ -324,6 +327,9 @@ async def record_gemini_operation(
         - Story 6.8: Gemini quota monitoring (FR34, NFR-I4)
         - Story 3.3: Asset generation records quota usage
     """
+    if db is None:
+        raise ValueError("Database session required for quota tracking")
+
     today = datetime.now(timezone.utc).date()
 
     # Atomic upsert: INSERT ON CONFLICT UPDATE
