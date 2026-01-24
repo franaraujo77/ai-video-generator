@@ -71,8 +71,10 @@ async def test_skip_completed_clips_from_checkpoint(async_session, tmp_path):
         mock_upload.return_value = "https://catbox.moe/fake.png"
 
         with patch("app.services.video_generation.run_cli_script", new_callable=AsyncMock):
-            # Call generate_videos with resume=True
-            result = await service.generate_videos(manifest, resume=True, max_concurrent=2)
+            # Call generate_videos with resume=True and checkpoint support
+            result = await service.generate_videos(
+                manifest, resume=True, max_concurrent=2, task_id=str(task.id), db=async_session
+            )
 
     # Verify: clips 1-5 skipped, clip 6 generated
     assert result["skipped"] == 5
@@ -143,8 +145,10 @@ async def test_update_checkpoint_after_clip_generation(async_session, tmp_path):
 
             mock_cli.side_effect = create_fake_video
 
-            # Call generate_videos
-            result = await service.generate_videos(manifest, resume=True, max_concurrent=2)
+            # Call generate_videos with checkpoint support
+            result = await service.generate_videos(
+                manifest, resume=True, max_concurrent=2, task_id=str(task.id), db=async_session
+            )
 
     # Verify all 3 clips generated
     assert result["generated"] == 3
@@ -219,8 +223,10 @@ async def test_safety_check_regenerate_if_file_missing(async_session, tmp_path):
 
             mock_cli.side_effect = create_fake_video
 
-            # Call generate_videos
-            result = await service.generate_videos(manifest, resume=True, max_concurrent=2)
+            # Call generate_videos with checkpoint support
+            result = await service.generate_videos(
+                manifest, resume=True, max_concurrent=2, task_id=str(task.id), db=async_session
+            )
 
     # Verify: clip 1 regenerated (not skipped) because file was missing
     assert result["generated"] == 1
@@ -293,8 +299,10 @@ async def test_partial_resume_clips_1_to_10_complete(async_session, tmp_path):
 
             mock_cli.side_effect = create_fake_video
 
-            # Call generate_videos
-            result = await service.generate_videos(manifest, resume=True, max_concurrent=5)
+            # Call generate_videos with checkpoint support
+            result = await service.generate_videos(
+                manifest, resume=True, max_concurrent=5, task_id=str(task.id), db=async_session
+            )
 
     # Verify: clips 1-10 skipped, clips 11-18 generated
     assert result["skipped"] == 10

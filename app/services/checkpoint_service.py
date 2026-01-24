@@ -168,6 +168,11 @@ async def update_step_metadata(
     step_metadata[metadata_key] = metadata_value
     task.step_metadata = step_metadata
 
+    # Mark as modified for SQLAlchemy to detect JSONB changes
+    from sqlalchemy.orm.attributes import flag_modified
+
+    flag_modified(task, "step_metadata")
+
     await db.commit()
 
     logger.info(

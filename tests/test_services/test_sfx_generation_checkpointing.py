@@ -71,24 +71,17 @@ async def test_skip_completed_sfx_clips_from_checkpoint(async_session, tmp_path)
         output_file.write_bytes(b"generated audio")
         return {"success": True, "output_path": str(output_file)}
 
-    # Mock async_session_factory for checkpoint service
-    mock_db = AsyncMock()
-    mock_session_ctx = AsyncMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_session_ctx.__aexit__ = AsyncMock()
-
     with patch("app.services.sfx_generation.run_cli_script", new_callable=AsyncMock) as mock_cli:
-        with patch("app.database.async_session_factory", return_value=mock_session_ctx):
-            mock_cli.side_effect = create_sfx_file
+        mock_cli.side_effect = create_sfx_file
 
-            # Call generate_sfx with resume=True
-            result = await service.generate_sfx(
-                manifest,
-                resume=True,
-                max_concurrent=2,
-                task_id=str(task.id),
-                db=async_session,
-            )
+        # Call generate_sfx with resume=True
+        result = await service.generate_sfx(
+            manifest,
+            resume=True,
+            max_concurrent=2,
+            task_id=str(task.id),
+            db=async_session,
+        )
 
     # Verify only clip 6 was generated (clips 1-5 skipped from checkpoint)
     assert result["skipped"] == 5
@@ -154,24 +147,17 @@ async def test_update_checkpoint_after_sfx_clip_generation(async_session, tmp_pa
         output_path = Path(arg_list[output_index])
         output_path.write_bytes(b"fake audio")
 
-    # Mock async_session_factory for checkpoint service
-    mock_db = AsyncMock()
-    mock_session_ctx = AsyncMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_session_ctx.__aexit__ = AsyncMock()
-
     with patch("app.services.sfx_generation.run_cli_script", new_callable=AsyncMock) as mock_cli:
-        with patch("app.database.async_session_factory", return_value=mock_session_ctx):
-            mock_cli.side_effect = mock_cli_side_effect
+        mock_cli.side_effect = mock_cli_side_effect
 
-            # Generate SFX clips
-            result = await service.generate_sfx(
-                manifest,
-                resume=True,
-                max_concurrent=1,  # Sequential for deterministic testing
-                task_id=str(task.id),
-                db=async_session,
-            )
+        # Generate SFX clips
+        result = await service.generate_sfx(
+            manifest,
+            resume=True,
+            max_concurrent=1,  # Sequential for deterministic testing
+            task_id=str(task.id),
+            db=async_session,
+        )
 
     # Verify both clips generated
     assert result["generated"] == 2
@@ -228,22 +214,15 @@ async def test_safety_check_regenerate_if_sfx_file_missing(async_session, tmp_pa
         output.write_bytes(b"regenerated audio")
         return {"success": True, "output_path": str(output)}
 
-    # Mock async_session_factory for checkpoint service
-    mock_db = AsyncMock()
-    mock_session_ctx = AsyncMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_session_ctx.__aexit__ = AsyncMock()
-
     with patch("app.services.sfx_generation.run_cli_script", new_callable=AsyncMock) as mock_cli:
-        with patch("app.database.async_session_factory", return_value=mock_session_ctx):
-            mock_cli.side_effect = mock_cli_side_effect
+        mock_cli.side_effect = mock_cli_side_effect
 
-            result = await service.generate_sfx(
-                manifest,
-                resume=True,
-                task_id=str(task.id),
-                db=async_session,
-            )
+        result = await service.generate_sfx(
+            manifest,
+            resume=True,
+            task_id=str(task.id),
+            db=async_session,
+        )
 
     # Verify clip was regenerated despite checkpoint (file was missing)
     assert result["generated"] == 1
@@ -309,23 +288,16 @@ async def test_partial_resume_sfx_clips_1_to_10_complete(async_session, tmp_path
         output.write_bytes(b"new audio")
         return {"success": True, "output_path": str(output)}
 
-    # Mock async_session_factory for checkpoint service
-    mock_db = AsyncMock()
-    mock_session_ctx = AsyncMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_session_ctx.__aexit__ = AsyncMock()
-
     with patch("app.services.sfx_generation.run_cli_script", new_callable=AsyncMock) as mock_cli:
-        with patch("app.database.async_session_factory", return_value=mock_session_ctx):
-            mock_cli.side_effect = mock_cli_side_effect
+        mock_cli.side_effect = mock_cli_side_effect
 
-            result = await service.generate_sfx(
-                manifest,
-                resume=True,
-                max_concurrent=1,
-                task_id=str(task.id),
-                db=async_session,
-            )
+        result = await service.generate_sfx(
+            manifest,
+            resume=True,
+            max_concurrent=1,
+            task_id=str(task.id),
+            db=async_session,
+        )
 
     # Verify only clips 11-12 generated (1-10 skipped from checkpoint)
     assert result["skipped"] == 10
@@ -405,23 +377,16 @@ async def test_narration_complete_sfx_fails_retry_only_sfx(async_session, tmp_pa
         output.write_bytes(b"new sfx")
         return {"success": True, "output_path": str(output)}
 
-    # Mock async_session_factory for checkpoint service
-    mock_db = AsyncMock()
-    mock_session_ctx = AsyncMock()
-    mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_db)
-    mock_session_ctx.__aexit__ = AsyncMock()
-
     with patch("app.services.sfx_generation.run_cli_script", new_callable=AsyncMock) as mock_cli:
-        with patch("app.database.async_session_factory", return_value=mock_session_ctx):
-            mock_cli.side_effect = mock_cli_side_effect
+        mock_cli.side_effect = mock_cli_side_effect
 
-            result = await service.generate_sfx(
-                manifest,
-                resume=True,
-                max_concurrent=1,
-                task_id=str(task.id),
-                db=async_session,
-            )
+        result = await service.generate_sfx(
+            manifest,
+            resume=True,
+            max_concurrent=1,
+            task_id=str(task.id),
+            db=async_session,
+        )
 
     # Verify only clips 4-6 generated (1-3 skipped, narration not regenerated)
     assert result["skipped"] == 3

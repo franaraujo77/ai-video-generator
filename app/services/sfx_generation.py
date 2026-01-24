@@ -472,47 +472,45 @@ class SFXGenerationService:
                     if task_id and db:
                         # Lock to serialize checkpoint updates
                         async with checkpoint_lock:
-                            # Create new session for each checkpoint update
-                            # to avoid concurrent commit conflicts
                             from uuid import UUID
 
-                            from app.database import async_session_factory
                             from app.models import Task
 
-                            async with async_session_factory() as checkpoint_db:  # type: ignore[misc]
-                                task_obj = await checkpoint_db.get(
-                                    Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                            # Use passed db session for checkpoint updates
+                            # (simpler than creating new session, works for tests and production)
+                            task_obj = await db.get(
+                                Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                            )
+                            if task_obj:
+                                # Get current completed list
+                                # (may have been updated by other clips)
+                                current_completed = (
+                                    task_obj.step_metadata.get("completed_sfx_clips", [])
+                                    if task_obj.step_metadata
+                                    else []
                                 )
-                                if task_obj:
-                                    # Get current completed list
-                                    # (may have been updated by other clips)
-                                    current_completed = (
-                                        task_obj.step_metadata.get("completed_sfx_clips", [])
-                                        if task_obj.step_metadata
-                                        else []
+                                # Add this clip if not already in list (deduplication)
+                                if clip.clip_number not in current_completed:
+                                    current_completed.append(clip.clip_number)
+                                    # Update using checkpoint service for transaction safety
+                                    from app.services.checkpoint_service import (
+                                        update_step_metadata,
                                     )
-                                    # Add this clip if not already in list (deduplication)
-                                    if clip.clip_number not in current_completed:
-                                        current_completed.append(clip.clip_number)
-                                        # Update using checkpoint service for transaction safety
-                                        from app.services.checkpoint_service import (
-                                            update_step_metadata,
-                                        )
 
-                                        await update_step_metadata(
-                                            task_id,
-                                            "completed_sfx_clips",
-                                            current_completed,
-                                            checkpoint_db,
-                                        )
-                                        # Sync local list with DB
-                                        completed_sfx_clips = current_completed
-                                        self.log.info(
-                                            "sfx_clip_checkpoint_saved",
-                                            task_id=task_id,
-                                            clip_number=clip.clip_number,
-                                            total_completed=len(current_completed),
-                                        )
+                                    await update_step_metadata(
+                                        task_id,
+                                        "completed_sfx_clips",
+                                        current_completed,
+                                        db,
+                                    )
+                                    # Sync local list with DB
+                                    completed_sfx_clips = current_completed
+                                    self.log.info(
+                                        "sfx_clip_checkpoint_saved",
+                                        task_id=task_id,
+                                        clip_number=clip.clip_number,
+                                        total_completed=len(current_completed),
+                                    )
 
                     return True
 
