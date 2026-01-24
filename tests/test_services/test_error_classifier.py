@@ -330,7 +330,7 @@ class TestErrorAnalysisStructure:
 
         # Verify field types
         assert isinstance(analysis.category, ErrorCategory)
-        assert isinstance(analysis.http_status_code, (int, type(None)))
+        assert analysis.http_status_code is None or isinstance(analysis.http_status_code, int)
         assert isinstance(analysis.error_type, str)
         assert isinstance(analysis.error_message, str)
         assert isinstance(analysis.retry_recommended, bool)

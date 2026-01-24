@@ -196,7 +196,7 @@ async def _handle_approval_status_change(
         return
 
     try:
-        TaskStatus(internal_status_str)  # Validate status string
+        internal_status = TaskStatus(internal_status_str)  # Validate and create TaskStatus
     except ValueError:
         log.error(
             "invalid_internal_status",
@@ -292,7 +292,7 @@ async def _handle_rejection_status_change(
         return
 
     try:
-        TaskStatus(internal_status_str)  # Validate status string
+        internal_status = TaskStatus(internal_status_str)  # Validate and create TaskStatus
     except ValueError:
         log.error(
             "invalid_internal_status",

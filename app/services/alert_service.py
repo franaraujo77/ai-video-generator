@@ -11,7 +11,7 @@ Integration:
 """
 
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -47,7 +47,7 @@ def should_send_alert(alert_type: str, channel_id: str, force: bool = False) -> 
 
     batch_window = int(os.getenv("ALERT_BATCH_WINDOW_SECONDS", "60"))
     key = (alert_type, channel_id)
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
 
     if key in _alert_history:
         elapsed = (now - _alert_history[key]).total_seconds()
@@ -114,8 +114,8 @@ async def send_discord_alert(
             "fields": [
                 {"name": key, "value": value, "inline": True} for key, value in fields.items()
             ],
-            "footer": {"text": f"Alert Type: {alert_type} | {datetime.now(UTC).isoformat()}"},
-            "timestamp": datetime.now(UTC).isoformat(),
+            "footer": {"text": f"Alert Type: {alert_type} | {datetime.now(timezone.utc).isoformat()}"},
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Add correlation ID to footer if provided

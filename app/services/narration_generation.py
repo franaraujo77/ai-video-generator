@@ -516,7 +516,7 @@ class NarrationGenerationService:
                             # so use provided db session
                             if async_session_factory is not None and db is None:
                                 # Production: Create new session (short transaction pattern)
-                                async with async_session_factory() as checkpoint_db:  # type: ignore[misc]
+                                async with async_session_factory() as checkpoint_db:
                                     task_obj = await checkpoint_db.get(
                                         Task, UUID(task_id) if isinstance(task_id, str) else task_id
                                     )

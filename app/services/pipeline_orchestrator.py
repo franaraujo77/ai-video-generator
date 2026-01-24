@@ -814,7 +814,7 @@ class PipelineOrchestrator:
                                     notion_page_id=task_notion_page_id,
                                     narration_files=narration_files,
                                     sfx_files=[],  # Only narration at this step
-                                    correlation_id=UUID(self.task_id),
+                                    correlation_id=self.task_id,
                                 )
                                 self.log.info(
                                     "narration_notion_population_complete",
@@ -956,7 +956,7 @@ class PipelineOrchestrator:
                                     notion_page_id=task_notion_page_id,
                                     narration_files=[],  # Only SFX at this step
                                     sfx_files=sfx_files,
-                                    correlation_id=UUID(self.task_id),
+                                    correlation_id=self.task_id,
                                 )
                                 self.log.info(
                                     "sfx_notion_population_complete",

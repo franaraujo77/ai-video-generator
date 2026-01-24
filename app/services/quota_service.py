@@ -52,7 +52,7 @@ async def record_youtube_operation(
     operation: str,
     task_id: UUID | None = None,
     video_id: str | None = None,
-    db: AsyncSession = None,
+    db: AsyncSession | None = None,
 ) -> None:
     """Record YouTube API operation quota usage atomically.
 
@@ -308,7 +308,7 @@ async def record_gemini_operation(
     channel_id: UUID,
     task_id: UUID | None = None,
     asset_name: str | None = None,
-    db: AsyncSession = None,
+    db: AsyncSession | None = None,
 ) -> None:
     """Record Gemini API operation (image generation request).
 

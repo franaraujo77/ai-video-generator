@@ -99,9 +99,7 @@ def _get_configuration_recommendation(api_service: str) -> str:
         "YouTube": "Verify YouTube OAuth tokens are valid (re-run setup_channel_oauth.py)",
         "Notion": "Check Notion API token and ensure workspace access is granted",
     }
-    return recommendations.get(
-        api_service, f"Check API credentials for {api_service}"
-    )
+    return recommendations.get(api_service, f"Check API credentials for {api_service}")
 
 
 def _get_transient_recommendation(error_analysis: ErrorAnalysis, api_service: str) -> str:

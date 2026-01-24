@@ -50,6 +50,7 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.error_classifier import ErrorContext, classify_error
 from app.utils.cli_wrapper import CLIScriptError, run_cli_script

@@ -147,7 +147,7 @@ class ErrorPayload(BaseModel):
     next_retry_at: datetime | None = Field(
         default=None, description="When next retry scheduled (None if terminal)"
     )
-    partial_progress: dict = Field(
+    partial_progress: dict[str, Any] = Field(
         default_factory=dict, description="Checkpoint data (completed clips/assets)"
     )
     recommendation: str | None = Field(default=None, description="Actionable next step for user")
@@ -207,7 +207,7 @@ class ErrorPayload(BaseModel):
 
         return "\n".join(lines)
 
-    def _format_progress(self, progress: dict) -> str:
+    def _format_progress(self, progress: dict[str, Any]) -> str:
         """Format checkpoint progress as human-readable string.
 
         Args:

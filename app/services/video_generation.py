@@ -79,7 +79,10 @@ def _is_retriable_http_error(exception: BaseException) -> bool:
         - 403 Forbidden (permission denied, retrying won't help)
     """
     # AC7: Do NOT retry 401 (invalid API key) or 403 (forbidden)
-    if isinstance(exception, httpx.HTTPStatusError) and exception.response.status_code in (401, 403):
+    if isinstance(exception, httpx.HTTPStatusError) and exception.response.status_code in (
+        401,
+        403,
+    ):
         return False
     # Retry all other HTTP errors and timeouts
     return isinstance(exception, httpx.HTTPError | asyncio.TimeoutError)

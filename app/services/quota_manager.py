@@ -216,12 +216,12 @@ async def record_youtube_quota(channel_id: UUID, operation: str, db: AsyncSessio
     elif percentage >= YOUTUBE_QUOTA_WARNING_THRESHOLD and _should_send_alert(
         channel_id, "WARNING"
     ):
-            await send_quota_alert(
-                channel_id=str(channel_id),  # Use UUID string as channel identifier
-                current_usage=quota.units_used,
-                daily_limit=quota.daily_limit,
-                is_exhausted=False,
-            )
+        await send_quota_alert(
+            channel_id=str(channel_id),  # Use UUID string as channel identifier
+            current_usage=quota.units_used,
+            daily_limit=quota.daily_limit,
+            is_exhausted=False,
+        )
 
 
 def get_required_api(status: str) -> str | None:

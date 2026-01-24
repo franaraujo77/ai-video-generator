@@ -41,7 +41,6 @@ Related:
     - Architecture: Short transaction pattern (never hold DB during CLI scripts)
 """
 
-import logging
 from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
@@ -49,8 +48,9 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task
+from app.utils.logging import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def save_step_checkpoint(

@@ -299,7 +299,7 @@ async def test_checkpoint_data_properly_formatted(async_session):
                 assert "duration_seconds" in checkpoint_data
                 assert "partial_progress" in checkpoint_data
                 assert isinstance(checkpoint_data["completed"], bool)
-                assert isinstance(checkpoint_data["duration_seconds"], (int, float))
+                assert isinstance(checkpoint_data["duration_seconds"], int | float)
                 assert isinstance(checkpoint_data["partial_progress"], dict)
                 assert checkpoint_data["partial_progress"]["generated"] == 16
 

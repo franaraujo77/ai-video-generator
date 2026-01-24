@@ -308,7 +308,7 @@ class WorkerState:
 
 
 # Global worker state instance
-worker_state = WorkerState()
+worker_state: WorkerState = WorkerState()
 
 
 def signal_handler(signum: int, frame: object) -> None:

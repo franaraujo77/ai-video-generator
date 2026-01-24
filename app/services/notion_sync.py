@@ -571,8 +571,7 @@ async def handle_manual_retry(
     Example:
         # User changes VIDEO_ERROR → QUEUED in Notion
         >>> await handle_manual_retry(
-        ...     task=task, old_status=TaskStatus.VIDEO_ERROR,
-        ...     new_status=TaskStatus.QUEUED, session=db
+        ...     task=task, old_status=TaskStatus.VIDEO_ERROR, new_status=TaskStatus.QUEUED, session=db
         ... )
         # Result:
         # - retry_count reset to 0
@@ -944,7 +943,7 @@ async def push_task_to_notion(
     notion_priority = priority_map[task.priority]
 
     # Build properties dict with Status, Priority, and Updated timestamp
-    properties = {
+    properties: dict[str, Any] = {
         "Status": {"select": {"name": notion_status}},
         "Priority": {"select": {"name": notion_priority}},
     }
