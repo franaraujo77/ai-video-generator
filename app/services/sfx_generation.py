@@ -597,6 +597,7 @@ class SFXGenerationService:
             "generated": generated,
             "skipped": skipped,
             "failed": failed,
+            "total": generated + skipped + failed,
             "total_cost_usd": total_cost,
         }
 

@@ -157,6 +157,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
     project_id = None
     topic = None
     story_direction = None
+    failed_clip_numbers = None  # Story 5.4 AC3: Partial regeneration
 
     # Step 1: Claim task (short transaction)
     async with async_session_factory() as db, db.begin():
@@ -174,6 +175,10 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
         topic = task.topic
         story_direction = task.story_direction
 
+        # Story 5.4 AC3: Check for partial regeneration
+        if task.step_completion_metadata:
+            failed_clip_numbers = task.step_completion_metadata.get("failed_clip_numbers")
+
         # Claim task by updating status (composites_ready → generating_video)
         task.status = TaskStatus.GENERATING_VIDEO
         await db.commit()
@@ -183,6 +188,8 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             task_id=str(task_id),
             channel_id=channel_id_str,
             status="generating_video",
+            partial_regeneration=failed_clip_numbers is not None,
+            failed_clips=failed_clip_numbers,
         )
 
     # Step 2: Generate videos (OUTSIDE transaction - DB connection closed)
@@ -194,11 +201,26 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
         service = VideoGenerationService(channel_id_str, project_id)
         manifest = service.create_video_manifest(topic, story_direction)
 
+        # Story 5.4 AC3: Filter manifest for partial regeneration
+        if failed_clip_numbers:
+            original_count = len(manifest.clips)
+            manifest.clips = [
+                clip for clip in manifest.clips if clip.clip_number in failed_clip_numbers
+            ]
+            log.info(
+                "partial_regeneration_filtering",
+                task_id=str(task_id),
+                original_clips=original_count,
+                filtered_clips=len(manifest.clips),
+                failed_clip_numbers=failed_clip_numbers,
+            )
+
         log.info(
             "video_generation_start",
             task_id=str(task_id),
             clip_count=len(manifest.clips),
-            estimated_time_minutes=18 * 3.5,  # 18 clips x 3.5 min average
+            estimated_time_minutes=len(manifest.clips) * 3.5,
+            partial_regeneration=failed_clip_numbers is not None,
         )
 
         result = await service.generate_videos(
@@ -242,6 +264,18 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
 
             # Set status to VIDEO_READY
             task.status = TaskStatus.VIDEO_READY
+
+            # Story 5.4 AC3: Clear failed_clip_numbers after successful regeneration
+            if (
+                failed_clip_numbers
+                and task.step_completion_metadata
+                and "failed_clip_numbers" in task.step_completion_metadata
+            ):
+                del task.step_completion_metadata["failed_clip_numbers"]
+                # Mark as modified for SQLAlchemy to detect the change
+                from sqlalchemy.orm.attributes import flag_modified
+
+                flag_modified(task, "step_completion_metadata")
 
             # Update total cost
             task.total_cost_usd = task.total_cost_usd + float(result["total_cost_usd"])

@@ -147,17 +147,12 @@ async def test_update_checkpoint_after_sfx_clip_generation(async_session, tmp_pa
     manifest = SFXManifest(clips=clips)
 
     # Mock CLI script to create files
-    def mock_cli_side_effect(*args, **kwargs):
-        sfx_description = kwargs.get("sfx_description", "")
-        if (
-            "clip 1" in kwargs.get("sfx_description", "").lower()
-            or "wind" in sfx_description.lower()
-        ):
-            output = sfx_dir / "sfx_01.wav"
-        else:
-            output = sfx_dir / "sfx_02.wav"
-        output.write_bytes(b"fake audio")
-        return {"success": True, "output_path": str(output)}
+    async def mock_cli_side_effect(*args, **kwargs):
+        # Extract output path from args: args[1] is the argument list
+        arg_list = args[1]
+        output_index = arg_list.index("--output") + 1
+        output_path = Path(arg_list[output_index])
+        output_path.write_bytes(b"fake audio")
 
     # Mock async_session_factory for checkpoint service
     mock_db = AsyncMock()

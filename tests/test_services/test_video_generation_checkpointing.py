@@ -144,9 +144,7 @@ async def test_update_checkpoint_after_clip_generation(async_session, tmp_path):
             mock_cli.side_effect = create_fake_video
 
             # Call generate_videos
-            result = await service.generate_videos(
-                manifest, resume=True, max_concurrent=2, db=async_session
-            )
+            result = await service.generate_videos(manifest, resume=True, max_concurrent=2)
 
     # Verify all 3 clips generated
     assert result["generated"] == 3
@@ -222,9 +220,7 @@ async def test_safety_check_regenerate_if_file_missing(async_session, tmp_path):
             mock_cli.side_effect = create_fake_video
 
             # Call generate_videos
-            result = await service.generate_videos(
-                manifest, resume=True, max_concurrent=2, db=async_session
-            )
+            result = await service.generate_videos(manifest, resume=True, max_concurrent=2)
 
     # Verify: clip 1 regenerated (not skipped) because file was missing
     assert result["generated"] == 1
@@ -298,9 +294,7 @@ async def test_partial_resume_clips_1_to_10_complete(async_session, tmp_path):
             mock_cli.side_effect = create_fake_video
 
             # Call generate_videos
-            result = await service.generate_videos(
-                manifest, resume=True, max_concurrent=5, db=async_session
-            )
+            result = await service.generate_videos(manifest, resume=True, max_concurrent=5)
 
     # Verify: clips 1-10 skipped, clips 11-18 generated
     assert result["skipped"] == 10

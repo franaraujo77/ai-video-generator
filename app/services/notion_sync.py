@@ -626,8 +626,7 @@ async def handle_manual_retry(
     failed_step = get_failed_step_from_status(old_status)
     await clear_step_checkpoint_for_retry(task_id=str(task.id), step_name=failed_step, db=session)
 
-    # Update task status and re-enqueue (Story 6.7 Task 3)
-    task.status = new_status
+    # Update timestamp and flush (status already set by caller on line 740)
     task.updated_at = now
     await session.flush()
 
