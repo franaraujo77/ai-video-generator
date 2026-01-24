@@ -80,7 +80,7 @@ class TestHealthEndpoint:
 
         # THEN: Response includes epic metadata
         data = response.json()
-        assert data["epic"] == "epic-1"
+        assert data["epic"] == "epic-7"
         assert data["message"] == "Foundation services operational"
 
     def test_health_endpoint_response_structure(self, client: TestClient) -> None:
@@ -99,7 +99,8 @@ class TestHealthEndpoint:
         assert "service" in data
         assert "epic" in data
         assert "message" in data
-        assert len(data) == 4  # Exactly 4 fields
+        assert "quota_reset_scheduler" in data  # Added in Story 7.0
+        assert len(data) == 5  # Exactly 5 fields (Story 7.0 added quota_reset_scheduler)
 
 
 class TestRootEndpoint:
