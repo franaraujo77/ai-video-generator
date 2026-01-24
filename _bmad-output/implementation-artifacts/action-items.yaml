@@ -1,0 +1,156 @@
+# Action Items Tracking System
+# Created: 2026-01-24 (Epic 6 Retrospective)
+# Owner: Bob (Scrum Master)
+#
+# Status values: pending, in-progress, completed, blocked, deferred
+# Priority values: HIGH, MEDIUM, LOW
+
+epic_5_retro_2026_01_18:
+  - id: epic5-ai-1
+    title: "Pipeline Resumability Architecture"
+    owner: "Alice"
+    priority: "HIGH"
+    status: "completed"
+    effort_estimate: "6-8 hours"
+    completed_in: "Epic 6 Story 6.3"
+    deliverable: "JSONB checkpoint system with hybrid granularity"
+    notes: "Delivered in Story 6.3 - completed_steps and step_metadata fields"
+
+  - id: epic5-ai-2
+    title: "Claim Duration Configuration"
+    owner: "Charlie + Elena"
+    priority: "HIGH"
+    status: "completed"
+    effort_estimate: "4-6 hours"
+    completed_in: "Epic 6 (confirmed by Francis)"
+    deliverable: "Task-type specific claim durations"
+    notes: "Confirmed complete by Francis during Epic 6 retrospective"
+
+  - id: epic5-ai-3
+    title: "End-to-End Testing Strategy"
+    owner: "Dana"
+    priority: "HIGH"
+    status: "completed"
+    effort_estimate: "12-16 hours"
+    completed_in: "Epic 6"
+    deliverable: "Formalized E2E testing strategy with 400+ tests"
+    notes: "Confirmed complete by Francis - testing strategy formalized, 400+ tests across Epic 6"
+
+  - id: epic5-ai-4
+    title: "Document Worker Orchestration Patterns"
+    owner: "Alice + Charlie"
+    priority: "MEDIUM"
+    status: "deferred"
+    effort_estimate: "8-12 hours"
+    deferred_to: "Epic 6 Preparation Sprint (epic6-ai-1)"
+    notes: "Not completed, caused Story 6.2 blocker. Now HIGH priority for Epic 7."
+
+  - id: epic5-ai-5
+    title: "Tune Concurrency Configuration"
+    owner: "Charlie"
+    priority: "LOW"
+    status: "deferred"
+    effort_estimate: "2-4 hours"
+    deferred_to: "Post-Epic 6 deployment"
+    notes: "Appropriately deferred - requires production monitoring data"
+
+epic_6_retro_2026_01_24:
+  - id: epic6-ai-1
+    title: "Worker Orchestration Documentation"
+    owner: "Alice + Charlie"
+    priority: "HIGH"
+    blocking: "Epic 7"
+    status: "pending"
+    effort_estimate: "8-12 hours"
+    timeline: "Week 1 of preparation sprint"
+    deliverable: "/docs/worker-orchestration.md"
+    content:
+      - "Document PgQueuer worker architecture"
+      - "4 patterns: Short Transaction, Worker-Local State, Pre-Flight Checks, Graceful Degradation"
+      - "Worker lifecycle: startup → claim → process → complete"
+      - "Parallelism configuration (asset:12, video:3, audio:6)"
+      - "Integration points for new SOPs"
+      - "Code examples and diagrams"
+      - "Troubleshooting section"
+    success_criteria: "Comprehensive guide reviewed and approved, prevents Story 6.2-type blockers"
+    notes: "MANDATORY before Epic 7. Story 6.2 blocker demonstrates concrete need."
+
+  - id: epic6-ai-2
+    title: "Lint Error Leakage Investigation"
+    owner: "Charlie"
+    priority: "HIGH"
+    blocking: "Epic 7"
+    status: "pending"
+    effort_estimate: "4-6 hours"
+    timeline: "Week 2 of preparation sprint"
+    deliverable: "Zero lint errors at push time"
+    steps:
+      - "Document current pre-commit hook setup"
+      - "Identify gap (hooks not running? config mismatch? bypass?)"
+      - "Implement fix (enforce hooks, align configs, add CI safety net)"
+      - "Verify with test scenario"
+    success_criteria: "Lint errors caught locally before push, verified with test scenario"
+    notes: "Francis identified this issue - lint errors still slipping through to push"
+
+  - id: epic6-ai-3
+    title: "Complete Story 6.2 Worker Integration"
+    owner: "Charlie"
+    priority: "HIGH"
+    blocking: "Epic 7"
+    status: "pending"
+    effort_estimate: "6-8 hours"
+    timeline: "Week 2 of preparation sprint"
+    deliverable: "Retry orchestrator connected to PgQueuer workers"
+    context: "Story 6.2 marked 'in-progress' - claim_retry_tasks() not connected to workers"
+    success_criteria: "Exponential backoff retry logic works end-to-end in worker environment"
+    notes: "Story 6.2 blocker due to PgQueuer architecture misunderstanding"
+
+  - id: epic6-ai-4
+    title: "Create Action Items Tracking System"
+    owner: "Bob"
+    priority: "MEDIUM"
+    status: "completed"
+    effort_estimate: "2 hours"
+    completed_in: "Epic 6 Retrospective 2026-01-24"
+    deliverable: "_bmad-output/implementation-artifacts/action-items.yaml"
+    notes: "THIS FILE. Process improvement to track action items formally."
+
+epic_6_preparation_stories:
+  - id: epic6-story-7.0
+    title: "Story 7.0: Automated Daily Quota Reset"
+    owner: "Elena (primary) + Charlie (pairing)"
+    priority: "HIGH"
+    blocking: "Epic 7"
+    status: "pending"
+    effort_estimate: "6-10 hours"
+    timeline: "Week 2-3 of preparation sprint"
+    story_file: "Will be created in _bmad-output/implementation-artifacts/7-0-automated-quota-reset.md"
+    acceptance_criteria:
+      - "YouTube quotas reset at midnight Pacific Time"
+      - "Other service quotas reset at midnight UTC (or per-service config)"
+      - "Reset creates new daily record with units_used = 0"
+      - "Old quota records retained for 90 days"
+      - "Scheduler runs reliably in Railway (cron or APScheduler)"
+      - "Alert sent if reset job fails"
+      - "Manual reset endpoint for ops team"
+      - "Tests verify reset logic with time-mocking"
+    rationale: "YouTube has strict daily quotas (10k units, resets midnight PT). Manual reset won't scale."
+    notes: "Francis decided this should be a story, not action item. SM approved Elena pairing with Charlie."
+
+# Process Improvement Commitments
+weekly_check_ins:
+  enabled: true
+  frequency: "Sprint planning or standup"
+  responsibility: "Bob (Scrum Master)"
+  process:
+    - "Review action-items.yaml status"
+    - "Owners report progress or blockers"
+    - "Escalate if 'pending' → 'in-progress' doesn't happen within 1 week"
+
+epic_kickoff_gate:
+  enabled: true
+  requirement: "HIGH priority action items MUST be completed before starting next epic"
+  process:
+    - "Review all HIGH priority action items"
+    - "Verify completion or document deferral with reasoning"
+    - "Get team consensus before epic kickoff"

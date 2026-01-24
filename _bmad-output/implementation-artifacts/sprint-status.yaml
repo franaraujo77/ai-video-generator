@@ -107,10 +107,20 @@ development_status:
   6-8-api-quota-monitoring: done  # Code review complete - All 9 issues fixed, 25 passing tests, worker integration ✅, AC fully implemented
   6-9-retry-state-visibility: done
   6-10-auto-recovery-success-rate-tracking: done  # Code review complete - All 8 tasks ✅, 16 passing tests, metrics service implemented
-  epic-6-retrospective: optional
+  epic-6-retrospective: done  # Completed 2026-01-24 - 4 blockers identified for Epic 7 preparation sprint
+
+  # Preparation Sprint for Epic 7 (2-3 weeks before Epic 7 kickoff)
+  # BLOCKERS: All 4 items must be completed before Epic 7 can start
+  #   AI-1: Worker Orchestration Documentation (Alice + Charlie, 8-12 hours)
+  #   AI-2: Lint Error Investigation (Charlie, 4-6 hours)
+  #   AI-3: Complete Story 6.2 Worker Integration (Charlie, 6-8 hours)
+  #   Story 7.0: Automated Daily Quota Reset (Elena + Charlie pairing, 6-10 hours)
+  # Total effort: 24-36 hours over 2-3 weeks
+  # See: action-items.yaml for detailed tracking
 
   # Epic 7: YouTube Publishing & Compliance
-  epic-7: backlog
+  epic-7: blocked  # BLOCKED on preparation sprint completion (4 items: AI-1, AI-2, AI-3, Story 7.0)
+  7-0-automated-quota-reset: backlog  # Preparation story - BLOCKER for Epic 7
   7-1-youtube-oauth-setup-cli: backlog
   7-2-oauth-token-refresh-automation: backlog
   7-3-video-metadata-generation: backlog
