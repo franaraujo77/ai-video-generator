@@ -360,6 +360,17 @@ class Channel(Base):
         index=True,  # Index for worker quota checks (WHERE NOT gemini_quota_exhausted)
     )
 
+    # YouTube token validation flag (Story 7.2 - FR61, NFR-I5)
+    # Set to True when refresh token is invalid/revoked (RefreshError from google-auth)
+    # Reset to False when new OAuth setup completes (Story 7.1 CLI)
+    youtube_token_invalid: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+        comment="True if YouTube refresh token is invalid/revoked (requires re-auth)",
+    )
+
     # Relationship to tasks (one-to-many)
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="channel")
 

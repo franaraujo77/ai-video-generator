@@ -84,7 +84,9 @@
       "Bash(ruff check:*)",
       "Bash(gh run list:*)",
       "Bash(git pull:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "WebFetch(domain:googleapis.github.io)",
+      "WebFetch(domain:thepythoncode.com)"
     ],
     "deny": [],
     "ask": []

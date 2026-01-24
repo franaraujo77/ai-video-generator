@@ -6,13 +6,16 @@ All configuration values are loaded at import time and cached.
 Environment Variables:
     DATABASE_URL: PostgreSQL connection URL (required for production)
     FERNET_KEY: Encryption key for credentials (required)
+    GOOGLE_CLIENT_ID: Google OAuth client ID for YouTube operations (required for Story 7.2)
+    GOOGLE_CLIENT_SECRET: Google OAuth client secret for YouTube operations (required for Story 7.2)
     DEFAULT_VOICE_ID: Fallback ElevenLabs voice ID when channel voice not set (optional)
 
 Usage:
-    from app.config import get_default_voice_id, get_database_url
+    from app.config import get_default_voice_id, get_database_url, get_google_client_id
 
     voice_id = get_default_voice_id()  # Returns None if not set
     db_url = get_database_url()  # Raises if DATABASE_URL not set
+    client_id = get_google_client_id()  # Raises if GOOGLE_CLIENT_ID not set
 """
 
 import os
@@ -87,6 +90,76 @@ def get_fernet_key() -> str:
     if not key:
         raise ValueError("FERNET_KEY environment variable is required")
     return key
+
+
+@lru_cache
+def get_google_client_id() -> str:
+    """Get Google OAuth client ID from environment.
+
+    Environment Variable:
+        GOOGLE_CLIENT_ID: Google OAuth client ID from client_secret.json
+            Format: xxxxx.apps.googleusercontent.com
+
+    Returns:
+        Google client ID string.
+
+    Raises:
+        ValueError: If GOOGLE_CLIENT_ID not set or invalid format.
+
+    Note:
+        Client ID must match the value in client_secret.json (Story 7.1).
+        Used by YouTubeService for OAuth token refresh automation (Story 7.2).
+    """
+    client_id = os.getenv("GOOGLE_CLIENT_ID")
+    if not client_id:
+        raise ValueError(
+            "GOOGLE_CLIENT_ID environment variable is required for YouTube operations. "
+            "Extract from client_secret.json: .installed.client_id"
+        )
+
+    # Validate format (must end with .apps.googleusercontent.com)
+    if not client_id.endswith(".apps.googleusercontent.com"):
+        raise ValueError(
+            f"Invalid GOOGLE_CLIENT_ID format: {client_id[:20]}... "
+            f"Must end with '.apps.googleusercontent.com'"
+        )
+
+    return client_id
+
+
+@lru_cache
+def get_google_client_secret() -> str:
+    """Get Google OAuth client secret from environment.
+
+    Environment Variable:
+        GOOGLE_CLIENT_SECRET: Google OAuth client secret from client_secret.json
+            Format: GOCSPX-xxxxxxxxxxxxx
+
+    Returns:
+        Google client secret string.
+
+    Raises:
+        ValueError: If GOOGLE_CLIENT_SECRET not set or invalid format.
+
+    Note:
+        Client secret must match the value in client_secret.json (Story 7.1).
+        Used by YouTubeService for OAuth token refresh automation (Story 7.2).
+    """
+    client_secret = os.getenv("GOOGLE_CLIENT_SECRET")
+    if not client_secret:
+        raise ValueError(
+            "GOOGLE_CLIENT_SECRET environment variable is required for YouTube operations. "
+            "Extract from client_secret.json: .installed.client_secret"
+        )
+
+    # Validate format (must start with GOCSPX-)
+    if not client_secret.startswith("GOCSPX-"):
+        raise ValueError(
+            f"Invalid GOOGLE_CLIENT_SECRET format: {client_secret[:10]}... "
+            f"Must start with 'GOCSPX-'"
+        )
+
+    return client_secret
 
 
 def get_channel_configs_dir() -> str:
