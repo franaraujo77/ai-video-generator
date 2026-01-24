@@ -227,6 +227,8 @@ class AssetGenerationService:
         Args:
             manifest: AssetManifest with prompts and paths
             resume: If True, skip assets that already exist on filesystem
+            task_id: Optional task ID for checkpoint tracking (Story 6.3)
+            db: Optional database session for checkpoint persistence (Story 6.3)
 
         Returns:
             Summary dict with keys:
@@ -251,6 +253,7 @@ class AssetGenerationService:
         completed_assets: list[str] = []
         if resume and task_id and db:
             from uuid import UUID
+
             from app.models import Task
 
             task = await db.get(Task, UUID(task_id) if isinstance(task_id, str) else task_id)
@@ -329,17 +332,20 @@ class AssetGenerationService:
                 # Story 6.8 Task 7.3: Record Gemini API quota usage
                 if task_id and db:
                     from uuid import UUID
+
                     from app.models import Task
                     from app.services.quota_service import record_gemini_operation
 
                     try:
-                        task_obj = await db.get(Task, UUID(task_id) if isinstance(task_id, str) else task_id)
+                        task_obj = await db.get(
+                            Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                        )
                         if task_obj and task_obj.channel_id:
                             await record_gemini_operation(
                                 channel_id=task_obj.channel_id,
                                 task_id=task_obj.id,
                                 asset_name=asset.name,
-                                db=db
+                                db=db,
                             )
                             self.log.debug(
                                 "gemini_quota_recorded",
@@ -348,7 +354,8 @@ class AssetGenerationService:
                                 asset_name=asset.name,
                             )
                     except Exception as e:
-                        # Story 6.8 requirement: Don't fail asset generation if quota recording fails
+                        # Story 6.8: Don't fail asset generation
+                        # if quota recording fails
                         self.log.error(
                             "gemini_quota_recording_failed",
                             task_id=str(task_id),
@@ -359,15 +366,19 @@ class AssetGenerationService:
                 # Story 6.3 Task 4 Subtask 4.3: Update step_metadata with completed asset
                 if task_id:
                     from uuid import UUID
+
                     from app.models import Task
 
                     # Lock to serialize checkpoint updates
                     async with checkpoint_lock:
-                        # Create new session for each checkpoint update to avoid concurrent commit conflicts
-                        # In tests, async_session_factory may be None, so use provided db session
+                        # Create new session for each checkpoint update
+                        # to avoid concurrent commit conflicts
+                        # In tests, async_session_factory may be None,
+                        # so use provided db session
                         if async_session_factory is not None and db is None:
-                            # Production: Create new session (short transaction pattern)
-                            async with async_session_factory() as checkpoint_db:  # type: ignore[misc]
+                            # Production: Create new session
+                            # (short transaction pattern)
+                            async with async_session_factory() as checkpoint_db:
                                 task_obj = await checkpoint_db.get(
                                     Task, UUID(task_id) if isinstance(task_id, str) else task_id
                                 )

@@ -236,13 +236,17 @@ async def test_complete_retry_progression_with_correlation_tracking(async_sessio
         # Verify correlation_id consistency
         for record in scheduled_logs + claimed_logs:
             log_data = json.loads(record.getMessage())
-            assert log_data.get("correlation_id") == str(correlation_id), \
-                f"Event {log_data.get('event')} has mismatched correlation_id"
+            assert log_data.get("correlation_id") == str(
+                correlation_id
+            ), f"Event {log_data.get('event')} has mismatched correlation_id"
 
         # Verify Railway query pattern works
         all_retry_events = [
-            r for r in caplog.records
-            if any(event in r.getMessage() for event in ["task_retry_scheduled", "task_retry_claimed"])
+            r
+            for r in caplog.records
+            if any(
+                event in r.getMessage() for event in ["task_retry_scheduled", "task_retry_claimed"]
+            )
         ]
 
         # All retry events should have the same correlation_id

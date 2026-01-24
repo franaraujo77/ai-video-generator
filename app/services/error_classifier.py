@@ -31,12 +31,53 @@ class ErrorCategory(Enum):
 
     TRANSIENT: Retry recommended (rate limits, server errors, network issues)
     PERMANENT: Fail fast (auth errors, bad requests, validation errors)
+    CONFIGURATION: Setup errors (API keys, auth tokens, missing credentials)
+    QUOTA_EXCEEDED: API quota limits reached (requires manual intervention)
     UNKNOWN: Conservative retry (unrecognized error types)
     """
 
     TRANSIENT = "transient"
     PERMANENT = "permanent"
+    CONFIGURATION = "configuration"
+    QUOTA_EXCEEDED = "quota_exceeded"
     UNKNOWN = "unknown"
+
+
+@dataclass
+class ErrorContext:
+    """Context information for error classification (Story 6.4).
+
+    Provides additional context about where and when an error occurred, enabling
+    richer error messages and more targeted recommendations.
+
+    Attributes:
+        step_name: Pipeline step name (e.g., "video_generation", "asset_generation")
+        task_id: Task UUID as string
+        channel_id: Channel ID as string
+        clip_index: Video clip index (1-18) if applicable
+        total_clips: Total video clips (usually 18) if applicable
+        asset_index: Asset index (1-22) if applicable
+        total_assets: Total assets (usually 22) if applicable
+        asset_name: Asset filename if applicable (e.g., "environment_background_3.png")
+
+    Example:
+        >>> context = ErrorContext(
+        ...     step_name="video_generation",
+        ...     task_id="12345678-1234-1234-1234-123456789abc",
+        ...     channel_id="poke1",
+        ...     clip_index=11,
+        ...     total_clips=18,
+        ... )
+    """
+
+    step_name: str
+    task_id: str
+    channel_id: str
+    clip_index: int | None = None
+    total_clips: int | None = None
+    asset_index: int | None = None
+    total_assets: int | None = None
+    asset_name: str | None = None
 
 
 @dataclass
@@ -51,6 +92,7 @@ class ErrorAnalysis:
         retry_recommended: Whether retry is recommended based on category
         confidence: Classification confidence (0.0-1.0, higher = more certain)
         suggested_action: Human-readable suggested action for operators
+        api_service: API service that failed (Story 6.4 - e.g., "KIE.ai", "Gemini")
     """
 
     category: ErrorCategory
@@ -60,9 +102,10 @@ class ErrorAnalysis:
     retry_recommended: bool
     confidence: float
     suggested_action: str
+    api_service: str | None = None  # Story 6.4: API service extraction
 
 
-def classify_error(exception: Exception) -> ErrorAnalysis:
+def classify_error(exception: Exception, context: ErrorContext | None = None) -> ErrorAnalysis:
     """Classify error as transient, permanent, or unknown.
 
     This is the main entry point for error classification. Handles httpx exceptions,
@@ -86,9 +129,10 @@ def classify_error(exception: Exception) -> ErrorAnalysis:
 
     Args:
         exception: Exception to classify
+        context: Optional context about where/when error occurred (Story 6.4)
 
     Returns:
-        ErrorAnalysis with classification details
+        ErrorAnalysis with classification details and API service (Story 6.4)
 
     Example:
         >>> import httpx
@@ -100,28 +144,46 @@ def classify_error(exception: Exception) -> ErrorAnalysis:
         ErrorCategory.TRANSIENT
         >>> print(analysis.retry_recommended)
         True
+
+        >>> # With context (Story 6.4)
+        >>> context = ErrorContext(
+        ...     step_name="video_generation",
+        ...     task_id="123",
+        ...     channel_id="poke1",
+        ...     clip_index=11,
+        ...     total_clips=18,
+        ... )
+        >>> analysis = classify_error(exception, context)
+        >>> print(analysis.api_service)  # Extracted from exception
     """
     try:
         # Handle httpx HTTP status errors
         if isinstance(exception, httpx.HTTPStatusError):
-            return _classify_http_status_error(exception)
+            analysis = _classify_http_status_error(exception)
 
         # Handle httpx timeout exceptions
-        if isinstance(
-            exception, (httpx.TimeoutException, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.WriteTimeout)
+        elif isinstance(
+            exception,
+            httpx.TimeoutException | httpx.ConnectTimeout | httpx.ReadTimeout | httpx.WriteTimeout,
         ):
-            return _classify_timeout_error(exception)
+            analysis = _classify_timeout_error(exception)
 
         # Handle httpx network errors
-        if isinstance(exception, (httpx.ConnectError, httpx.NetworkError)):
-            return _classify_network_error(exception)
+        elif isinstance(exception, httpx.ConnectError | httpx.NetworkError):
+            analysis = _classify_network_error(exception)
 
         # Handle CLI script errors (parse stderr for HTTP codes)
-        if isinstance(exception, CLIScriptError):
-            return _classify_cli_script_error(exception)
+        elif isinstance(exception, CLIScriptError):
+            analysis = _classify_cli_script_error(exception)
 
         # Unknown error - conservative retry with low confidence
-        return _classify_unknown_error(exception)
+        else:
+            analysis = _classify_unknown_error(exception)
+
+        # Story 6.4: Extract API service from exception message/context
+        analysis.api_service = _extract_api_service(exception, context)
+
+        return analysis
 
     except Exception as e:
         # CRITICAL: Never fail the pipeline due to classification errors
@@ -133,7 +195,8 @@ def classify_error(exception: Exception) -> ErrorAnalysis:
             error_message=str(exception),
             retry_recommended=True,  # Conservative retry
             confidence=0.1,
-            suggested_action=f"Classification failed ({str(e)}), retry conservatively",
+            suggested_action=f"Classification failed ({e!s}), retry conservatively",
+            api_service="Unknown",
         )
 
 
@@ -172,12 +235,26 @@ def _classify_http_status_error(exception: httpx.HTTPStatusError) -> ErrorAnalys
             suggested_action=f"Server error ({status_code}) - retry after brief delay",
         )
 
-    # Permanent errors (client-side issues, auth failures)
-    if status_code in (400, 401, 403, 404, 422):
+    # Configuration errors (auth failures - Story 6.4)
+    if status_code in (401, 403):
         action_map = {
-            400: "Bad request - fix request parameters",
             401: "Unauthorized - check API key/credentials",
             403: "Forbidden - check permissions",
+        }
+        return ErrorAnalysis(
+            category=ErrorCategory.CONFIGURATION,
+            http_status_code=status_code,
+            error_type="HTTPStatusError",
+            error_message=error_message,
+            retry_recommended=False,
+            confidence=0.95,
+            suggested_action=action_map[status_code],
+        )
+
+    # Permanent errors (client-side issues, validation errors)
+    if status_code in (400, 404, 422):
+        action_map = {
+            400: "Bad request - fix request parameters",
             404: "Not found - verify resource exists",
             422: "Unprocessable entity - fix request data format",
         }
@@ -292,8 +369,20 @@ def _classify_cli_script_error(exception: CLIScriptError) -> ErrorAnalysis:
                 suggested_action=f"Server error {status_code} from CLI script - retry",
             )
 
-        # Permanent status codes
-        if status_code in (400, 401, 403, 404, 422):
+        # Configuration errors (auth failures)
+        if status_code in (401, 403):
+            return ErrorAnalysis(
+                category=ErrorCategory.CONFIGURATION,
+                http_status_code=status_code,
+                error_type="CLIScriptError",
+                error_message=stderr,
+                retry_recommended=False,
+                confidence=0.9,
+                suggested_action=f"Auth error {status_code} - check API credentials",
+            )
+
+        # Permanent status codes (validation errors)
+        if status_code in (400, 404, 422):
             return ErrorAnalysis(
                 category=ErrorCategory.PERMANENT,
                 http_status_code=status_code,
@@ -301,7 +390,7 @@ def _classify_cli_script_error(exception: CLIScriptError) -> ErrorAnalysis:
                 error_message=stderr,
                 retry_recommended=False,
                 confidence=0.9,
-                suggested_action=f"Client error {status_code} - fix script parameters or credentials",
+                suggested_action=f"Client error {status_code} - fix script parameters",
             )
 
     # Check for timeout keywords without HTTP status code
@@ -351,6 +440,7 @@ def _classify_unknown_error(exception: Exception) -> ErrorAnalysis:
     """
     # Use qualified name for better log analysis
     error_type = f"{type(exception).__module__}.{type(exception).__name__}"
+    action = f"Unknown error type ({error_type}) - investigate and retry conservatively"
     return ErrorAnalysis(
         category=ErrorCategory.UNKNOWN,
         http_status_code=None,
@@ -358,5 +448,73 @@ def _classify_unknown_error(exception: Exception) -> ErrorAnalysis:
         error_message=str(exception),
         retry_recommended=True,  # Conservative retry
         confidence=0.3,
-        suggested_action=f"Unknown error type ({error_type}) - investigate and retry conservatively",
+        suggested_action=action,
     )
+
+
+def _extract_api_service(exception: Exception, context: ErrorContext | None = None) -> str:
+    """Extract API service name from exception message or context (Story 6.4).
+
+    Attempts to identify which API service caused the error by analyzing:
+    1. Context step_name (primary source if available)
+    2. Exception message keywords
+    3. Exception type and module
+
+    Args:
+        exception: Exception to analyze
+        context: Optional context with step_name
+
+    Returns:
+        API service name (e.g., "KIE.ai", "Gemini", "ElevenLabs", "Notion", "YouTube")
+        or "Unknown" if service cannot be determined
+
+    Examples:
+        >>> exc = Exception("KIE.ai timeout")
+        >>> _extract_api_service(exc)
+        'KIE.ai'
+
+        >>> context = ErrorContext(step_name="video_generation", task_id="123", channel_id="poke1")
+        >>> _extract_api_service(Exception("timeout"), context)
+        'KIE.ai'
+
+        >>> context = ErrorContext(step_name="asset_generation", task_id="123", channel_id="poke1")
+        >>> _extract_api_service(Exception("401"), context)
+        'Gemini'
+    """
+    # Priority 1: Infer from context step_name (most reliable)
+    if context:
+        step_to_service = {
+            "video_generation": "KIE.ai",
+            "asset_generation": "Gemini",
+            "narration_generation": "ElevenLabs",
+            "sfx_generation": "ElevenLabs",
+            "notion_sync": "Notion",
+            "youtube_upload": "YouTube",
+        }
+
+        if context.step_name in step_to_service:
+            return step_to_service[context.step_name]
+
+    # Priority 2: Parse exception message for API keywords
+    error_msg = str(exception).lower()
+
+    if "kie.ai" in error_msg or "kling" in error_msg:
+        return "KIE.ai"
+    elif "gemini" in error_msg or "google.generativeai" in error_msg:
+        return "Gemini"
+    elif "elevenlabs" in error_msg:
+        return "ElevenLabs"
+    elif "notion" in error_msg:
+        return "Notion"
+    elif "youtube" in error_msg:
+        return "YouTube"
+
+    # Priority 3: Check exception type/module
+    exception_type = type(exception).__module__ + "." + type(exception).__name__
+
+    if "google" in exception_type:
+        return "Gemini"
+    elif "httpx" in exception_type or "requests" in exception_type:
+        return "HTTP Client"  # Generic HTTP error
+
+    return "Unknown"

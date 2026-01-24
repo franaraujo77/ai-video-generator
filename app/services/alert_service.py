@@ -1,5 +1,4 @@
-"""
-Discord webhook alert service for operational monitoring.
+"""Discord webhook alert service for operational monitoring.
 
 This service provides standardized alerting for terminal failures, quota
 exhaustion, and other operational events requiring human attention.
@@ -12,28 +11,26 @@ Integration:
 """
 
 import os
-import httpx
-import structlog
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime
 from typing import Literal
 from uuid import UUID
+
+import httpx
+import structlog
 
 log = structlog.get_logger()
 
 AlertSeverity = Literal["INFO", "WARNING", "CRITICAL"]
-AlertType = Literal["terminal_failure", "quota_warning", "quota_exhausted", "worker_down", "low_recovery_rate"]
+AlertType = Literal[
+    "terminal_failure", "quota_warning", "quota_exhausted", "worker_down", "low_recovery_rate"
+]
 
 # In-memory alert batching tracker
 _alert_history: dict[tuple[str, str], datetime] = {}
 
 
-def should_send_alert(
-    alert_type: str,
-    channel_id: str,
-    force: bool = False
-) -> bool:
-    """
-    Determine if alert should be sent based on batching rules.
+def should_send_alert(alert_type: str, channel_id: str, force: bool = False) -> bool:
+    """Determine if alert should be sent based on batching rules.
 
     Args:
         alert_type: Type of alert (for deduplication)
@@ -61,7 +58,7 @@ def should_send_alert(
                 alert_type=alert_type,
                 channel_id=channel_id,
                 elapsed_seconds=elapsed,
-                batch_window_seconds=batch_window
+                batch_window_seconds=batch_window,
             )
             return False
 
@@ -77,10 +74,9 @@ async def send_discord_alert(
     description: str,
     fields: dict[str, str],
     webhook_url: str,
-    correlation_id: UUID | None = None
+    correlation_id: UUID | None = None,
 ) -> bool:
-    """
-    Send alert to Discord via webhook.
+    """Send alert to Discord via webhook.
 
     Args:
         alert_type: Type of alert (for batching key)
@@ -100,34 +96,33 @@ async def send_discord_alert(
     try:
         # Map severity to Discord embed color
         color_map = {
-            "INFO": 0x3498db,     # Blue
-            "WARNING": 0xf39c12,  # Orange
-            "CRITICAL": 0xe74c3c  # Red
+            "INFO": 0x3498DB,  # Blue
+            "WARNING": 0xF39C12,  # Orange
+            "CRITICAL": 0xE74C3C,  # Red
         }
 
         # Build Discord embed
+        severity_emoji = {
+            "INFO": "🔵",
+            "WARNING": "⚠️",
+            "CRITICAL": "🔴",
+        }
         embed = {
-            "title": f"{'🔴' if severity == 'CRITICAL' else '⚠️' if severity == 'WARNING' else 'ℹ️'} {title}",
+            "title": f"{severity_emoji[severity]} {title}",
             "description": description,
             "color": color_map[severity],
             "fields": [
-                {"name": key, "value": value, "inline": True}
-                for key, value in fields.items()
+                {"name": key, "value": value, "inline": True} for key, value in fields.items()
             ],
-            "footer": {
-                "text": f"Alert Type: {alert_type} | {datetime.now(UTC).isoformat()}"
-            },
-            "timestamp": datetime.now(UTC).isoformat()
+            "footer": {"text": f"Alert Type: {alert_type} | {datetime.now(UTC).isoformat()}"},
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
         # Add correlation ID to footer if provided
         if correlation_id:
             embed["footer"]["text"] += f" | Correlation ID: {correlation_id}"
 
-        payload = {
-            "embeds": [embed],
-            "username": "AI Video Generator Alerts"
-        }
+        payload = {"embeds": [embed], "username": "AI Video Generator Alerts"}
 
         # Non-blocking webhook POST with 10 second timeout
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -141,7 +136,7 @@ async def send_discord_alert(
             severity=severity,
             title=title,
             correlation_id=str(correlation_id) if correlation_id else None,
-            webhook_response_status=response.status_code
+            webhook_response_status=response.status_code,
         )
 
         return True
@@ -154,7 +149,7 @@ async def send_discord_alert(
             severity=severity,
             error=str(e),
             correlation_id=str(correlation_id) if correlation_id else None,
-            exc_info=True
+            exc_info=True,
         )
         return False
 
@@ -165,7 +160,7 @@ async def send_discord_alert(
             alert_type=alert_type,
             error=str(e),
             correlation_id=str(correlation_id) if correlation_id else None,
-            exc_info=True
+            exc_info=True,
         )
         return False
 
@@ -179,10 +174,9 @@ async def send_alert_with_batching(
     webhook_url: str,
     channel_id: str,
     correlation_id: UUID | None = None,
-    force: bool = False
+    force: bool = False,
 ) -> bool:
-    """
-    Send alert with automatic batching/rate limiting.
+    """Send alert with automatic batching/rate limiting.
 
     Args:
         alert_type: Type of alert (for batching key)
@@ -216,10 +210,9 @@ async def send_terminal_failure_alert(
     retry_count: int,
     correlation_id: UUID,
     recommendation: str | None = None,
-    notion_url: str | None = None
+    notion_url: str | None = None,
 ) -> bool:
-    """
-    Send terminal failure alert to Discord.
+    """Send terminal failure alert to Discord.
 
     Args:
         task_id: Task UUID
@@ -240,7 +233,7 @@ async def send_terminal_failure_alert(
     if not webhook_url:
         log.warning(
             "discord_webhook_not_configured",
-            message="Terminal failure alert not sent - DISCORD_WEBHOOK_URL not set"
+            message="Terminal failure alert not sent - DISCORD_WEBHOOK_URL not set",
         )
         return False
 
@@ -263,7 +256,7 @@ async def send_terminal_failure_alert(
         "Failed Step": failed_step,
         "Error Type": error_type,
         "Retry Attempts": str(retry_count),
-        "Correlation ID": str(correlation_id)
+        "Correlation ID": str(correlation_id),
     }
 
     return await send_alert_with_batching(
@@ -275,18 +268,14 @@ async def send_terminal_failure_alert(
         webhook_url=webhook_url,
         channel_id=channel_id,
         correlation_id=correlation_id,
-        force=True  # CRITICAL alerts bypass batching
+        force=True,  # CRITICAL alerts bypass batching
     )
 
 
 async def send_quota_alert(
-    channel_id: str,
-    current_usage: int,
-    daily_limit: int,
-    is_exhausted: bool = False
+    channel_id: str, current_usage: int, daily_limit: int, is_exhausted: bool = False
 ) -> bool:
-    """
-    Send YouTube quota alert to Discord.
+    """Send YouTube quota alert to Discord.
 
     Args:
         channel_id: YouTube channel ID
@@ -301,7 +290,7 @@ async def send_quota_alert(
     if not webhook_url:
         log.warning(
             "discord_webhook_not_configured",
-            message="Quota alert not sent - DISCORD_WEBHOOK_URL not set"
+            message="Quota alert not sent - DISCORD_WEBHOOK_URL not set",
         )
         return False
 
@@ -323,11 +312,11 @@ async def send_quota_alert(
                 "Usage": f"{current_usage:,} / {daily_limit:,} units",
                 "Percentage": f"{usage_percent:.1f}%",
                 "Reset Time": "Midnight PST (8AM UTC)",
-                "Action": "Uploads paused"
+                "Action": "Uploads paused",
             },
             webhook_url=webhook_url,
             channel_id=channel_id,
-            force=True  # CRITICAL
+            force=True,  # CRITICAL
         )
     else:
         # WARNING: Approaching limit (80%)
@@ -337,7 +326,8 @@ async def send_quota_alert(
             title=f"YouTube Quota Warning: {channel_id}",
             description=(
                 f"**Channel {channel_id} approaching YouTube API quota limit.**\n\n"
-                f"Current Usage: {current_usage:,} / {daily_limit:,} units ({usage_percent:.1f}%)\n\n"
+                f"Current Usage: {current_usage:,} / {daily_limit:,} units "
+                f"({usage_percent:.1f}%)\n\n"
                 f"Consider prioritizing high-value uploads."
             ),
             fields={
@@ -345,9 +335,9 @@ async def send_quota_alert(
                 "Usage": f"{current_usage:,} / {daily_limit:,} units",
                 "Percentage": f"{usage_percent:.1f}%",
                 "Remaining": f"{daily_limit - current_usage:,} units",
-                "Reset Time": "Midnight PST (8AM UTC)"
+                "Reset Time": "Midnight PST (8AM UTC)",
             },
             webhook_url=webhook_url,
             channel_id=channel_id,
-            force=False  # Allow batching
+            force=False,  # Allow batching
         )

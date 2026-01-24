@@ -35,20 +35,32 @@ async def test_pipeline_logs_step_started_event(async_session, caplog):
     await async_session.commit()
 
     # Mock async_session_factory to return test session
-    with patch("app.services.pipeline_orchestrator.async_session_factory", create_mock_session_factory(async_session)):
+    with patch(
+        "app.services.pipeline_orchestrator.async_session_factory",
+        create_mock_session_factory(async_session),
+    ):
         # Mock the services to avoid actual pipeline execution
         with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service:
             mock_service.return_value.create_asset_manifest.return_value = MagicMock(assets=[])
-            mock_service.return_value.generate_assets = AsyncMock(return_value={"generated": 0, "skipped": 0})
+            mock_service.return_value.generate_assets = AsyncMock(
+                return_value={"generated": 0, "skipped": 0}
+            )
 
         # Mock checkpoint service to skip checkpoint check
         with patch("app.services.pipeline_orchestrator.is_step_complete", return_value=False):
-            with patch("app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock):
-                with patch("app.services.pipeline_orchestrator.save_step_checkpoint", new_callable=AsyncMock):
+            with patch(
+                "app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock
+            ):
+                with patch(
+                    "app.services.pipeline_orchestrator.save_step_checkpoint",
+                    new_callable=AsyncMock,
+                ):
                     orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
                     # Mock _load_task_data and update methods to avoid database interactions
-                    with patch.object(orchestrator, "_load_task_data", new_callable=AsyncMock) as mock_load:
+                    with patch.object(
+                        orchestrator, "_load_task_data", new_callable=AsyncMock
+                    ) as mock_load:
                         mock_load.return_value = {
                             "channel_id": "poke1",
                             "project_id": str(task.id),
@@ -59,14 +71,27 @@ async def test_pipeline_logs_step_started_event(async_session, caplog):
                             "voice_id": "test_voice",
                         }
 
-                        with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock):
-                            with patch.object(orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock):
-                                with patch.object(orchestrator, "_update_pipeline_end_time", new_callable=AsyncMock):
+                        with patch.object(
+                            orchestrator, "update_task_status", new_callable=AsyncMock
+                        ):
+                            with patch.object(
+                                orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock
+                            ):
+                                with patch.object(
+                                    orchestrator,
+                                    "_update_pipeline_end_time",
+                                    new_callable=AsyncMock,
+                                ):
                                     # Execute just the first step
                                     with caplog.at_level("INFO"):
                                         # Mock execute_step to return immediately after logging
-                                        with patch.object(orchestrator, "execute_step", new_callable=AsyncMock) as mock_exec:
-                                            from app.services.pipeline_orchestrator import StepCompletion
+                                        with patch.object(
+                                            orchestrator, "execute_step", new_callable=AsyncMock
+                                        ) as mock_exec:
+                                            from app.services.pipeline_orchestrator import (
+                                                StepCompletion,
+                                            )
+
                                             mock_exec.return_value = StepCompletion(
                                                 step=PipelineStep.ASSET_GENERATION,
                                                 completed=True,
@@ -106,19 +131,31 @@ async def test_pipeline_logs_step_completed_event(async_session, caplog):
     await async_session.commit()
 
     # Mock async_session_factory to return test session
-    with patch("app.services.pipeline_orchestrator.async_session_factory", create_mock_session_factory(async_session)):
+    with patch(
+        "app.services.pipeline_orchestrator.async_session_factory",
+        create_mock_session_factory(async_session),
+    ):
         # Mock services
         with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service:
             mock_service.return_value.create_asset_manifest.return_value = MagicMock(assets=[])
-        mock_service.return_value.generate_assets = AsyncMock(return_value={"generated": 0, "skipped": 0})
+        mock_service.return_value.generate_assets = AsyncMock(
+            return_value={"generated": 0, "skipped": 0}
+        )
 
         with patch("app.services.pipeline_orchestrator.is_step_complete", return_value=False):
-            with patch("app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock):
-                with patch("app.services.pipeline_orchestrator.save_step_checkpoint", new_callable=AsyncMock):
+            with patch(
+                "app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock
+            ):
+                with patch(
+                    "app.services.pipeline_orchestrator.save_step_checkpoint",
+                    new_callable=AsyncMock,
+                ):
                     orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
                     # Mock _load_task_data and update methods
-                    with patch.object(orchestrator, "_load_task_data", new_callable=AsyncMock) as mock_load:
+                    with patch.object(
+                        orchestrator, "_load_task_data", new_callable=AsyncMock
+                    ) as mock_load:
                         mock_load.return_value = {
                             "channel_id": "poke1",
                             "project_id": str(task.id),
@@ -129,12 +166,25 @@ async def test_pipeline_logs_step_completed_event(async_session, caplog):
                             "voice_id": "test_voice",
                         }
 
-                        with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock):
-                            with patch.object(orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock):
-                                with patch.object(orchestrator, "_update_pipeline_end_time", new_callable=AsyncMock):
+                        with patch.object(
+                            orchestrator, "update_task_status", new_callable=AsyncMock
+                        ):
+                            with patch.object(
+                                orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock
+                            ):
+                                with patch.object(
+                                    orchestrator,
+                                    "_update_pipeline_end_time",
+                                    new_callable=AsyncMock,
+                                ):
                                     with caplog.at_level("INFO"):
-                                        with patch.object(orchestrator, "execute_step", new_callable=AsyncMock) as mock_exec:
-                                            from app.services.pipeline_orchestrator import StepCompletion
+                                        with patch.object(
+                                            orchestrator, "execute_step", new_callable=AsyncMock
+                                        ) as mock_exec:
+                                            from app.services.pipeline_orchestrator import (
+                                                StepCompletion,
+                                            )
+
                                             mock_exec.return_value = StepCompletion(
                                                 step=PipelineStep.ASSET_GENERATION,
                                                 completed=True,
@@ -174,20 +224,34 @@ async def test_pipeline_logs_structured_error_on_step_failure(async_session, cap
     await async_session.commit()
 
     # Mock async_session_factory to return test session
-    with patch("app.services.pipeline_orchestrator.async_session_factory", create_mock_session_factory(async_session)):
+    with patch(
+        "app.services.pipeline_orchestrator.async_session_factory",
+        create_mock_session_factory(async_session),
+    ):
         # Mock services to raise exception
         with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service:
             mock_service.return_value.create_asset_manifest.return_value = MagicMock(assets=[])
-            mock_service.return_value.generate_assets = AsyncMock(side_effect=TimeoutError("Gemini timeout"))
+            mock_service.return_value.generate_assets = AsyncMock(
+                side_effect=TimeoutError("Gemini timeout")
+            )
 
         with patch("app.services.pipeline_orchestrator.is_step_complete", return_value=False):
-            with patch("app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock):
-                with patch("app.services.pipeline_orchestrator.save_step_checkpoint", new_callable=AsyncMock):
-                    with patch("app.services.pipeline_orchestrator.schedule_retry", new_callable=AsyncMock):
+            with patch(
+                "app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock
+            ):
+                with patch(
+                    "app.services.pipeline_orchestrator.save_step_checkpoint",
+                    new_callable=AsyncMock,
+                ):
+                    with patch(
+                        "app.services.pipeline_orchestrator.schedule_retry", new_callable=AsyncMock
+                    ):
                         orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
                         # Mock _load_task_data and update methods
-                        with patch.object(orchestrator, "_load_task_data", new_callable=AsyncMock) as mock_load:
+                        with patch.object(
+                            orchestrator, "_load_task_data", new_callable=AsyncMock
+                        ) as mock_load:
                             mock_load.return_value = {
                                 "channel_id": "poke1",
                                 "project_id": str(task.id),
@@ -198,9 +262,19 @@ async def test_pipeline_logs_structured_error_on_step_failure(async_session, cap
                                 "voice_id": "test_voice",
                             }
 
-                            with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock):
-                                with patch.object(orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock):
-                                    with patch.object(orchestrator, "_update_pipeline_end_time", new_callable=AsyncMock):
+                            with patch.object(
+                                orchestrator, "update_task_status", new_callable=AsyncMock
+                            ):
+                                with patch.object(
+                                    orchestrator,
+                                    "_update_pipeline_start_time",
+                                    new_callable=AsyncMock,
+                                ):
+                                    with patch.object(
+                                        orchestrator,
+                                        "_update_pipeline_end_time",
+                                        new_callable=AsyncMock,
+                                    ):
                                         with caplog.at_level("ERROR"):
                                             await orchestrator.execute_pipeline()
 
@@ -235,19 +309,31 @@ async def test_correlation_id_propagates_through_pipeline_logs(async_session, ca
     await async_session.commit()
 
     # Mock async_session_factory to return test session
-    with patch("app.services.pipeline_orchestrator.async_session_factory", create_mock_session_factory(async_session)):
+    with patch(
+        "app.services.pipeline_orchestrator.async_session_factory",
+        create_mock_session_factory(async_session),
+    ):
         # Mock services
         with patch("app.services.pipeline_orchestrator.AssetGenerationService") as mock_service:
             mock_service.return_value.create_asset_manifest.return_value = MagicMock(assets=[])
-        mock_service.return_value.generate_assets = AsyncMock(return_value={"generated": 0, "skipped": 0})
+        mock_service.return_value.generate_assets = AsyncMock(
+            return_value={"generated": 0, "skipped": 0}
+        )
 
         with patch("app.services.pipeline_orchestrator.is_step_complete", return_value=False):
-            with patch("app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock):
-                with patch("app.services.pipeline_orchestrator.save_step_checkpoint", new_callable=AsyncMock):
+            with patch(
+                "app.services.pipeline_orchestrator.clear_step_metadata", new_callable=AsyncMock
+            ):
+                with patch(
+                    "app.services.pipeline_orchestrator.save_step_checkpoint",
+                    new_callable=AsyncMock,
+                ):
                     orchestrator = PipelineOrchestrator(task_id=str(task.id))
 
                     # Mock _load_task_data and update methods
-                    with patch.object(orchestrator, "_load_task_data", new_callable=AsyncMock) as mock_load:
+                    with patch.object(
+                        orchestrator, "_load_task_data", new_callable=AsyncMock
+                    ) as mock_load:
                         mock_load.return_value = {
                             "channel_id": "poke1",
                             "project_id": str(task.id),
@@ -258,12 +344,25 @@ async def test_correlation_id_propagates_through_pipeline_logs(async_session, ca
                             "voice_id": "test_voice",
                         }
 
-                        with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock):
-                            with patch.object(orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock):
-                                with patch.object(orchestrator, "_update_pipeline_end_time", new_callable=AsyncMock):
+                        with patch.object(
+                            orchestrator, "update_task_status", new_callable=AsyncMock
+                        ):
+                            with patch.object(
+                                orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock
+                            ):
+                                with patch.object(
+                                    orchestrator,
+                                    "_update_pipeline_end_time",
+                                    new_callable=AsyncMock,
+                                ):
                                     with caplog.at_level("INFO"):
-                                        with patch.object(orchestrator, "execute_step", new_callable=AsyncMock) as mock_exec:
-                                            from app.services.pipeline_orchestrator import StepCompletion
+                                        with patch.object(
+                                            orchestrator, "execute_step", new_callable=AsyncMock
+                                        ) as mock_exec:
+                                            from app.services.pipeline_orchestrator import (
+                                                StepCompletion,
+                                            )
+
                                             mock_exec.return_value = StepCompletion(
                                                 step=PipelineStep.ASSET_GENERATION,
                                                 completed=True,
@@ -274,8 +373,12 @@ async def test_correlation_id_propagates_through_pipeline_logs(async_session, ca
 
     # Get all pipeline-related structured logs
     structured_logs = [
-        r for r in caplog.records
-        if any(event in r.getMessage() for event in ["pipeline_step_started", "pipeline_step_completed"])
+        r
+        for r in caplog.records
+        if any(
+            event in r.getMessage()
+            for event in ["pipeline_step_started", "pipeline_step_completed"]
+        )
     ]
 
     # Verify all logs have correlation_id = task.id

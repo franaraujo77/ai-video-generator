@@ -164,8 +164,16 @@ def is_manual_retry_transition(old_status: TaskStatus, new_status: TaskStatus) -
     # Map error statuses to valid retry target statuses
     manual_retry_map = {
         TaskStatus.ASSET_ERROR: {TaskStatus.QUEUED, TaskStatus.GENERATING_ASSETS},
-        TaskStatus.VIDEO_ERROR: {TaskStatus.QUEUED, TaskStatus.ASSETS_APPROVED, TaskStatus.GENERATING_VIDEO},
-        TaskStatus.AUDIO_ERROR: {TaskStatus.QUEUED, TaskStatus.VIDEO_APPROVED, TaskStatus.GENERATING_AUDIO},
+        TaskStatus.VIDEO_ERROR: {
+            TaskStatus.QUEUED,
+            TaskStatus.ASSETS_APPROVED,
+            TaskStatus.GENERATING_VIDEO,
+        },
+        TaskStatus.AUDIO_ERROR: {
+            TaskStatus.QUEUED,
+            TaskStatus.VIDEO_APPROVED,
+            TaskStatus.GENERATING_AUDIO,
+        },
         TaskStatus.UPLOAD_ERROR: {TaskStatus.QUEUED, TaskStatus.APPROVED, TaskStatus.UPLOADING},
     }
 
@@ -234,6 +242,8 @@ class TaskSyncData:
         updated_at: Timestamp of last task update (Story 5.6, AC2, FR55)
         retry_count: Number of retry attempts (Story 6.2)
         next_retry_at: Timestamp for next retry attempt (Story 6.2)
+        max_retry_attempts: Maximum retry attempts before terminal failure (Story 6.9)
+        last_error_timestamp: Timestamp of most recent error (Story 6.9)
         completed_steps: Step-level checkpoints (Story 6.3, Task 9)
         step_metadata: Sub-step checkpoints (Story 6.3, Task 9)
     """
@@ -246,6 +256,8 @@ class TaskSyncData:
     updated_at: datetime
     retry_count: int = 0
     next_retry_at: datetime | None = None
+    max_retry_attempts: int = 5
+    last_error_timestamp: datetime | None = None
     completed_steps: list[dict[str, Any]] | None = None
     step_metadata: dict[str, Any] | None = None
 
@@ -559,10 +571,8 @@ async def handle_manual_retry(
     Example:
         # User changes VIDEO_ERROR → QUEUED in Notion
         >>> await handle_manual_retry(
-        ...     task=task,
-        ...     old_status=TaskStatus.VIDEO_ERROR,
-        ...     new_status=TaskStatus.QUEUED,
-        ...     session=db
+        ...     task=task, old_status=TaskStatus.VIDEO_ERROR,
+        ...     new_status=TaskStatus.QUEUED, session=db
         ... )
         # Result:
         # - retry_count reset to 0
@@ -612,11 +622,7 @@ async def handle_manual_retry(
 
     # Clear checkpoint for failed step only (Story 6.7 Task 5)
     failed_step = get_failed_step_from_status(old_status)
-    await clear_step_checkpoint_for_retry(
-        task_id=str(task.id),
-        step_name=failed_step,
-        db=session
-    )
+    await clear_step_checkpoint_for_retry(task_id=str(task.id), step_name=failed_step, db=session)
 
     # Update task status and re-enqueue (Story 6.7 Task 3)
     task.status = new_status
@@ -625,6 +631,7 @@ async def handle_manual_retry(
 
     # Re-enqueue task for worker claiming
     from app.services.task_service import enqueue_task_to_pgqueuer
+
     await enqueue_task_to_pgqueuer(task)
 
     # Log manual retry event for analytics (Story 6.7 Task 6)
@@ -826,22 +833,20 @@ def format_checkpoint_progress(
     Examples:
         >>> # Video generation with 10/18 clips complete
         >>> format_checkpoint_progress(
-        ...     {"completed_video_clips": [1,2,3,4,5,6,7,8,9,10]},
-        ...     TaskStatus.VIDEO_ERROR
+        ...     {"completed_video_clips": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]}, TaskStatus.VIDEO_ERROR
         ... )
         'Video: 10/18 clips ✓'
 
         >>> # Audio generation with 5/18 clips complete
         >>> format_checkpoint_progress(
-        ...     {"completed_narration_clips": [1,2,3,4,5]},
-        ...     TaskStatus.AUDIO_ERROR
+        ...     {"completed_narration_clips": [1, 2, 3, 4, 5]}, TaskStatus.AUDIO_ERROR
         ... )
         'Audio: 5/18 clips ✓'
 
         >>> # Asset generation with 15 assets complete
         >>> format_checkpoint_progress(
         ...     {"completed_assets": ["char_1", "char_2", ...]},  # 15 items
-        ...     TaskStatus.ASSET_ERROR
+        ...     TaskStatus.ASSET_ERROR,
         ... )
         'Assets: 15 complete ✓'
 
@@ -885,7 +890,7 @@ def format_checkpoint_progress(
 async def push_task_to_notion(
     task: Task | TaskSyncData,
     notion_client: NotionClient,
-    error_payload: ErrorPayload | None = None
+    error_payload: ErrorPayload | None = None,
 ) -> None:
     """Push Task status/priority updates back to Notion.
 
@@ -955,28 +960,38 @@ async def push_task_to_notion(
     if error_payload:
         # Format ErrorPayload as Notion-compatible markdown
         error_markdown = error_payload.format_for_notion()
-        properties["Error Log"] = {
-            "rich_text": [{"text": {"content": error_markdown}}]
-        }
-    # Story 6.2: Fallback to simple retry display if no ErrorPayload
+        properties["Error Log"] = {"rich_text": [{"text": {"content": error_markdown}}]}
+    # Story 6.2 & 6.9: Fallback to retry display with history if no ErrorPayload
+    # Only show Error Log for active retries (next_retry_at set) to filter terminal failures
+    # from "Retrying Tasks" view (Story 6.9, View 4 filter)
     elif task.retry_count > 0 and task.next_retry_at:
-        retry_display = format_retry_display(task.retry_count, task.next_retry_at)
-        properties["Error Log"] = {
-            "rich_text": [{"text": {"content": retry_display}}]
-        }
+        from app.services.error_logger import format_retry_history
+
+        # Build detailed retry history (Story 6.9, Task 7)
+        retry_history = format_retry_history(
+            retry_attempt=task.retry_count,
+            last_error_timestamp=task.last_error_timestamp,
+            next_retry_at=task.next_retry_at,
+            error_message=None,  # Detailed error in ErrorPayload case only
+        )
+
+        # Also include short display format for quick visibility
+        retry_summary = format_retry_display(task.retry_count, task.next_retry_at)
+        combined_display = f"{retry_summary}\n\n{retry_history}"
+
+        properties["Error Log"] = {"rich_text": [{"text": {"content": combined_display}}]}
+    # Terminal failures (retry_count > 0 but next_retry_at=None) don't get Error Log
+    # This filters them OUT of "Retrying Tasks" view (Story 6.9, View 4)
 
     # Add checkpoint progress if available (Story 6.3, Task 9)
     # Display as "Video: 10/18 clips ✓" in Notion Progress field
     # This shows users which sub-steps completed before failure, helping them
     # understand resume-from-failure behavior
     checkpoint_progress = format_checkpoint_progress(
-        getattr(task, "step_metadata", None),
-        task.status
+        getattr(task, "step_metadata", None), task.status
     )
     if checkpoint_progress:
-        properties["Progress"] = {
-            "rich_text": [{"text": {"content": checkpoint_progress}}]
-        }
+        properties["Progress"] = {"rich_text": [{"text": {"content": checkpoint_progress}}]}
 
     # Update Notion page properties
     try:
@@ -1155,6 +1170,8 @@ async def push_error_payload_to_notion(
                 updated_at=task.updated_at,
                 retry_count=task.retry_count,
                 next_retry_at=task.next_retry_at,
+                max_retry_attempts=task.max_retry_attempts,
+                last_error_timestamp=task.last_error_timestamp,
                 completed_steps=task.completed_steps,
                 step_metadata=task.step_metadata,
             )
@@ -1169,7 +1186,9 @@ async def push_error_payload_to_notion(
             notion_page_id=task_sync.notion_page_id,
             error_category=error_payload.error_category,
             api_service=error_payload.api_service,
-            failure_location=error_payload.failure_location.format() if error_payload.failure_location else None,
+            failure_location=error_payload.failure_location.format()
+            if error_payload.failure_location
+            else None,
         )
 
     except (NotionAPIError, ValueError, KeyError, AttributeError, RuntimeError) as e:
@@ -1219,8 +1238,10 @@ async def sync_database_status_to_notion(notion_client: NotionClient) -> None:
                 updated_at=task.updated_at,
                 retry_count=task.retry_count,
                 next_retry_at=task.next_retry_at,
+                max_retry_attempts=task.max_retry_attempts,  # Story 6.9, Task 4: Retry tracking
+                last_error_timestamp=task.last_error_timestamp,  # Story 6.9, Task 4: Retry tracking
                 completed_steps=task.completed_steps,  # Story 6.3, Task 9: Checkpoint fields
-                step_metadata=task.step_metadata,      # Story 6.3, Task 9: Checkpoint fields
+                step_metadata=task.step_metadata,  # Story 6.3, Task 9: Checkpoint fields
             )
             for task in tasks
         ]

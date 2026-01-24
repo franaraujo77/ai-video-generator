@@ -32,6 +32,7 @@ References:
 """
 
 import os
+from uuid import UUID
 
 from pgqueuer import PgQueuer
 from pgqueuer.models import Job
@@ -113,8 +114,8 @@ def register_entrypoints(pgq: PgQueuer) -> None:
 
             # Step 1.4: Retry eligibility check (Story 6.9, Task 5)
             # Don't claim tasks that are waiting for their retry time
-            from app.services.retry_state_service import should_retry
             from app.services.error_logger import log_retry_started
+            from app.services.retry_state_service import should_retry
 
             # Check if task has retry_count > 0 (indicating it's in retry state)
             if task.retry_count > 0:
@@ -125,11 +126,12 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                     max_attempts=task.max_retry_attempts,
                 ):
                     # Task is waiting for retry - release back to queue
+                    next_retry_iso = task.next_retry_at.isoformat() if task.next_retry_at else None
                     log.info(
                         "task_retry_not_ready_releasing",
                         task_id=task_id,
                         retry_count=task.retry_count,
-                        next_retry_at=task.next_retry_at.isoformat() if task.next_retry_at else None,
+                        next_retry_at=next_retry_iso,
                         max_retry_attempts=task.max_retry_attempts,
                     )
                     # Return early - don't process this task yet
@@ -138,8 +140,8 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 # Retry time has arrived - log retry started (Story 6.9, Task 7)
                 await log_retry_started(
                     task_id=task.id,
-                    correlation_id=task.id,  # Use task.id as correlation_id
-                    channel_id=task.channel_id,
+                    correlation_id=task.id,
+                    channel_id=str(task.channel_id),
                     retry_attempt=task.retry_count,
                     step_name=task.status.value,  # Current step being retried
                 )
@@ -177,13 +179,16 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 # Then check Gemini quota flag (worker-local) with auto-reset (Story 4.5)
                 elif not worker_state.check_gemini_quota_available():
                     rate_limit_hit = True
+                    reset_time_iso = (
+                        worker_state.gemini_quota_reset_time.isoformat()
+                        if worker_state.gemini_quota_reset_time
+                        else None
+                    )
                     log.warning(
                         "gemini_quota_exhausted_releasing_task",
                         task_id=task_id,
                         status=task.status.value,
-                        reset_time=worker_state.gemini_quota_reset_time.isoformat()
-                        if worker_state.gemini_quota_reset_time
-                        else None,
+                        reset_time=reset_time_iso,
                     )
 
             elif required_api == "kling":
@@ -309,7 +314,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
 
             # Story 6.10: Mark auto-recovery if task recovered from error via retry
             if task.retry_count > 0:
-                await mark_task_recovered(task_id, db)
+                await mark_task_recovered(UUID(task_id), db)
 
             await db.commit()
 

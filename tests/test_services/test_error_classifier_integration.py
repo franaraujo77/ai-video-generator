@@ -150,7 +150,9 @@ class TestRetryIntegrationWithClassifier:
 
             # Simulate CLI script error with 429 in stderr
             raise CLIScriptError(
-                script="generate_audio.py", exit_code=1, stderr="Error: HTTP 429 - Rate limit exceeded"
+                script="generate_audio.py",
+                exit_code=1,
+                stderr="Error: HTTP 429 - Rate limit exceeded",
             )
 
         # Execute and verify retry behavior

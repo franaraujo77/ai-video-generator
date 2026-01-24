@@ -51,7 +51,7 @@ from tenacity import (
     wait_exponential,
 )
 
-from app.services.error_classifier import classify_error
+from app.services.error_classifier import ErrorContext, classify_error
 from app.utils.cli_wrapper import CLIScriptError, run_cli_script
 from app.utils.filesystem import get_sfx_dir
 from app.utils.logging import get_logger
@@ -237,6 +237,8 @@ class SFXGenerationService:
         resume: bool = False,
         max_concurrent: int = 10,
         clips_to_regenerate: list[int] | None = None,
+        task_id: str | None = None,  # Story 6.3 Task 5 (SFX)
+        db: AsyncSession | None = None,  # Story 6.3 Task 5 (SFX)
     ) -> dict[str, Any]:
         """Generate all SFX audio clips in manifest by invoking CLI script.
 
@@ -298,6 +300,23 @@ class SFXGenerationService:
                 total_clips=len(manifest.clips),
             )
 
+        # Story 6.3 Task 5: Load completed SFX clips from step_metadata
+        completed_sfx_clips: list[int] = []
+        if resume and task_id and db:
+            from uuid import UUID
+
+            from app.models import Task
+
+            task = await db.get(Task, UUID(task_id) if isinstance(task_id, str) else task_id)
+            if task and task.step_metadata:
+                completed_sfx_clips = task.step_metadata.get("completed_sfx_clips", [])
+                self.log.info(
+                    "loaded_completed_sfx_clips",
+                    task_id=task_id,
+                    completed_count=len(completed_sfx_clips),
+                    completed_clips=completed_sfx_clips,
+                )
+
         # Track results
         generated = 0
         skipped = 0
@@ -305,6 +324,8 @@ class SFXGenerationService:
 
         # Semaphore limits concurrent ElevenLabs API requests
         semaphore = asyncio.Semaphore(max_concurrent)
+        # Lock for checkpoint updates (Story 6.3 Task 5 - SFX)
+        checkpoint_lock = asyncio.Lock()
 
         @retry(
             retry=retry_if_exception_type(CLIScriptError),
@@ -364,14 +385,34 @@ class SFXGenerationService:
             Returns:
                 True if generated, False if skipped or failed
             """
-            nonlocal generated, skipped, failed
+            nonlocal generated, skipped, failed, completed_sfx_clips
 
             async with semaphore:
-                # Check if SFX exists (for resume functionality)
-                if resume and self.check_sfx_exists(clip.output_path):
+                # Story 6.3 Task 5 Subtask 5.2: Check if clip already in completed list
+                if resume and task_id and db and clip.clip_number in completed_sfx_clips:
+                    # Story 6.3 Task 5 Subtask 5.4: Safety check - verify file exists
+                    if not self.check_sfx_exists(clip.output_path):
+                        self.log.warning(
+                            "sfx_clip_checkpoint_exists_but_file_missing",
+                            clip_number=clip.clip_number,
+                            output_path=str(clip.output_path),
+                            action="regenerating",
+                        )
+                        # File missing, regenerate (fall through to generation logic)
+                    else:
+                        self.log.info(
+                            "sfx_clip_skipped_from_checkpoint",
+                            clip_number=clip.clip_number,
+                            path=str(clip.output_path),
+                        )
+                        skipped += 1
+                        return False
+
+                # Legacy resume support (filesystem check only, no checkpoint)
+                elif resume and self.check_sfx_exists(clip.output_path):
                     skipped += 1
                     self.log.info(
-                        "sfx_clip_skipped",
+                        "sfx_clip_skipped_filesystem_check",
                         clip_number=clip.clip_number,
                         path=str(clip.output_path),
                         reason="already_exists",
@@ -422,25 +463,98 @@ class SFXGenerationService:
                         )
 
                     generated += 1
+
+                    # Story 6.3 Task 5 Subtask 5.3: Update step_metadata with completed SFX clip
+                    if task_id and db:
+                        # Lock to serialize checkpoint updates
+                        async with checkpoint_lock:
+                            # Create new session for each checkpoint update to avoid concurrent commit conflicts
+                            from uuid import UUID
+
+                            from app.database import async_session_factory
+                            from app.models import Task
+
+                            async with async_session_factory() as checkpoint_db:  # type: ignore[misc]
+                                task_obj = await checkpoint_db.get(
+                                    Task, UUID(task_id) if isinstance(task_id, str) else task_id
+                                )
+                                if task_obj:
+                                    # Get current completed list (may have been updated by other clips)
+                                    current_completed = (
+                                        task_obj.step_metadata.get("completed_sfx_clips", [])
+                                        if task_obj.step_metadata
+                                        else []
+                                    )
+                                    # Add this clip if not already in list (deduplication)
+                                    if clip.clip_number not in current_completed:
+                                        current_completed.append(clip.clip_number)
+                                        # Update using checkpoint service for transaction safety
+                                        from app.services.checkpoint_service import (
+                                            update_step_metadata,
+                                        )
+
+                                        await update_step_metadata(
+                                            task_id,
+                                            "completed_sfx_clips",
+                                            current_completed,
+                                            checkpoint_db,
+                                        )
+                                        # Sync local list with DB
+                                        completed_sfx_clips = current_completed
+                                        self.log.info(
+                                            "sfx_clip_checkpoint_saved",
+                                            task_id=task_id,
+                                            clip_number=clip.clip_number,
+                                            total_completed=len(current_completed),
+                                        )
+
                     return True
 
                 except CLIScriptError as e:
                     failed += 1
+
+                    # Story 6.4 Task 3: Capture failure context for error classification
+                    context = ErrorContext(
+                        step_name="sfx_generation",
+                        task_id=task_id or "unknown",
+                        channel_id=self.channel_id,
+                        clip_index=clip.clip_number,
+                        total_clips=18,
+                    )
+                    error_analysis = classify_error(e, context)
+
                     self.log.error(
                         "sfx_generation_failed",
                         clip_number=clip.clip_number,
                         script=e.script,
                         exit_code=e.exit_code,
                         stderr=e.stderr[:500],  # Truncate stderr
+                        error_category=error_analysis.category.value,
+                        api_service=error_analysis.api_service,
+                        retry_recommended=error_analysis.retry_recommended,
                     )
                     raise  # Re-raise to stop generation on failure
 
                 except Exception as e:
                     failed += 1
+
+                    # Story 6.4 Task 3: Capture failure context for error classification
+                    context = ErrorContext(
+                        step_name="sfx_generation",
+                        task_id=task_id or "unknown",
+                        channel_id=self.channel_id,
+                        clip_index=clip.clip_number,
+                        total_clips=18,
+                    )
+                    error_analysis = classify_error(e, context)
+
                     self.log.error(
                         "sfx_generation_unexpected_error",
                         clip_number=clip.clip_number,
                         error=str(e),
+                        error_category=error_analysis.category.value,
+                        api_service=error_analysis.api_service,
+                        retry_recommended=error_analysis.retry_recommended,
                     )
                     raise  # Re-raise to stop generation on failure
 

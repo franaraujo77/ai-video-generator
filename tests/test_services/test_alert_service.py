@@ -21,7 +21,7 @@ from app.services.alert_service import (
     send_terminal_failure_alert,
     send_quota_alert,
     should_send_alert,
-    _alert_history
+    _alert_history,
 )
 
 
@@ -54,6 +54,7 @@ def reset_alert_history():
 # Discord Webhook Delivery Tests (5 tests)
 # =============================================================================
 
+
 @pytest.mark.asyncio
 async def test_send_discord_alert_formats_embed_correctly(mock_httpx_client):
     """Verify Discord embed formatting with all fields."""
@@ -67,7 +68,7 @@ async def test_send_discord_alert_formats_embed_correctly(mock_httpx_client):
         description="Task failed after 3 retries",
         fields={"Task ID": "abc-123", "Channel": "poke1"},
         webhook_url=webhook_url,
-        correlation_id=correlation_id
+        correlation_id=correlation_id,
     )
 
     assert result is True
@@ -80,7 +81,7 @@ async def test_send_discord_alert_formats_embed_correctly(mock_httpx_client):
 
     assert "🔴" in embed["title"]  # CRITICAL emoji
     assert "Task Failed" in embed["title"]
-    assert embed["color"] == 0xe74c3c  # Red color
+    assert embed["color"] == 0xE74C3C  # Red color
     assert embed["description"] == "Task failed after 3 retries"
     assert len(embed["fields"]) == 2
     assert embed["fields"][0]["name"] == "Task ID"
@@ -101,10 +102,10 @@ async def test_send_discord_alert_severity_colors(mock_httpx_client):
         title="Critical Alert",
         description="Critical issue",
         fields={},
-        webhook_url=webhook_url
+        webhook_url=webhook_url,
     )
     payload = mock_httpx_client.post.call_args.kwargs["json"]
-    assert payload["embeds"][0]["color"] == 0xe74c3c  # Red
+    assert payload["embeds"][0]["color"] == 0xE74C3C  # Red
     assert "🔴" in payload["embeds"][0]["title"]
 
     # Test WARNING (Orange, ⚠️)
@@ -114,10 +115,10 @@ async def test_send_discord_alert_severity_colors(mock_httpx_client):
         title="Warning Alert",
         description="Warning issue",
         fields={},
-        webhook_url=webhook_url
+        webhook_url=webhook_url,
     )
     payload = mock_httpx_client.post.call_args.kwargs["json"]
-    assert payload["embeds"][0]["color"] == 0xf39c12  # Orange
+    assert payload["embeds"][0]["color"] == 0xF39C12  # Orange
     assert "⚠️" in payload["embeds"][0]["title"]
 
     # Test INFO (Blue, ℹ️)
@@ -127,10 +128,10 @@ async def test_send_discord_alert_severity_colors(mock_httpx_client):
         title="Info Alert",
         description="Info issue",
         fields={},
-        webhook_url=webhook_url
+        webhook_url=webhook_url,
     )
     payload = mock_httpx_client.post.call_args.kwargs["json"]
-    assert payload["embeds"][0]["color"] == 0x3498db  # Blue
+    assert payload["embeds"][0]["color"] == 0x3498DB  # Blue
     assert "ℹ️" in payload["embeds"][0]["title"]
 
 
@@ -145,7 +146,7 @@ async def test_send_discord_alert_webhook_delivery_success(mock_httpx_client):
         title="Test Alert",
         description="Test description",
         fields={},
-        webhook_url=webhook_url
+        webhook_url=webhook_url,
     )
 
     assert result is True
@@ -163,11 +164,11 @@ async def test_send_discord_alert_webhook_http_error():
         mock_instance = MagicMock()
         mock_instance.__aenter__ = AsyncMock(return_value=mock_instance)
         mock_instance.__aexit__ = AsyncMock()
-        mock_instance.post = AsyncMock(side_effect=httpx.HTTPStatusError(
-            "Bad Request",
-            request=MagicMock(),
-            response=MagicMock(status_code=400)
-        ))
+        mock_instance.post = AsyncMock(
+            side_effect=httpx.HTTPStatusError(
+                "Bad Request", request=MagicMock(), response=MagicMock(status_code=400)
+            )
+        )
         mock_client.return_value = mock_instance
 
         result = await send_discord_alert(
@@ -176,7 +177,7 @@ async def test_send_discord_alert_webhook_http_error():
             title="Test Alert",
             description="Test",
             fields={},
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
         )
 
         assert result is False  # Delivery failed
@@ -196,7 +197,7 @@ async def test_send_discord_alert_unexpected_exception():
             title="Test Alert",
             description="Test",
             fields={},
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
         )
 
         assert result is False  # System error caught
@@ -205,6 +206,7 @@ async def test_send_discord_alert_unexpected_exception():
 # =============================================================================
 # Alert Batching Tests (5 tests)
 # =============================================================================
+
 
 def test_should_send_alert_allows_first_alert():
     """Verify first alert is always allowed."""
@@ -261,12 +263,13 @@ def test_should_send_alert_scoped_per_channel_and_type():
     result3 = should_send_alert("terminal_failure", "poke1", force=False)
     result4 = should_send_alert("quota_warning", "poke1", force=False)
     assert result3 is False  # Duplicate
-    assert result4 is True   # Different type
+    assert result4 is True  # Different type
 
 
 # =============================================================================
 # Alert Batching Integration Tests (2 tests)
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_send_alert_with_batching_suppresses_duplicates(mock_httpx_client):
@@ -282,7 +285,7 @@ async def test_send_alert_with_batching_suppresses_duplicates(mock_httpx_client)
         fields={},
         webhook_url=webhook_url,
         channel_id="poke1",
-        force=False
+        force=False,
     )
     assert result1 is True
     assert mock_httpx_client.post.call_count == 1
@@ -296,7 +299,7 @@ async def test_send_alert_with_batching_suppresses_duplicates(mock_httpx_client)
         fields={},
         webhook_url=webhook_url,
         channel_id="poke1",
-        force=False
+        force=False,
     )
     assert result2 is False  # Suppressed
     assert mock_httpx_client.post.call_count == 1  # No additional call
@@ -317,7 +320,7 @@ async def test_send_alert_with_batching_env_var_disable(mock_httpx_client):
             fields={},
             webhook_url=webhook_url,
             channel_id="poke1",
-            force=False
+            force=False,
         )
         assert result1 is True
 
@@ -330,7 +333,7 @@ async def test_send_alert_with_batching_env_var_disable(mock_httpx_client):
             fields={},
             webhook_url=webhook_url,
             channel_id="poke1",
-            force=False
+            force=False,
         )
         assert result2 is True
         assert mock_httpx_client.post.call_count == 2
@@ -339,6 +342,7 @@ async def test_send_alert_with_batching_env_var_disable(mock_httpx_client):
 # =============================================================================
 # Terminal Failure Alert Tests (3 tests)
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_send_terminal_failure_alert_success(mock_httpx_client):
@@ -357,7 +361,7 @@ async def test_send_terminal_failure_alert_success(mock_httpx_client):
             retry_count=3,
             correlation_id=correlation_id,
             recommendation="Check API credentials",
-            notion_url="https://notion.so/page123"
+            notion_url="https://notion.so/page123",
         )
 
     assert result is True
@@ -372,7 +376,7 @@ async def test_send_terminal_failure_alert_success(mock_httpx_client):
     assert "video_generation" in embed["description"]
     assert "Check API credentials" in embed["description"]
     assert "https://notion.so/page123" in embed["description"]
-    assert embed["color"] == 0xe74c3c  # CRITICAL red
+    assert embed["color"] == 0xE74C3C  # CRITICAL red
 
 
 @pytest.mark.asyncio
@@ -387,7 +391,7 @@ async def test_send_terminal_failure_alert_no_webhook_configured():
             error_type="PERMANENT",
             error_message="Error",
             retry_count=3,
-            correlation_id=uuid4()
+            correlation_id=uuid4(),
         )
 
     assert result is False  # Not sent
@@ -406,7 +410,7 @@ async def test_send_terminal_failure_alert_forces_critical_bypass(mock_httpx_cli
             error_type="PERMANENT",
             error_message="Error",
             retry_count=3,
-            correlation_id=uuid4()
+            correlation_id=uuid4(),
         )
 
         result2 = await send_terminal_failure_alert(
@@ -417,7 +421,7 @@ async def test_send_terminal_failure_alert_forces_critical_bypass(mock_httpx_cli
             error_type="PERMANENT",
             error_message="Error",
             retry_count=3,
-            correlation_id=uuid4()
+            correlation_id=uuid4(),
         )
 
     # Both should send because force=True bypasses batching
@@ -430,15 +434,13 @@ async def test_send_terminal_failure_alert_forces_critical_bypass(mock_httpx_cli
 # YouTube Quota Alert Tests (3 tests)
 # =============================================================================
 
+
 @pytest.mark.asyncio
 async def test_send_quota_alert_exhausted(mock_httpx_client):
     """Verify quota exhausted alert (100% threshold)."""
     with patch.dict("os.environ", {"DISCORD_WEBHOOK_URL": "https://webhook.url"}):
         result = await send_quota_alert(
-            channel_id="poke1",
-            current_usage=10000,
-            daily_limit=10000,
-            is_exhausted=True
+            channel_id="poke1", current_usage=10000, daily_limit=10000, is_exhausted=True
         )
 
     assert result is True
@@ -447,7 +449,7 @@ async def test_send_quota_alert_exhausted(mock_httpx_client):
 
     assert "YouTube Quota Exhausted" in embed["title"]
     assert "100.0%" in embed["description"]
-    assert embed["color"] == 0xe74c3c  # CRITICAL red
+    assert embed["color"] == 0xE74C3C  # CRITICAL red
     assert "Uploads paused" in str(embed["fields"])
 
 
@@ -456,10 +458,7 @@ async def test_send_quota_alert_warning(mock_httpx_client):
     """Verify quota warning alert (80% threshold)."""
     with patch.dict("os.environ", {"DISCORD_WEBHOOK_URL": "https://webhook.url"}):
         result = await send_quota_alert(
-            channel_id="poke1",
-            current_usage=8500,
-            daily_limit=10000,
-            is_exhausted=False
+            channel_id="poke1", current_usage=8500, daily_limit=10000, is_exhausted=False
         )
 
     assert result is True
@@ -468,7 +467,7 @@ async def test_send_quota_alert_warning(mock_httpx_client):
 
     assert "YouTube Quota Warning" in embed["title"]
     assert "85.0%" in embed["description"]
-    assert embed["color"] == 0xf39c12  # WARNING orange
+    assert embed["color"] == 0xF39C12  # WARNING orange
     assert "1,500 units" in str(embed["fields"])  # Remaining
 
 
@@ -477,10 +476,7 @@ async def test_send_quota_alert_no_webhook_configured():
     """Verify quota alert logs warning when webhook not configured."""
     with patch.dict("os.environ", {}, clear=True):
         result = await send_quota_alert(
-            channel_id="poke1",
-            current_usage=10000,
-            daily_limit=10000,
-            is_exhausted=True
+            channel_id="poke1", current_usage=10000, daily_limit=10000, is_exhausted=True
         )
 
     assert result is False  # Not sent

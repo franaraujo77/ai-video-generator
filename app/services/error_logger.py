@@ -17,15 +17,15 @@ Architecture Compliance:
 Story Reference: 6.5 - Detailed Error Logging
 """
 
-import structlog
-from uuid import UUID
 from datetime import datetime, timezone
-from typing import Any
+from uuid import UUID
+
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.error_classifier import classify_error, ErrorContext, ErrorCategory
 from app.schemas.error_payload import FailureLocation
 from app.services.checkpoint_service import get_step_checkpoint
+from app.services.error_classifier import ErrorCategory, ErrorContext, classify_error
 
 # Configure structlog if not already configured (safe for multiple imports)
 # In production, this should be configured once at app startup, but this ensures
@@ -196,6 +196,130 @@ async def log_retry_claimed(
     )
 
 
+async def log_retry_started(
+    task_id: UUID,
+    correlation_id: UUID,
+    channel_id: str,
+    retry_attempt: int,
+    step_name: str,
+) -> None:
+    """Log when retry processing begins (Story 6.9, Task 7).
+
+    This event is logged when the worker starts processing a retry task
+    after the retry time has arrived. Distinguishes retry execution
+    from normal task execution for traceability.
+
+    Args:
+        task_id: UUID of the task being retried
+        correlation_id: Correlation ID for distributed tracing
+        channel_id: Channel ID for filtering
+        retry_attempt: Current retry attempt number (1-5)
+        step_name: Pipeline step being retried (e.g., "video_generation")
+
+    Integration:
+        - Story 6.2: Exponential backoff retry logic
+        - Story 6.9: Retry state visibility
+        - Called from worker entrypoint after retry eligibility check passes
+    """
+    log.info(
+        "task_retry_started",
+        task_id=str(task_id),
+        correlation_id=str(correlation_id),
+        channel_id=channel_id,
+        retry_attempt=retry_attempt,
+        step_name=step_name,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        message=f"Retry attempt {retry_attempt} started for task {task_id}",
+    )
+
+
+async def log_retry_succeeded(
+    task_id: UUID,
+    correlation_id: UUID,
+    channel_id: str,
+    retry_attempt: int,
+    step_name: str,
+    recovery_time_seconds: float,
+) -> None:
+    """Log when retry succeeds (Story 6.9, Task 7).
+
+    This event is logged when a task succeeds after one or more retry attempts.
+    Tracks successful recovery from transient errors.
+
+    Args:
+        task_id: UUID of the task that recovered
+        correlation_id: Correlation ID for distributed tracing
+        channel_id: Channel ID for filtering
+        retry_attempt: Retry attempt that succeeded (1-5)
+        step_name: Pipeline step that recovered (e.g., "video_generation")
+        recovery_time_seconds: Time from first failure to recovery
+
+    Integration:
+        - Story 6.2: Exponential backoff retry logic
+        - Story 6.9: Retry state visibility
+        - Called from pipeline orchestrator after successful retry
+    """
+    log.info(
+        "task_retry_succeeded",
+        task_id=str(task_id),
+        correlation_id=str(correlation_id),
+        channel_id=channel_id,
+        retry_attempt=retry_attempt,
+        step_name=step_name,
+        recovery_time_seconds=recovery_time_seconds,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        message=f"Task {task_id} recovered after {retry_attempt} retry attempts",
+    )
+
+
+async def log_retry_failed(
+    task_id: UUID,
+    correlation_id: UUID,
+    channel_id: str,
+    retry_attempt: int,
+    step_name: str,
+    error_type: str,
+    error_message: str,
+    next_retry_at: datetime | None,
+) -> None:
+    """Log when retry fails but more retries remain (Story 6.9, Task 7).
+
+    This event is logged when a retry attempt fails but the task is still
+    retriable (retry_attempt < max_attempts). Distinguishes from terminal
+    failures where no more retries remain.
+
+    Args:
+        task_id: UUID of the task that failed again
+        correlation_id: Correlation ID for distributed tracing
+        channel_id: Channel ID for filtering
+        retry_attempt: Retry attempt that failed (1-5)
+        step_name: Pipeline step that failed (e.g., "video_generation")
+        error_type: Exception class name
+        error_message: Error message from failure
+        next_retry_at: Timestamp of next scheduled retry (None if terminal)
+
+    Integration:
+        - Story 6.2: Exponential backoff retry logic
+        - Story 6.9: Retry state visibility
+        - Called from pipeline orchestrator after retry failure
+    """
+    log.warning(
+        "task_retry_failed",
+        task_id=str(task_id),
+        correlation_id=str(correlation_id),
+        channel_id=channel_id,
+        retry_attempt=retry_attempt,
+        step_name=step_name,
+        error_type=error_type,
+        error_message=error_message,
+        next_retry_at=next_retry_at.isoformat() if next_retry_at else None,
+        timestamp=datetime.now(timezone.utc).isoformat(),
+        message=f"Retry attempt {retry_attempt} failed for task {task_id}, will retry"
+        if next_retry_at
+        else f"Retry attempt {retry_attempt} failed for task {task_id}, no more retries",
+    )
+
+
 async def log_terminal_failure(
     task_id: UUID,
     correlation_id: UUID,
@@ -275,3 +399,76 @@ async def log_pipeline_step_completed(
         duration_seconds=duration_seconds,
         timestamp=datetime.now(timezone.utc).isoformat(),
     )
+
+
+def format_retry_history(
+    retry_attempt: int,
+    last_error_timestamp: datetime | None,
+    next_retry_at: datetime | None,
+    error_message: str | None = None,
+) -> str:
+    r"""Format retry history for error_log property (Story 6.9, Task 7).
+
+    Builds human-readable retry history showing all attempt information
+    with timestamps. Used in Notion error display for visibility into
+    retry progression.
+
+    Args:
+        retry_attempt: Current retry attempt number (1-5)
+        last_error_timestamp: Timestamp of most recent error
+        next_retry_at: Timestamp of next scheduled retry (None if terminal)
+        error_message: Optional error message from last failure
+
+    Returns:
+        Formatted retry history string for Notion display
+
+    Examples:
+        >>> format_retry_history(3, datetime(2026, 1, 23, 14, 30), datetime(2026, 1, 23, 14, 45))
+        "Retry History:\\nAttempt 3/5\\nLast error: 2026-01-23 14:30:00\\n
+        Next retry: 2026-01-23 14:45:00 (in 15 min)"
+
+        >>> format_retry_history(5, datetime(2026, 1, 23, 15, 00), None, "API timeout")
+        "Retry History:\\nAttempt 5/5\\nLast error: 2026-01-23 15:00:00 (API timeout)\\n
+        Status: Terminal failure"
+
+    Integration:
+        - Story 6.2: Exponential backoff schedule
+        - Story 6.4: Granular error status updates
+        - Story 6.9: Retry state visibility
+    """
+    if retry_attempt == 0 and last_error_timestamp is None:
+        return "No retry history"
+
+    lines = ["Retry History:"]
+
+    # Show attempt count
+    lines.append(f"Attempt {retry_attempt}/5")
+
+    # Show last error timestamp
+    if last_error_timestamp:
+        timestamp_str = last_error_timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        if error_message:
+            lines.append(f"Last error: {timestamp_str} ({error_message})")
+        else:
+            lines.append(f"Last error: {timestamp_str}")
+
+    # Show next retry or terminal status
+    if next_retry_at:
+        from app.services.retry_state_service import format_countdown
+
+        now = datetime.now(timezone.utc)
+        # Handle naive datetime from SQLite
+        if next_retry_at.tzinfo is None:
+            next_retry_at = next_retry_at.replace(tzinfo=timezone.utc)
+
+        time_until = next_retry_at - now
+        countdown = format_countdown(time_until)
+
+        next_str = next_retry_at.strftime("%Y-%m-%d %H:%M:%S")
+        lines.append(f"Next retry: {next_str} (in {countdown})")
+    elif retry_attempt >= 5:
+        lines.append("Status: Terminal failure")
+    else:
+        lines.append("Status: Retry exhausted")
+
+    return "\n".join(lines)

@@ -23,16 +23,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task, TaskStatus
+from app.schemas.error_payload import ErrorPayload, FailureLocation
+from app.services.alert_service import send_terminal_failure_alert
 from app.services.checkpoint_service import extract_partial_progress_for_error
 from app.services.error_classifier import ErrorAnalysis, ErrorCategory, ErrorContext, classify_error
-from app.schemas.error_payload import ErrorPayload, FailureLocation
-from app.utils.logging import get_logger
 from app.services.error_logger import (
-    log_retry_scheduled,
     log_retry_claimed,
+    log_retry_scheduled,
     log_terminal_failure,
 )
-from app.services.alert_service import send_terminal_failure_alert
+from app.utils.logging import get_logger
 
 # Get logger for this module
 log = get_logger(__name__)
@@ -183,6 +183,10 @@ async def schedule_retry(
     # Step 2: Classify error using Story 6.1 classifier (with optional context from Story 6.4)
     error_analysis = classify_error(exception, context)
 
+    # Story 6.10: Set error_category for auto-recovery metrics breakdown
+    # Maps ErrorCategory enum to string for database storage (TRANSIENT/PERMANENT/UNKNOWN)
+    task.error_category = error_analysis.category.value
+
     # Step 3: Determine if retry should happen
     if not should_retry_task(error_analysis, task.retry_count):
         # Terminal failure - all retries exhausted or permanent error
@@ -191,6 +195,10 @@ async def schedule_retry(
     # Step 4: Calculate next retry time and update task
     task.retry_count += 1
     task.next_retry_at = calculate_next_retry(task.retry_count - 1)  # 0-indexed
+
+    # Story 6.9: Set retry tracking fields
+    task.last_error_timestamp = datetime.now(timezone.utc)
+    # max_retry_attempts already has default value of 5 from model definition
 
     # Step 5: Build rich ErrorPayload for Notion sync (Story 6.4 Task 4)
     error_payload = _build_error_payload(
@@ -211,7 +219,9 @@ async def schedule_retry(
         "api_service": error_analysis.api_service,
         "is_transient": error_analysis.category == ErrorCategory.TRANSIENT,
         "confidence": error_analysis.confidence,
-        "failure_location": error_payload.failure_location.model_dump() if error_payload.failure_location else None,
+        "failure_location": error_payload.failure_location.model_dump()
+        if error_payload.failure_location
+        else None,
         "partial_progress": error_payload.partial_progress,
         "recommendation": error_payload.recommendation,
     }
@@ -234,7 +244,9 @@ async def schedule_retry(
         error_category=error_analysis.category.value,
         api_service=error_analysis.api_service,
         is_transient=True,
-        failure_location=error_payload.failure_location.format() if error_payload.failure_location else None,
+        failure_location=error_payload.failure_location.format()
+        if error_payload.failure_location
+        else None,
         recommendation=error_payload.recommendation,
     )
 
@@ -338,6 +350,10 @@ async def _handle_terminal_failure(
     task.retry_count = MAX_RETRY_ATTEMPTS
     task.next_retry_at = None  # No more retries
 
+    # Story 6.9: Set retry tracking fields for terminal failure
+    task.last_error_timestamp = datetime.now(timezone.utc)
+    # max_retry_attempts already has default value of 5 from model definition
+
     # Build rich ErrorPayload for terminal failure (Story 6.4 Task 4)
     error_payload = _build_error_payload(
         task=task,
@@ -358,7 +374,9 @@ async def _handle_terminal_failure(
         "is_transient": False,
         "confidence": error_analysis.confidence,
         "terminal_failure": True,
-        "failure_location": error_payload.failure_location.model_dump() if error_payload.failure_location else None,
+        "failure_location": error_payload.failure_location.model_dump()
+        if error_payload.failure_location
+        else None,
         "partial_progress": error_payload.partial_progress,
         "recommendation": error_payload.recommendation,
     }
@@ -383,7 +401,9 @@ async def _handle_terminal_failure(
         error_message=error_analysis.error_message,
         api_service=error_analysis.api_service,
         is_transient=False,
-        failure_location=error_payload.failure_location.format() if error_payload.failure_location else None,
+        failure_location=error_payload.failure_location.format()
+        if error_payload.failure_location
+        else None,
         partial_progress=error_payload.partial_progress,
         recommendation=error_payload.recommendation,
     )
@@ -391,8 +411,8 @@ async def _handle_terminal_failure(
     # Send Discord alert (fire-and-forget pattern - won't fail pipeline)
     await send_terminal_failure_alert(
         task_id=task.id,
-        task_title=f"{task.channel_id} - {task.status.value}",  # Human-readable title
-        channel_id=task.channel_id,
+        task_title=f"{task.channel_id} - {task.status.value}",
+        channel_id=str(task.channel_id),
         failed_step=error_payload.step_name,
         error_type=error_payload.error_category,
         error_message=error_payload.error_message,
@@ -501,3 +521,84 @@ async def claim_retry_tasks(db: AsyncSession) -> list[Task]:
         )
 
     return tasks
+
+
+async def mark_task_recovered(task_id: UUID, db: AsyncSession) -> None:
+    """Mark task as successfully auto-recovered from error state (Story 6.10).
+
+    This function tracks successful auto-recovery for FR35 metrics (80% target).
+    Call this when a task reaches a successful state after retry.
+
+    Conditions for Auto-Recovery:
+        - Task had previous error (retry_count > 0)
+        - Task was NOT manually retried (is_manual_retry=False)
+        - Task reached successful status (PUBLISHED or other success state)
+
+    Args:
+        task_id: UUID of task that recovered successfully
+        db: Active database session (must commit after this function)
+
+    Side Effects:
+        - Sets task.auto_recovered = True (used for metrics calculation)
+        - Sets task.recovery_attempt_number = retry_count (which retry succeeded)
+        - Logs auto-recovery event with structlog (observability)
+
+    Pattern:
+        Short transaction for auto-recovery marking. Called when task reaches
+        successful state after error/retry.
+
+    Example:
+        >>> # In pipeline_orchestrator after successful step completion
+        >>> async with async_session_factory() as db:
+        ...     task = await db.get(Task, task_id)
+        ...     task.status = TaskStatus.PUBLISHED
+        ...     if task.retry_count > 0:
+        ...         await mark_task_recovered(task_id, db)
+        ...     await db.commit()
+
+    Related:
+        - Story 6.10: Auto-Recovery Success Rate Tracking
+        - FR35: 80% auto-recovery target
+        - Story 6.2: Exponential backoff retry logic
+    """
+    # Load task
+    task = await db.get(Task, task_id)
+    if not task:
+        log.error(
+            "task_not_found_for_recovery_marking",
+            task_id=str(task_id),
+            error="Task not found when marking auto-recovery",
+        )
+        return
+
+    # Check if task recovered via automatic retry (not manual intervention)
+    if task.retry_count > 0 and not task.is_manual_retry:
+        # Mark auto-recovery for metrics tracking
+        task.auto_recovered = True
+        task.recovery_attempt_number = task.retry_count
+
+        log.info(
+            "task_auto_recovered",
+            task_id=str(task.id),
+            channel_id=str(task.channel_id),
+            retry_count=task.retry_count,
+            recovery_attempt=task.recovery_attempt_number,
+            error_category=task.error_category,
+            status=task.status.value,
+        )
+    elif task.retry_count > 0 and task.is_manual_retry:
+        # Task recovered but via manual retry - don't count for auto-recovery metrics
+        log.info(
+            "task_recovered_via_manual_retry",
+            task_id=str(task.id),
+            channel_id=str(task.channel_id),
+            retry_count=task.retry_count,
+            is_manual_retry=True,
+        )
+    else:
+        # Task succeeded on first attempt - no recovery needed
+        log.debug(
+            "task_succeeded_first_attempt",
+            task_id=str(task.id),
+            channel_id=str(task.channel_id),
+        )

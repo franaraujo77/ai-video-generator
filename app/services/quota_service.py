@@ -1,5 +1,4 @@
-"""
-YouTube and Gemini API quota tracking and monitoring service.
+"""YouTube and Gemini API quota tracking and monitoring service.
 
 Responsibilities:
 1. Record YouTube/Gemini API operations with quota costs
@@ -12,17 +11,26 @@ Integration:
 - Epic 7: YouTube upload service records quota usage
 - Epic 4: Workers check quota before claiming upload tasks
 - Story 3.3: Asset generation records Gemini quota usage
+
+Timezone Considerations (Code Review Issue #8):
+- YouTube API: Quota resets at midnight PST (UTC-8/-7)
+- Gemini API: Quota resets at midnight PST (UTC-8/-7)
+- Current Implementation: Uses UTC for date boundaries (hardcoded)
+- Impact: Quota checks may be off by 7-8 hours from actual API reset
+- Future Enhancement: Add configurable QUOTA_TIMEZONE="America/Los_Angeles"
+- Recommendation: Document timezone assumption in deployment guide
 """
 
 import os
-import structlog
-from datetime import datetime, timezone, date
+from datetime import date, datetime, timezone
 from uuid import UUID
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.dialects.postgresql import insert
 
-from app.models import YouTubeQuotaUsage, GeminiQuotaUsage
+import structlog
+from sqlalchemy import select, text
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import GeminiQuotaUsage, YouTubeQuotaUsage
 from app.services.alert_service import send_discord_alert
 
 log = structlog.get_logger()
@@ -31,11 +39,11 @@ log = structlog.get_logger()
 # Source: https://developers.google.com/youtube/v3/determine_quota_cost
 YOUTUBE_OPERATION_COSTS = {
     "upload": 1600,  # videos.insert
-    "update": 50,    # videos.update
-    "list": 1,       # videos.list
-    "search": 100,   # search.list
-    "rate": 50,      # videos.rate
-    "delete": 50,    # videos.delete
+    "update": 50,  # videos.update
+    "list": 1,  # videos.list
+    "search": 100,  # search.list
+    "rate": 50,  # videos.rate
+    "delete": 50,  # videos.delete
 }
 
 
@@ -44,10 +52,9 @@ async def record_youtube_operation(
     operation: str,
     task_id: UUID | None = None,
     video_id: str | None = None,
-    db: AsyncSession = None
+    db: AsyncSession = None,
 ) -> None:
-    """
-    Record YouTube API operation quota usage atomically.
+    """Record YouTube API operation quota usage atomically.
 
     Uses INSERT ON CONFLICT UPDATE to handle concurrent worker updates safely.
 
@@ -77,7 +84,7 @@ async def record_youtube_operation(
         channel_id=channel_id,
         date=today,
         units_used=cost,
-        daily_limit=10000  # Default, can be configured per channel
+        daily_limit=10000,  # Default, can be configured per channel
     )
 
     # SQLite/PostgreSQL compatible upsert: Use text() for excluded pseudo-table reference
@@ -87,7 +94,7 @@ async def record_youtube_operation(
         index_elements=["channel_id", "date"],
         set_={
             "units_used": text("units_used + excluded.units_used"),
-        }
+        },
     )
 
     await db.execute(stmt)
@@ -114,7 +121,7 @@ async def record_youtube_operation(
             daily_limit=quota.daily_limit,
             percentage=round((quota.units_used / quota.daily_limit) * 100, 1),
             task_id=str(task_id) if task_id else None,
-            video_id=video_id
+            video_id=video_id,
         )
 
         # Check thresholds and alert if needed
@@ -122,26 +129,18 @@ async def record_youtube_operation(
 
 
 async def get_youtube_quota_usage(
-    channel_id: UUID,
-    date_value: date,
-    db: AsyncSession
+    channel_id: UUID, date_value: date, db: AsyncSession
 ) -> YouTubeQuotaUsage | None:
     """Get YouTube quota usage for channel on specific date."""
     stmt = select(YouTubeQuotaUsage).where(
-        YouTubeQuotaUsage.channel_id == channel_id,
-        YouTubeQuotaUsage.date == date_value
+        YouTubeQuotaUsage.channel_id == channel_id, YouTubeQuotaUsage.date == date_value
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def check_youtube_quota(
-    channel_id: UUID,
-    operation: str,
-    db: AsyncSession
-) -> bool:
-    """
-    Check if YouTube quota available for operation.
+async def check_youtube_quota(channel_id: UUID, operation: str, db: AsyncSession) -> bool:
+    """Check if YouTube quota available for operation.
 
     Args:
         channel_id: Channel UUID to check quota for
@@ -154,9 +153,27 @@ async def check_youtube_quota(
     Integration:
         - Epic 4: Workers call this before claiming upload tasks
         - NFR-I4: Quota exhaustion recovery (pause uploads)
+        - Story 6.8: Check quota_exhausted flag set at 100% threshold
     """
     if operation not in YOUTUBE_OPERATION_COSTS:
         raise ValueError(f"Unknown YouTube operation: {operation}")
+
+    # CRITICAL (Story 6.8): Check if channel has quota_exhausted flag set
+    # This flag is set at 100% threshold and prevents tasks from being claimed
+    from app.models import Channel
+
+    stmt = select(Channel).where(Channel.id == channel_id)
+    result = await db.execute(stmt)
+    channel = result.scalar_one_or_none()
+
+    if channel and channel.youtube_quota_exhausted:
+        log.warning(
+            "youtube_quota_flag_exhausted",
+            channel_id=str(channel_id),
+            operation=operation,
+            message="Channel quota_exhausted flag set, operation blocked",
+        )
+        return False
 
     cost = YOUTUBE_OPERATION_COSTS[operation]
     today = datetime.now(timezone.utc).date()
@@ -178,15 +195,16 @@ async def check_youtube_quota(
             cost=cost,
             units_used=quota.units_used,
             daily_limit=quota.daily_limit,
-            remaining=remaining
+            remaining=remaining,
         )
 
     return can_proceed
 
 
-async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSession | None = None) -> None:
-    """
-    Check quota thresholds and trigger alerts if needed.
+async def check_youtube_quota_thresholds(
+    quota: YouTubeQuotaUsage, db: AsyncSession | None = None
+) -> None:
+    """Check quota thresholds and trigger alerts if needed.
 
     Thresholds:
     - 80%: WARNING alert, uploads continue
@@ -210,7 +228,7 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
         await send_discord_alert(
             alert_type="quota_exhausted",
             severity="CRITICAL",
-            title=f"YouTube Quota Exhausted",
+            title="YouTube Quota Exhausted",
             description=(
                 f"YouTube API quota exhausted for channel {quota.channel_id}\n"
                 f"Used: {quota.units_used}/{quota.daily_limit} units (100%)\n"
@@ -221,9 +239,9 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
                 "Date": str(quota.date),
                 "Units Used": f"{quota.units_used}/{quota.daily_limit}",
                 "Remaining": "0",
-                "Next Reset": "Midnight UTC"
+                "Next Reset": "Midnight UTC",
             },
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
         )
 
         # Set quota_exhausted flag to pause upload tasks (Story 6.8 AC)
@@ -231,6 +249,7 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
         # Flag will be reset by scheduled job at midnight UTC
         if db:
             from app.models import Channel
+
             stmt = select(Channel).where(Channel.id == quota.channel_id)
             result = await db.execute(stmt)
             channel = result.scalar_one_or_none()
@@ -241,7 +260,7 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
                 log.info(
                     "youtube_quota_exhausted_flag_set",
                     channel_id=str(quota.channel_id),
-                    message="Upload tasks paused until quota reset"
+                    message="Upload tasks paused until quota reset",
                 )
 
         log.critical(
@@ -249,7 +268,7 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
             channel_id=str(quota.channel_id),
             units_used=quota.units_used,
             daily_limit=quota.daily_limit,
-            percentage=percentage
+            percentage=percentage,
         )
 
     # 80% WARNING threshold
@@ -258,11 +277,12 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
         await send_discord_alert(
             alert_type="quota_warning",
             severity="WARNING",
-            title=f"YouTube Quota Warning",
+            title="YouTube Quota Warning",
             description=(
                 f"YouTube API quota at {percentage:.1f}% for channel {quota.channel_id}\n"
                 f"Used: {quota.units_used}/{quota.daily_limit} units\n"
-                f"Remaining: {quota.daily_limit - quota.units_used} units (~{remaining_uploads} uploads)\n"
+                f"Remaining: {quota.daily_limit - quota.units_used} units "
+                f"(~{remaining_uploads} uploads)\n"
                 f"Uploads continuing but monitored"
             ),
             fields={
@@ -270,9 +290,9 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
                 "Date": str(quota.date),
                 "Usage": f"{percentage:.1f}%",
                 "Remaining Uploads": str(remaining_uploads),
-                "Next Reset": "Midnight UTC"
+                "Next Reset": "Midnight UTC",
             },
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
         )
 
         log.warning(
@@ -280,7 +300,7 @@ async def check_youtube_quota_thresholds(quota: YouTubeQuotaUsage, db: AsyncSess
             channel_id=str(quota.channel_id),
             units_used=quota.units_used,
             daily_limit=quota.daily_limit,
-            percentage=percentage
+            percentage=percentage,
         )
 
 
@@ -288,10 +308,9 @@ async def record_gemini_operation(
     channel_id: UUID,
     task_id: UUID | None = None,
     asset_name: str | None = None,
-    db: AsyncSession = None
+    db: AsyncSession = None,
 ) -> None:
-    """
-    Record Gemini API operation (image generation request).
+    """Record Gemini API operation (image generation request).
 
     Uses INSERT ON CONFLICT UPDATE to handle concurrent worker updates safely.
 
@@ -313,7 +332,7 @@ async def record_gemini_operation(
         channel_id=channel_id,
         date=today,
         requests_used=1,
-        daily_limit=1500  # Default Gemini Free Tier
+        daily_limit=1500,  # Default Gemini Free Tier
     )
 
     # SQLite/PostgreSQL compatible upsert: Use text() for excluded pseudo-table reference
@@ -323,7 +342,7 @@ async def record_gemini_operation(
         index_elements=["channel_id", "date"],
         set_={
             "requests_used": text("requests_used + excluded.requests_used"),
-        }
+        },
     )
 
     await db.execute(stmt)
@@ -348,7 +367,7 @@ async def record_gemini_operation(
             daily_limit=quota.daily_limit,
             percentage=round((quota.requests_used / quota.daily_limit) * 100, 1),
             task_id=str(task_id) if task_id else None,
-            asset_name=asset_name
+            asset_name=asset_name,
         )
 
         # Check thresholds and alert if needed
@@ -356,25 +375,18 @@ async def record_gemini_operation(
 
 
 async def get_gemini_quota_usage(
-    channel_id: UUID,
-    date_value: date,
-    db: AsyncSession
+    channel_id: UUID, date_value: date, db: AsyncSession
 ) -> GeminiQuotaUsage | None:
     """Get Gemini quota usage for channel on specific date."""
     stmt = select(GeminiQuotaUsage).where(
-        GeminiQuotaUsage.channel_id == channel_id,
-        GeminiQuotaUsage.date == date_value
+        GeminiQuotaUsage.channel_id == channel_id, GeminiQuotaUsage.date == date_value
     )
     result = await db.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def check_gemini_quota(
-    channel_id: UUID,
-    db: AsyncSession
-) -> bool:
-    """
-    Check if Gemini quota available for asset generation.
+async def check_gemini_quota(channel_id: UUID, db: AsyncSession) -> bool:
+    """Check if Gemini quota available for asset generation.
 
     Args:
         channel_id: Channel UUID to check quota for
@@ -386,7 +398,24 @@ async def check_gemini_quota(
     Integration:
         - Story 3.3: Asset generation checks quota before claiming tasks
         - NFR-I4: Quota exhaustion recovery (pause until midnight PST)
+        - Story 6.8: Check quota_exhausted flag set at 100% threshold
     """
+    # CRITICAL (Story 6.8): Check if channel has quota_exhausted flag set
+    # This flag is set at 100% threshold and prevents tasks from being claimed
+    from app.models import Channel
+
+    stmt = select(Channel).where(Channel.id == channel_id)
+    result = await db.execute(stmt)
+    channel = result.scalar_one_or_none()
+
+    if channel and channel.gemini_quota_exhausted:
+        log.warning(
+            "gemini_quota_flag_exhausted",
+            channel_id=str(channel_id),
+            message="Channel quota_exhausted flag set, operation blocked",
+        )
+        return False
+
     today = datetime.now(timezone.utc).date()
 
     quota = await get_gemini_quota_usage(channel_id, today, db)
@@ -404,15 +433,16 @@ async def check_gemini_quota(
             channel_id=str(channel_id),
             requests_used=quota.requests_used,
             daily_limit=quota.daily_limit,
-            remaining=remaining
+            remaining=remaining,
         )
 
     return can_proceed
 
 
-async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSession | None = None) -> None:
-    """
-    Check Gemini quota thresholds and trigger alerts if needed.
+async def check_gemini_quota_thresholds(
+    quota: GeminiQuotaUsage, db: AsyncSession | None = None
+) -> None:
+    """Check Gemini quota thresholds and trigger alerts if needed.
 
     Thresholds:
     - 80%: WARNING alert, asset generation continues
@@ -436,7 +466,7 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
         await send_discord_alert(
             alert_type="quota_exhausted",
             severity="CRITICAL",
-            title=f"Gemini Quota Exhausted",
+            title="Gemini Quota Exhausted",
             description=(
                 f"Gemini API quota exhausted for channel {quota.channel_id}\n"
                 f"Used: {quota.requests_used}/{quota.daily_limit} requests (100%)\n"
@@ -447,9 +477,9 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
                 "Date": str(quota.date),
                 "Requests Used": f"{quota.requests_used}/{quota.daily_limit}",
                 "Remaining": "0",
-                "Next Reset": "Midnight PST"
+                "Next Reset": "Midnight PST",
             },
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
         )
 
         # Set quota_exhausted flag to pause asset generation tasks (Story 6.8 AC)
@@ -457,6 +487,7 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
         # Flag will be reset by scheduled job at midnight PST
         if db:
             from app.models import Channel
+
             stmt = select(Channel).where(Channel.id == quota.channel_id)
             result = await db.execute(stmt)
             channel = result.scalar_one_or_none()
@@ -467,7 +498,7 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
                 log.info(
                     "gemini_quota_exhausted_flag_set",
                     channel_id=str(quota.channel_id),
-                    message="Asset generation tasks paused until quota reset"
+                    message="Asset generation tasks paused until quota reset",
                 )
 
         log.critical(
@@ -475,7 +506,7 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
             channel_id=str(quota.channel_id),
             requests_used=quota.requests_used,
             daily_limit=quota.daily_limit,
-            percentage=percentage
+            percentage=percentage,
         )
 
     # 80% WARNING threshold
@@ -484,7 +515,7 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
         await send_discord_alert(
             alert_type="quota_warning",
             severity="WARNING",
-            title=f"Gemini Quota Warning",
+            title="Gemini Quota Warning",
             description=(
                 f"Gemini API quota at {percentage:.1f}% for channel {quota.channel_id}\n"
                 f"Used: {quota.requests_used}/{quota.daily_limit} requests\n"
@@ -496,9 +527,9 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
                 "Date": str(quota.date),
                 "Usage": f"{percentage:.1f}%",
                 "Remaining Requests": str(remaining_requests),
-                "Next Reset": "Midnight PST"
+                "Next Reset": "Midnight PST",
             },
-            webhook_url=webhook_url
+            webhook_url=webhook_url,
         )
 
         log.warning(
@@ -506,5 +537,5 @@ async def check_gemini_quota_thresholds(quota: GeminiQuotaUsage, db: AsyncSessio
             channel_id=str(quota.channel_id),
             requests_used=quota.requests_used,
             daily_limit=quota.daily_limit,
-            percentage=percentage
+            percentage=percentage,
         )

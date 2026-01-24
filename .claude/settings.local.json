@@ -77,7 +77,11 @@
       "Bash(git stash:*)",
       "Bash(gh pr reopen:*)",
       "Bash(gh pr diff:*)",
-      "Bash(ruff format:*)"
+      "Bash(ruff format:*)",
+      "Bash(git log:*)",
+      "Bash(alembic revision:*)",
+      "Bash(export DATABASE_URL=\"sqlite+aiosqlite:///./test.db\")",
+      "Bash(ruff check:*)"
     ],
     "deny": [],
     "ask": []

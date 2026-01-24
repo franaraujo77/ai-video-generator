@@ -49,7 +49,6 @@ Usage:
 
 import asyncio
 import re
-from datetime import datetime, timezone
 from uuid import UUID
 
 import httpx
@@ -269,9 +268,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
 
     except asyncio.TimeoutError:
         log.error("video_generation_timeout", task_id=str(task_id), timeout=600)
-        await _mark_task_error(
-            task_id, "Video generation timeout (10 minutes per clip exceeded)"
-        )
+        await _mark_task_error(task_id, "Video generation timeout (10 minutes per clip exceeded)")
 
     except httpx.HTTPError as e:
         # Catbox upload or Kling API HTTP errors

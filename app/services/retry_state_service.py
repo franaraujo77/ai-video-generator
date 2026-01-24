@@ -36,27 +36,27 @@ Example Usage:
         ...
 """
 
-import structlog
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+
+import structlog
 
 log = structlog.get_logger()
 
 # Exponential backoff schedule matching Story 6.2
 # Each entry represents the wait time BEFORE the next retry attempt
 RETRY_BACKOFF_SCHEDULE = [
-    timedelta(minutes=1),   # Attempt 1 → 2: Wait 1 minute
-    timedelta(minutes=5),   # Attempt 2 → 3: Wait 5 minutes
+    timedelta(minutes=1),  # Attempt 1 → 2: Wait 1 minute
+    timedelta(minutes=5),  # Attempt 2 → 3: Wait 5 minutes
     timedelta(minutes=15),  # Attempt 3 → 4: Wait 15 minutes
-    timedelta(hours=1),     # Attempt 4 → 5: Wait 1 hour
-    None,                   # Attempt 5: Terminal failure (no more retries)
+    timedelta(hours=1),  # Attempt 4 → 5: Wait 1 hour
+    None,  # Attempt 5: Terminal failure (no more retries)
 ]
 
 
 def calculate_next_retry_time(
     retry_attempt: int,
     max_attempts: int = 5,
-) -> Optional[datetime]:
+) -> datetime | None:
     """Calculate next retry timestamp using exponential backoff.
 
     Args:
@@ -132,7 +132,7 @@ def calculate_next_retry_time(
 def get_retry_status_message(
     retry_attempt: int,
     max_attempts: int,
-    next_retry_at: Optional[datetime],
+    next_retry_at: datetime | None,
 ) -> str:
     """Format retry status for Notion display.
 
@@ -234,7 +234,7 @@ def format_countdown(delta: timedelta) -> str:
 
 def should_retry(
     retry_attempt: int,
-    next_retry_at: Optional[datetime],
+    next_retry_at: datetime | None,
     max_attempts: int = 5,
 ) -> bool:
     """Check if task is eligible for retry.
@@ -258,7 +258,7 @@ def should_retry(
 
     Example:
         >>> if should_retry(task.retry_count, task.next_retry_at, 5):
-        >>>     # Worker can claim this task for retry
+        >>> # Worker can claim this task for retry
         >>>     await claim_and_process_task(task)
     """
     # Check if retry exhausted

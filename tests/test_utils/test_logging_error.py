@@ -128,7 +128,9 @@ class TestAcceptanceCriteriaValidation:
         timestamp = datetime.fromisoformat(timestamp_str)
         assert timestamp.tzinfo is not None  # Must have timezone
         # Verify it's in UTC (or at least timezone-aware)
-        assert timestamp.tzinfo == timezone.utc or timestamp.tzinfo.utcoffset(None) == timezone.utc.utcoffset(None)
+        assert timestamp.tzinfo == timezone.utc or timestamp.tzinfo.utcoffset(
+            None
+        ) == timezone.utc.utcoffset(None)
 
     def test_log_error_without_optional_fields(self, caplog: pytest.LogCaptureFixture) -> None:
         """Verify log_error works with only required fields."""
@@ -196,7 +198,7 @@ class TestLogErrorIntegrationWithClassifier:
 
     def test_log_error_with_classifier_output(self, caplog: pytest.LogCaptureFixture) -> None:
         """Verify log_error can be called with ErrorAnalysis output."""
-        from app.services.error_classifier import ErrorAnalysis, ErrorCategory
+        from app.services.error_classifier import ErrorAnalysis
 
         # Simulate ErrorAnalysis from classifier
         analysis = ErrorAnalysis(

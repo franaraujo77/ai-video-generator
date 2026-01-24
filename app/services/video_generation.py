@@ -78,12 +78,11 @@ def _is_retriable_http_error(exception: BaseException) -> bool:
         - 401 Unauthorized (invalid API key, retrying won't help)
         - 403 Forbidden (permission denied, retrying won't help)
     """
-    if isinstance(exception, httpx.HTTPStatusError):
-        # AC7: Do NOT retry 401 (invalid API key) or 403 (forbidden)
-        if exception.response.status_code in (401, 403):
-            return False
+    # AC7: Do NOT retry 401 (invalid API key) or 403 (forbidden)
+    if isinstance(exception, httpx.HTTPStatusError) and exception.response.status_code in (401, 403):
+        return False
     # Retry all other HTTP errors and timeouts
-    return isinstance(exception, (httpx.HTTPError, asyncio.TimeoutError))
+    return isinstance(exception, httpx.HTTPError | asyncio.TimeoutError)
 
 
 def _validate_identifier(value: str, name: str) -> None:

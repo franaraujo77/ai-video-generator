@@ -36,7 +36,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSONB, JSON, UUID
+from sqlalchemy.dialects.postgresql import JSON, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.exceptions import InvalidStateTransitionError
@@ -590,6 +590,24 @@ class Task(Base):
         index=True,  # Index for efficient retry polling
     )
 
+    # Retry tracking (Story 6.9 - Retry State Visibility)
+    # Maximum number of retry attempts before terminal failure (default 5)
+    # Can be customized per task if needed (e.g., critical tasks get more retries)
+    max_retry_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=5,
+        server_default="5",
+    )
+
+    # Timestamp of most recent error (UTC timezone-aware)
+    # Updated every time task encounters an error (before retry scheduling)
+    # Used for retry history tracking and debugging
+    last_error_timestamp: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     # Manual retry flag (Story 6.7 Task 6 - Manual Retry Monitoring)
     # True if this task was triggered by manual retry (user changed status in Notion)
     # False for automatic retries (triggered by exponential backoff)
@@ -599,6 +617,35 @@ class Task(Base):
         nullable=False,
         default=False,
         server_default="false",
+    )
+
+    # Auto-recovery tracking (Story 6.10 - Auto-Recovery Success Rate Tracking)
+    # Task successfully recovered from error via automatic retry (not manual intervention)
+    # Set to True when task reaches successful state after retry_count > 0
+    # Used for FR35 metrics (80% auto-recovery target)
+    auto_recovered: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default="false",
+    )
+
+    # Which retry attempt succeeded (1-5), NULL if task never recovered
+    # Set when auto_recovered=True to track retry efficiency
+    # Example: recovery_attempt_number=2 means task succeeded on second retry
+    recovery_attempt_number: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    # Error classification for metrics breakdown (TRANSIENT/PERMANENT/UNKNOWN)
+    # Set by error_classifier when task fails - used for auto-recovery metrics
+    # TRANSIENT: Network timeouts, rate limits, temporary service errors (should recover)
+    # PERMANENT: Bad requests, auth failures, validation errors (won't recover)
+    # UNKNOWN: Unexpected errors (may or may not recover)
+    error_category: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
     )
 
     # Checkpoint tracking (Story 6.3 - Resume from Failure Point)
@@ -1076,4 +1123,178 @@ class GeminiQuotaUsage(Base):
             f"<GeminiQuotaUsage(channel_id={self.channel_id!s:.8}, "
             f"date={self.date!s}, usage={self.requests_used}/{self.daily_limit} "
             f"({percentage:.1f}%))>"
+        )
+
+
+class AutoRecoveryMetrics(Base):
+    """Weekly auto-recovery success rate tracking per channel.
+
+    Tracks weekly auto-recovery metrics to verify FR35 target (80% success rate).
+    Workers calculate metrics weekly (Monday 00:00 UTC) for previous week's data.
+
+    Composite Primary Key:
+        (channel_id, week_starting_date) - One row per channel per week (ISO week).
+
+    Success Rate Calculation:
+        success_rate = (total_auto_recovered / total_retry_attempts) * 100
+
+    Alert Thresholds:
+        - success_rate < 80%: WARNING alert to Discord webhook with failure patterns
+        - Minimum 5 retry attempts required for meaningful sample size
+
+    Attributes:
+        channel_id: Foreign key to channels.id (part of composite PK).
+        week_starting_date: Monday of ISO week (part of composite PK).
+        total_retry_attempts: Tasks with retry_count > 0 in week (default: 0).
+        total_auto_recovered: Tasks with auto_recovered=True in week (default: 0).
+        success_rate: Percentage of retry attempts that auto-recovered (default: 0.0).
+        average_retries_before_success: Average recovery_attempt_number (nullable).
+        transient_error_count: Tasks with error_category=TRANSIENT (default: 0).
+        transient_recovered: TRANSIENT errors that auto-recovered (default: 0).
+        permanent_error_count: Tasks with error_category=PERMANENT (default: 0).
+        calculated_at: When metrics were calculated (UTC).
+        created_at: Row creation timestamp (UTC).
+        updated_at: Last update timestamp (UTC).
+
+    Indexes:
+        - Composite PK on (channel_id, week_starting_date) for fast lookups
+        - Index on week_starting_date for historical queries
+        - Index on success_rate for threshold alerts
+        - Index on channel_id for per-channel queries
+
+    Constraints:
+        - total_retry_attempts >= 0
+        - total_auto_recovered >= 0
+        - total_auto_recovered <= total_retry_attempts
+        - success_rate >= 0.0 AND success_rate <= 100.0
+
+    Usage:
+        # Calculate metrics for previous week
+        week_start = get_week_starting_date(date.today() - timedelta(days=7))
+        metrics = await calculate_weekly_metrics(channel_id, week_start, db)
+
+        # Check threshold and alert if needed
+        await check_success_rate_thresholds(metrics, db)
+
+    Related:
+        - Story 6.10: Auto-Recovery Success Rate Tracking
+        - FR35: 80% auto-recovery target
+        - Story 6.8: Similar atomic upsert + threshold alerting pattern
+    """
+
+    __tablename__ = "auto_recovery_metrics"
+
+    # Composite primary key: (channel_id, week_starting_date)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+
+    week_starting_date: Mapped[date] = mapped_column(
+        Date,
+        primary_key=True,
+        nullable=False,
+    )
+
+    # Success rate metrics
+    total_retry_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    total_auto_recovered: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    success_rate: Mapped[float] = mapped_column(
+        nullable=False,
+        default=0.0,
+        server_default="0.0",
+    )
+
+    average_retries_before_success: Mapped[float | None] = mapped_column(
+        nullable=True,
+    )
+
+    # Error category breakdown
+    transient_error_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    transient_recovered: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    permanent_error_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Metadata
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+    # Relationship to channel
+    channel: Mapped["Channel"] = relationship("Channel")
+
+    __table_args__ = (
+        # Composite primary key constraint (explicit name)
+        PrimaryKeyConstraint("channel_id", "week_starting_date", name="pk_auto_recovery_metrics"),
+        # Index for historical queries by week
+        Index("ix_auto_recovery_metrics_week", "week_starting_date"),
+        # Index for threshold alert queries (WHERE success_rate < 80)
+        Index("ix_auto_recovery_metrics_success_rate", "success_rate"),
+        # Index for per-channel queries
+        Index("ix_auto_recovery_metrics_channel", "channel_id"),
+        # Check constraints for data integrity
+        CheckConstraint("total_retry_attempts >= 0", name="ck_auto_recovery_attempts_non_negative"),
+        CheckConstraint(
+            "total_auto_recovered >= 0", name="ck_auto_recovery_recovered_non_negative"
+        ),
+        CheckConstraint(
+            "total_auto_recovered <= total_retry_attempts",
+            name="ck_auto_recovery_recovered_le_attempts",
+        ),
+        CheckConstraint(
+            "success_rate >= 0.0 AND success_rate <= 100.0", name="ck_auto_recovery_rate_range"
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<AutoRecoveryMetrics(channel_id={self.channel_id!s:.8}, "
+            f"week={self.week_starting_date!s}, success_rate={self.success_rate:.1f}%, "
+            f"recovered={self.total_auto_recovered}/{self.total_retry_attempts})>"
         )

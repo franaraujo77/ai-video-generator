@@ -292,7 +292,7 @@ async def _handle_rejection_status_change(
         return
 
     try:
-        internal_status = TaskStatus(internal_status_str)
+        TaskStatus(internal_status_str)  # Validate status string
     except ValueError:
         log.error(
             "invalid_internal_status",
@@ -402,8 +402,8 @@ async def _handle_manual_retry_detection(
 
     Story 6.7 Task 3: Integrate with Notion sync service
     """
-    from app.services.notion_sync import is_manual_retry_transition, handle_manual_retry
     from app.constants import NOTION_TO_INTERNAL_STATUS
+    from app.services.notion_sync import handle_manual_retry, is_manual_retry_transition
 
     # Map Notion status to internal TaskStatus
     internal_status_str = NOTION_TO_INTERNAL_STATUS.get(current_notion_status)
@@ -430,9 +430,7 @@ async def _handle_manual_retry_detection(
 
     async with async_session_factory() as session, session.begin():
         # Find task by notion_page_id to get old status
-        result = await session.execute(
-            select(Task).where(Task.notion_page_id == page_id)
-        )
+        result = await session.execute(select(Task).where(Task.notion_page_id == page_id))
         task = result.scalar_one_or_none()
 
         if not task:

@@ -42,78 +42,48 @@ from tests.support.factories import create_task
 
 def test_is_manual_retry_transition_asset_error_to_queued():
     """Test detection of ASSET_ERROR → QUEUED transition."""
-    assert is_manual_retry_transition(
-        TaskStatus.ASSET_ERROR,
-        TaskStatus.QUEUED
-    ) is True
+    assert is_manual_retry_transition(TaskStatus.ASSET_ERROR, TaskStatus.QUEUED) is True
 
 
 def test_is_manual_retry_transition_video_error_to_queued():
     """Test detection of VIDEO_ERROR → QUEUED transition."""
-    assert is_manual_retry_transition(
-        TaskStatus.VIDEO_ERROR,
-        TaskStatus.QUEUED
-    ) is True
+    assert is_manual_retry_transition(TaskStatus.VIDEO_ERROR, TaskStatus.QUEUED) is True
 
 
 def test_is_manual_retry_transition_video_error_to_assets_approved():
     """Test detection of VIDEO_ERROR → ASSETS_APPROVED transition (partial retry)."""
-    assert is_manual_retry_transition(
-        TaskStatus.VIDEO_ERROR,
-        TaskStatus.ASSETS_APPROVED
-    ) is True
+    assert is_manual_retry_transition(TaskStatus.VIDEO_ERROR, TaskStatus.ASSETS_APPROVED) is True
 
 
 def test_is_manual_retry_transition_audio_error_to_video_approved():
     """Test detection of AUDIO_ERROR → VIDEO_APPROVED transition (partial retry)."""
-    assert is_manual_retry_transition(
-        TaskStatus.AUDIO_ERROR,
-        TaskStatus.VIDEO_APPROVED
-    ) is True
+    assert is_manual_retry_transition(TaskStatus.AUDIO_ERROR, TaskStatus.VIDEO_APPROVED) is True
 
 
 def test_is_manual_retry_transition_upload_error_to_approved():
     """Test detection of UPLOAD_ERROR → APPROVED transition (partial retry)."""
-    assert is_manual_retry_transition(
-        TaskStatus.UPLOAD_ERROR,
-        TaskStatus.APPROVED
-    ) is True
-
-
+    assert is_manual_retry_transition(TaskStatus.UPLOAD_ERROR, TaskStatus.APPROVED) is True
 
 
 def test_is_manual_retry_transition_normal_progression_not_detected():
     """Test that normal status progression does NOT trigger manual retry."""
     # Normal pipeline flow should NOT be detected as manual retry
-    assert is_manual_retry_transition(
-        TaskStatus.GENERATING_VIDEO,
-        TaskStatus.VIDEO_READY
-    ) is False
+    assert is_manual_retry_transition(TaskStatus.GENERATING_VIDEO, TaskStatus.VIDEO_READY) is False
 
-    assert is_manual_retry_transition(
-        TaskStatus.ASSETS_APPROVED,
-        TaskStatus.GENERATING_VIDEO
-    ) is False
+    assert (
+        is_manual_retry_transition(TaskStatus.ASSETS_APPROVED, TaskStatus.GENERATING_VIDEO) is False
+    )
 
-    assert is_manual_retry_transition(
-        TaskStatus.QUEUED,
-        TaskStatus.CLAIMED
-    ) is False
+    assert is_manual_retry_transition(TaskStatus.QUEUED, TaskStatus.CLAIMED) is False
 
 
 def test_is_manual_retry_transition_invalid_retry_target():
     """Test that invalid retry transitions are NOT detected."""
     # ASSET_ERROR → VIDEO_APPROVED is invalid (wrong step)
-    assert is_manual_retry_transition(
-        TaskStatus.ASSET_ERROR,
-        TaskStatus.VIDEO_APPROVED
-    ) is False
+    assert is_manual_retry_transition(TaskStatus.ASSET_ERROR, TaskStatus.VIDEO_APPROVED) is False
 
     # VIDEO_ERROR → UPLOADING is invalid (wrong step)
-    assert is_manual_retry_transition(
-        TaskStatus.VIDEO_ERROR,
-        TaskStatus.UPLOADING
-    ) is False
+    assert is_manual_retry_transition(TaskStatus.VIDEO_ERROR, TaskStatus.UPLOADING) is False
 
 
 # =============================================================================
@@ -128,7 +98,7 @@ async def test_handle_manual_retry_resets_retry_count(async_session):
     task = create_task(
         status=TaskStatus.VIDEO_ERROR,
         retry_count=3,
-        error_log="Original error: Video generation timeout"
+        error_log="Original error: Video generation timeout",
     )
     async_session.add(task)
     await async_session.commit()
@@ -151,11 +121,7 @@ async def test_handle_manual_retry_preserves_error_log(async_session):
     """Verify manual retry preserves existing error log."""
     # Create task with existing error log
     original_log = "Original error: Video generation timeout\nRetry 1: Failed\nRetry 2: Failed"
-    task = create_task(
-        status=TaskStatus.VIDEO_ERROR,
-        retry_count=3,
-        error_log=original_log
-    )
+    task = create_task(status=TaskStatus.VIDEO_ERROR, retry_count=3, error_log=original_log)
     async_session.add(task)
     await async_session.commit()
 
@@ -178,11 +144,7 @@ async def test_handle_manual_retry_preserves_error_log(async_session):
 async def test_handle_manual_retry_appends_marker_to_empty_log(async_session):
     """Verify manual retry creates error log with marker if none exists."""
     # Create task with no error log
-    task = create_task(
-        status=TaskStatus.VIDEO_ERROR,
-        retry_count=1,
-        error_log=None
-    )
+    task = create_task(status=TaskStatus.VIDEO_ERROR, retry_count=1, error_log=None)
     async_session.add(task)
     await async_session.commit()
 
@@ -202,10 +164,7 @@ async def test_handle_manual_retry_appends_marker_to_empty_log(async_session):
 @pytest.mark.asyncio
 async def test_handle_manual_retry_updates_status(async_session):
     """Verify manual retry updates task status to new_status."""
-    task = create_task(
-        status=TaskStatus.VIDEO_ERROR,
-        retry_count=2
-    )
+    task = create_task(status=TaskStatus.VIDEO_ERROR, retry_count=2)
     async_session.add(task)
     await async_session.commit()
 
@@ -234,8 +193,6 @@ def test_get_failed_step_from_status_maps_error_statuses():
     assert get_failed_step_from_status(TaskStatus.UPLOAD_ERROR) == "youtube_upload"
 
 
-
-
 @pytest.mark.asyncio
 async def test_clear_step_checkpoint_for_retry_selective(async_session):
     """Verify selective checkpoint clearing preserves completed steps."""
@@ -249,36 +206,30 @@ async def test_clear_step_checkpoint_for_retry_selective(async_session):
         task_id=str(task.id),
         step_name="asset_generation",
         outputs={"total_assets": 20, "completed": True},
-        db=async_session
+        db=async_session,
     )
     await save_step_checkpoint(
         task_id=str(task.id),
         step_name="video_generation",
         outputs={"total_clips": 18, "completed_clips": 10},
-        db=async_session
+        db=async_session,
     )
 
     # Clear video checkpoint (failed step)
     await clear_step_checkpoint_for_retry(
-        task_id=str(task.id),
-        step_name="video_generation",
-        db=async_session
+        task_id=str(task.id), step_name="video_generation", db=async_session
     )
 
     # Verify asset checkpoint preserved
     asset_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="asset_generation",
-        db=async_session
+        task_id=str(task.id), step_name="asset_generation", db=async_session
     )
     assert asset_checkpoint is not None, "Asset checkpoint should be preserved"
     assert asset_checkpoint["outputs"]["completed"] is True
 
     # Verify video checkpoint cleared
     video_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="video_generation",
-        db=async_session
+        task_id=str(task.id), step_name="video_generation", db=async_session
     )
     assert video_checkpoint is None, "Video checkpoint should be cleared"
 
@@ -296,34 +247,30 @@ async def test_clear_step_checkpoint_for_retry_full_restart(async_session):
         task_id=str(task.id),
         step_name="asset_generation",
         outputs={"completed": True},
-        db=async_session
+        db=async_session,
     )
     await save_step_checkpoint(
         task_id=str(task.id),
         step_name="video_generation",
         outputs={"completed": True},
-        db=async_session
+        db=async_session,
     )
 
     # Clear all checkpoints (FAILED → full restart)
     await clear_step_checkpoint_for_retry(
         task_id=str(task.id),
         step_name=None,  # None = clear all
-        db=async_session
+        db=async_session,
     )
 
     # Verify all checkpoints cleared
     asset_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="asset_generation",
-        db=async_session
+        task_id=str(task.id), step_name="asset_generation", db=async_session
     )
     assert asset_checkpoint is None, "All checkpoints should be cleared"
 
     video_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="video_generation",
-        db=async_session
+        task_id=str(task.id), step_name="video_generation", db=async_session
     )
     assert video_checkpoint is None, "All checkpoints should be cleared"
 
@@ -336,10 +283,7 @@ async def test_clear_step_checkpoint_for_retry_full_restart(async_session):
 @pytest.mark.asyncio
 async def test_error_log_accumulation_across_multiple_retries(async_session):
     """Verify error log accumulates across multiple manual retries."""
-    task = create_task(
-        status=TaskStatus.VIDEO_ERROR,
-        error_log="Initial failure: Timeout"
-    )
+    task = create_task(status=TaskStatus.VIDEO_ERROR, error_log="Initial failure: Timeout")
     async_session.add(task)
     await async_session.commit()
 
@@ -361,11 +305,11 @@ async def test_error_log_accumulation_across_multiple_retries(async_session):
     # Use SQLAlchemy update to bypass status validator
     from sqlalchemy import update as sql_update
     from app.models import Task as TaskModel
+
     await async_session.execute(
-        sql_update(TaskModel).where(TaskModel.id == task.id).values(
-            status=TaskStatus.VIDEO_ERROR,
-            retry_count=2
-        )
+        sql_update(TaskModel)
+        .where(TaskModel.id == task.id)
+        .values(status=TaskStatus.VIDEO_ERROR, retry_count=2)
     )
     await async_session.commit()
     await async_session.refresh(task)
@@ -388,7 +332,7 @@ async def test_error_log_includes_timestamp_and_status_details(async_session):
     task = create_task(
         status=TaskStatus.ASSET_ERROR,
         retry_count=3,
-        error_log="Asset generation failed: API timeout"
+        error_log="Asset generation failed: API timeout",
     )
     async_session.add(task)
     await async_session.commit()
@@ -422,7 +366,7 @@ async def test_end_to_end_manual_retry_from_video_error(async_session):
         status=TaskStatus.VIDEO_ERROR,
         retry_count=3,
         next_retry_at=None,  # Retries exhausted
-        error_log="Video generation failed: KIE.ai timeout after 10 minutes"
+        error_log="Video generation failed: KIE.ai timeout after 10 minutes",
     )
     async_session.add(task)
     await async_session.commit()
@@ -432,7 +376,7 @@ async def test_end_to_end_manual_retry_from_video_error(async_session):
         task_id=str(task.id),
         step_name="asset_generation",
         outputs={"total_assets": 22, "completed": True},
-        db=async_session
+        db=async_session,
     )
 
     # Save video checkpoint (partial - 10/18 clips)
@@ -440,7 +384,7 @@ async def test_end_to_end_manual_retry_from_video_error(async_session):
         task_id=str(task.id),
         step_name="video_generation",
         outputs={"total_clips": 18, "completed_clips": 10},
-        db=async_session
+        db=async_session,
     )
 
     # User triggers manual retry by changing status to QUEUED in Notion
@@ -463,18 +407,14 @@ async def test_end_to_end_manual_retry_from_video_error(async_session):
 
     # Verify asset checkpoint preserved
     asset_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="asset_generation",
-        db=async_session
+        task_id=str(task.id), step_name="asset_generation", db=async_session
     )
     assert asset_checkpoint is not None, "Asset checkpoint should be preserved"
     assert asset_checkpoint["outputs"]["completed"] is True
 
     # Verify video checkpoint cleared
     video_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="video_generation",
-        db=async_session
+        task_id=str(task.id), step_name="video_generation", db=async_session
     )
     assert video_checkpoint is None, "Video checkpoint should be cleared for re-execution"
 
@@ -486,7 +426,7 @@ async def test_clear_all_checkpoints_when_step_name_is_none(async_session):
     task = create_task(
         status=TaskStatus.UPLOAD_ERROR,  # Use valid error status
         retry_count=3,
-        error_log="Upload failed repeatedly"
+        error_log="Upload failed repeatedly",
     )
     async_session.add(task)
     await async_session.commit()
@@ -496,33 +436,29 @@ async def test_clear_all_checkpoints_when_step_name_is_none(async_session):
         task_id=str(task.id),
         step_name="asset_generation",
         outputs={"completed": True},
-        db=async_session
+        db=async_session,
     )
     await save_step_checkpoint(
         task_id=str(task.id),
         step_name="video_generation",
         outputs={"completed": True},
-        db=async_session
+        db=async_session,
     )
 
     # Clear all checkpoints by passing step_name=None
     await clear_step_checkpoint_for_retry(
         task_id=str(task.id),
         step_name=None,  # None = clear all checkpoints
-        db=async_session
+        db=async_session,
     )
 
     # Verify all checkpoints cleared
     asset_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="asset_generation",
-        db=async_session
+        task_id=str(task.id), step_name="asset_generation", db=async_session
     )
     assert asset_checkpoint is None, "All checkpoints should be cleared"
 
     video_checkpoint = await get_step_checkpoint(
-        task_id=str(task.id),
-        step_name="video_generation",
-        db=async_session
+        task_id=str(task.id), step_name="video_generation", db=async_session
     )
     assert video_checkpoint is None, "All checkpoints should be cleared"

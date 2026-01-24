@@ -38,6 +38,7 @@ def mock_discord_webhook():
 # Terminal Failure → Discord Alert Integration Tests (3 tests)
 # =============================================================================
 
+
 @pytest.mark.asyncio
 async def test_handle_terminal_failure_sends_alert(async_session, mock_discord_webhook):
     """Verify terminal failure triggers Discord alert with rich context."""
@@ -53,7 +54,7 @@ async def test_handle_terminal_failure_sends_alert(async_session, mock_discord_w
         retry_recommended=False,
         confidence=0.95,
         suggested_action="Verify KLING_API_KEY environment variable is set correctly",
-        api_service="kling"
+        api_service="kling",
     )
 
     context = ErrorContext(
@@ -62,7 +63,7 @@ async def test_handle_terminal_failure_sends_alert(async_session, mock_discord_w
         step_name="video_generation",
         clip_index=3,
         total_clips=18,
-        asset_name="clip_003_haunter_phasing.mp4"
+        asset_name="clip_003_haunter_phasing.mp4",
     )
 
     with patch.dict("os.environ", {"DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"}):
@@ -78,14 +79,14 @@ async def test_handle_terminal_failure_sends_alert(async_session, mock_discord_w
     assert "Task Failed Permanently" in embed["title"]
     assert "video_error" in embed["title"]  # TaskStatus.value returns lowercase
     assert "Invalid API key" in embed["description"]
-    assert embed["color"] == 0xe74c3c  # CRITICAL red
+    assert embed["color"] == 0xE74C3C  # CRITICAL red
 
     # Verify fields
     fields = {field["name"]: field["value"] for field in embed["fields"]}
     assert str(task.id) == fields["Task ID"]
     assert str(task.channel_id) == fields["Channel"]  # Channel field contains UUID FK
-    assert "video_generation" == fields["Failed Step"]
-    assert "permanent" == fields["Error Type"]  # ErrorCategory.value returns lowercase
+    assert fields["Failed Step"] == "video_generation"
+    assert fields["Error Type"] == "permanent"  # ErrorCategory.value returns lowercase
 
 
 @pytest.mark.asyncio
@@ -103,7 +104,7 @@ async def test_handle_terminal_failure_no_webhook_logs_warning(async_session):
         retry_recommended=False,
         confidence=0.99,
         suggested_action="Wait until quota resets at midnight PST",
-        api_service="gemini"
+        api_service="gemini",
     )
 
     # No DISCORD_WEBHOOK_URL configured
@@ -132,7 +133,7 @@ async def test_terminal_failure_alert_includes_recommendation(async_session, moc
         retry_recommended=False,
         confidence=0.98,
         suggested_action="Update ELEVENLABS_API_KEY in Railway environment variables",
-        api_service="elevenlabs"
+        api_service="elevenlabs",
     )
 
     with patch.dict("os.environ", {"DISCORD_WEBHOOK_URL": "https://discord.com/api/webhooks/test"}):
@@ -150,6 +151,7 @@ async def test_terminal_failure_alert_includes_recommendation(async_session, moc
 # =============================================================================
 # Retry Orchestration → Alert Integration Tests (2 tests)
 # =============================================================================
+
 
 @pytest.mark.asyncio
 async def test_schedule_retry_no_alert_for_transient_error(async_session, mock_discord_webhook):
@@ -171,7 +173,7 @@ async def test_schedule_retry_no_alert_for_transient_error(async_session, mock_d
                 retry_recommended=True,
                 confidence=0.90,
                 suggested_action="Retry automatically",
-                api_service="kling"
+                api_service="kling",
             )
 
             error_payload = await schedule_retry(task.id, exception, async_session, None)
@@ -205,7 +207,7 @@ async def test_schedule_retry_alerts_on_permanent_error(async_session, mock_disc
                 retry_recommended=False,
                 confidence=0.99,
                 suggested_action="Check GEMINI_API_KEY environment variable",
-                api_service="gemini"
+                api_service="gemini",
             )
 
             error_payload = await schedule_retry(task.id, exception, async_session, None)

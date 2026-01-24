@@ -137,7 +137,10 @@ async def test_update_checkpoint_after_sfx_clip_generation(async_session, tmp_pa
     # Mock CLI script to create files
     def mock_cli_side_effect(*args, **kwargs):
         sfx_description = kwargs.get("sfx_description", "")
-        if "clip 1" in kwargs.get("sfx_description", "").lower() or "wind" in sfx_description.lower():
+        if (
+            "clip 1" in kwargs.get("sfx_description", "").lower()
+            or "wind" in sfx_description.lower()
+        ):
             output = sfx_dir / "sfx_01.wav"
         else:
             output = sfx_dir / "sfx_02.wav"

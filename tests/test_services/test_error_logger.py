@@ -88,9 +88,7 @@ async def test_structured_error_includes_error_category_from_story_61(async_sess
 
     # Simulate transient error
     exception = TimeoutError("Connection timeout")
-    context = ErrorContext(
-        step_name="asset_generation", task_id=str(task.id), channel_id="poke1"
-    )
+    context = ErrorContext(step_name="asset_generation", task_id=str(task.id), channel_id="poke1")
 
     with caplog.at_level("ERROR"):
         await log_structured_error(
@@ -112,7 +110,13 @@ async def test_structured_error_includes_error_category_from_story_61(async_sess
     # Verify Story 6.1 integration
     assert "error_category" in log_data
     # Error categories are lowercase (from ErrorCategory enum)
-    assert log_data["error_category"] in ["transient", "permanent", "configuration", "quota_exceeded", "unknown"]
+    assert log_data["error_category"] in [
+        "transient",
+        "permanent",
+        "configuration",
+        "quota_exceeded",
+        "unknown",
+    ]
     assert log_data["is_transient"] == (log_data["error_category"] == "transient")
 
 

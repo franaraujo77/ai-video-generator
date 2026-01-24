@@ -40,7 +40,9 @@ class TestTransientErrorDetection:
         """Verify 500 errors classified as TRANSIENT."""
         request = httpx.Request("POST", "https://api.example.com")
         response = httpx.Response(500, request=request)
-        exception = httpx.HTTPStatusError("Internal Server Error", request=request, response=response)
+        exception = httpx.HTTPStatusError(
+            "Internal Server Error", request=request, response=response
+        )
 
         analysis = classify_error(exception)
 
@@ -144,30 +146,37 @@ class TestPermanentErrorDetection:
         assert analysis.retry_recommended is False
         assert analysis.http_status_code == 400
         assert analysis.confidence >= 0.95
-        assert "fix" in analysis.suggested_action.lower() or "check" in analysis.suggested_action.lower()
+        assert (
+            "fix" in analysis.suggested_action.lower()
+            or "check" in analysis.suggested_action.lower()
+        )
 
     def test_classify_unauthorized_401(self) -> None:
-        """Verify 401 errors classified as PERMANENT."""
+        """Verify 401 errors classified as CONFIGURATION (Story 6.4)."""
         request = httpx.Request("GET", "https://api.example.com")
         response = httpx.Response(401, request=request)
         exception = httpx.HTTPStatusError("Unauthorized", request=request, response=response)
 
         analysis = classify_error(exception)
 
-        assert analysis.category == ErrorCategory.PERMANENT
+        assert (
+            analysis.category == ErrorCategory.CONFIGURATION
+        )  # Story 6.4: 401/403 are CONFIGURATION
         assert analysis.retry_recommended is False
         assert analysis.http_status_code == 401
         assert analysis.confidence >= 0.95
 
     def test_classify_forbidden_403(self) -> None:
-        """Verify 403 errors classified as PERMANENT."""
+        """Verify 403 errors classified as CONFIGURATION (Story 6.4)."""
         request = httpx.Request("GET", "https://api.example.com")
         response = httpx.Response(403, request=request)
         exception = httpx.HTTPStatusError("Forbidden", request=request, response=response)
 
         analysis = classify_error(exception)
 
-        assert analysis.category == ErrorCategory.PERMANENT
+        assert (
+            analysis.category == ErrorCategory.CONFIGURATION
+        )  # Story 6.4: 401/403 are CONFIGURATION
         assert analysis.http_status_code == 403
 
     def test_classify_not_found_404(self) -> None:
@@ -185,7 +194,9 @@ class TestPermanentErrorDetection:
         """Verify 422 errors classified as PERMANENT."""
         request = httpx.Request("POST", "https://api.example.com")
         response = httpx.Response(422, request=request)
-        exception = httpx.HTTPStatusError("Unprocessable Entity", request=request, response=response)
+        exception = httpx.HTTPStatusError(
+            "Unprocessable Entity", request=request, response=response
+        )
 
         analysis = classify_error(exception)
 
@@ -256,7 +267,7 @@ class TestCLIScriptErrorParsing:
         assert analysis.http_status_code == 500
 
     def test_classify_cli_script_error_401(self) -> None:
-        """Verify CLIScriptError with 401 in stderr classified as PERMANENT."""
+        """Verify CLIScriptError with 401 in stderr classified as CONFIGURATION (Story 6.4)."""
         cli_error = CLIScriptError(
             script="generate_asset.py",
             exit_code=1,
@@ -265,7 +276,9 @@ class TestCLIScriptErrorParsing:
 
         analysis = classify_error(cli_error)
 
-        assert analysis.category == ErrorCategory.PERMANENT
+        assert (
+            analysis.category == ErrorCategory.CONFIGURATION
+        )  # Story 6.4: 401/403 are CONFIGURATION
         assert analysis.http_status_code == 401
         assert analysis.retry_recommended is False
 
@@ -327,15 +340,25 @@ class TestErrorAnalysisStructure:
     def test_confidence_within_valid_range(self) -> None:
         """Verify confidence scores are between 0.0 and 1.0."""
         test_cases = [
-            httpx.HTTPStatusError("", request=httpx.Request("GET", "https://api.example.com"), response=httpx.Response(429)),
-            httpx.HTTPStatusError("", request=httpx.Request("GET", "https://api.example.com"), response=httpx.Response(400)),
+            httpx.HTTPStatusError(
+                "",
+                request=httpx.Request("GET", "https://api.example.com"),
+                response=httpx.Response(429),
+            ),
+            httpx.HTTPStatusError(
+                "",
+                request=httpx.Request("GET", "https://api.example.com"),
+                response=httpx.Response(400),
+            ),
             httpx.TimeoutException("timeout"),
             ValueError("unknown error"),
         ]
 
         for exception in test_cases:
             analysis = classify_error(exception)
-            assert 0.0 <= analysis.confidence <= 1.0, f"Confidence out of range: {analysis.confidence}"
+            assert (
+                0.0 <= analysis.confidence <= 1.0
+            ), f"Confidence out of range: {analysis.confidence}"
 
 
 class TestErrorClassifierRobustness:
