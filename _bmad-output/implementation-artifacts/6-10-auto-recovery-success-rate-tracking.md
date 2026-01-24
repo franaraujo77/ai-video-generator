@@ -1,6 +1,6 @@
 # Story 6.10: Auto-Recovery Success Rate Tracking
 
-Status: in-progress
+Status: done
 
 ## Story
 
