@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
-from app.routes import webhooks
+from app.routes import webhooks, admin
 from app.services.notion_sync import sync_database_to_notion_loop
 
 log = structlog.get_logger()
@@ -85,23 +85,33 @@ app = FastAPI(
 # Register webhook routes (Story 2.5)
 app.include_router(webhooks.router)
 
+# Register admin routes (Story 7.0)
+app.include_router(admin.router)
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check() -> JSONResponse:
     """Health check endpoint for Railway deployment validation.
 
     Epic 1: Validates that the application can start and respond to requests.
+    Story 7.0: Adds scheduler status check for quota reset jobs.
     Future epics will add database connectivity checks, service health checks, etc.
 
     Returns:
         JSONResponse: Status and basic system information
     """
+    # Check quota reset scheduler status (Story 7.0)
+    from app.scheduler import is_scheduler_running
+
+    scheduler_running = is_scheduler_running()
+
     return JSONResponse(
         content={
             "status": "healthy",
             "service": "ai-video-generator",
-            "epic": "epic-1",
+            "epic": "epic-7",
             "message": "Foundation services operational",
+            "quota_reset_scheduler": "running" if scheduler_running else "not_running",
         }
     )
 

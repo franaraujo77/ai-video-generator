@@ -419,6 +419,7 @@ async def worker_main_loop() -> None:
         - Import entrypoints to register task handlers
         - Run PgQueuer worker loop (handles polling, LISTEN/NOTIFY, claiming)
         - Run retry task poller in background (Story 6.2)
+        - Start quota reset scheduler (Story 7.0)
         - Exit gracefully on shutdown signal
 
     Error Handling:
@@ -441,6 +442,7 @@ async def worker_main_loop() -> None:
         # Import queue initialization
         from app.entrypoints import register_entrypoints
         from app.queue import initialize_pgqueuer
+        from app.scheduler import start_quota_reset_scheduler
 
         # Initialize PgQueuer
         pgq, pool = await initialize_pgqueuer()
@@ -453,6 +455,9 @@ async def worker_main_loop() -> None:
 
         # Start retry task poller in background (Story 6.2, epic6-ai-3)
         retry_poller_task = asyncio.create_task(retry_task_poller(pgq))
+
+        # Start quota reset scheduler (Story 7.0)
+        await start_quota_reset_scheduler()
 
         # Run PgQueuer worker loop
         # Handles: polling, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED, retry logic
@@ -492,11 +497,17 @@ async def shutdown_worker() -> None:
     Important for Railway deployments to prevent connection leaks.
 
     Side Effects:
+        - Shuts down quota reset scheduler (Story 7.0)
         - Closes asyncpg pool (PgQueuer)
         - Closes async database engine (SQLAlchemy)
         - Disposes connection pool
     """
     log.info("closing_database_connections")
+
+    # Shutdown quota reset scheduler (Story 7.0)
+    from app.scheduler import shutdown_quota_reset_scheduler
+
+    shutdown_quota_reset_scheduler()
 
     # Close asyncpg pool (used by PgQueuer)
     if asyncpg_pool:
