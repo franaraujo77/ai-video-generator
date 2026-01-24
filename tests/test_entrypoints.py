@@ -50,11 +50,16 @@ async def test_process_video_success():
 
     # Mock Task model (Story 4.3: Added priority and channel_id)
     # Story 4.6: Mock status as enum with .value attribute
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.status = MagicMock()
     mock_task.status.value = "pending"
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
+    mock_task.auto_recovered = False
 
     # Mock database session
     mock_db = AsyncMock()
@@ -121,11 +126,16 @@ async def test_process_video_short_transaction_pattern():
 
     # Mock Task (Story 4.3: Added priority and channel_id)
     # Story 4.6: Mock status as enum with .value attribute
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.status = MagicMock()
     mock_task.status.value = "pending"
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
+    mock_task.auto_recovered = False
 
     # Track session lifecycle
     session_open_count = 0
@@ -165,11 +175,15 @@ async def test_process_video_logging():
     mock_job.payload = b"task_999"
 
     # Story 4.6: Mock status as enum with .value attribute
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.status = MagicMock()
     mock_task.status.value = "pending"
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)
@@ -202,9 +216,13 @@ async def test_process_video_worker_id_from_env():
     mock_job.id = 123
     mock_job.payload = b"task_111"
 
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)
@@ -232,9 +250,13 @@ async def test_process_video_worker_id_defaults_to_local():
     mock_job.id = 123
     mock_job.payload = b"task_222"
 
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)
@@ -265,16 +287,22 @@ async def test_process_video_status_transitions():
 
     # Create two separate task mocks (one for each transaction)
     # Story 4.6: Mock status as enum with .value attribute
+    # Story 6.9: Added retry-related attributes
     mock_task_1 = MagicMock()
     mock_task_1.status = MagicMock()
     mock_task_1.status.value = "pending"
     mock_task_1.priority = "high"
     mock_task_1.channel_id = "channel1"
+    mock_task_1.retry_count = 0
+    mock_task_1.next_retry_at = None
+    mock_task_1.max_retry_attempts = 5
 
     mock_task_2 = MagicMock()
     mock_task_2.status = MagicMock()
     mock_task_2.status.value = "processing"
     mock_task_2.priority = "high"
+    mock_task_2.retry_count = 0
+    mock_task_2.auto_recovered = False
 
     mock_db = AsyncMock()
     # First call returns task with "pending", second call returns task with "processing"
@@ -305,9 +333,13 @@ async def test_process_video_pgqueuer_job_id_logged():
     mock_job.id = 456789
     mock_job.payload = b"task_444"
 
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)
@@ -335,9 +367,13 @@ async def test_process_video_database_commit_called():
     mock_job.id = 123
     mock_job.payload = b"task_555"
 
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.priority = "normal"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)
@@ -366,9 +402,13 @@ async def test_process_video_logs_priority_on_claim():
     mock_job.id = 123
     mock_job.payload = b"task_high_priority"
 
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.priority = "high"
     mock_task.channel_id = "channel1"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)
@@ -398,8 +438,13 @@ async def test_process_video_logs_priority_on_completion():
     mock_job.id = 123
     mock_job.payload = b"task_normal_priority"
 
+    # Story 6.9: Added retry-related attributes
     mock_task = MagicMock()
     mock_task.priority = "normal"
+    mock_task.retry_count = 0
+    mock_task.next_retry_at = None
+    mock_task.max_retry_attempts = 5
+    mock_task.auto_recovered = False
 
     mock_db = AsyncMock()
     mock_db.get = AsyncMock(return_value=mock_task)

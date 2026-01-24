@@ -400,6 +400,10 @@ async def test_push_task_to_notion_success():
     task.status = TaskStatus.GENERATING_ASSETS
     task.priority = PriorityLevel.HIGH
     task.title = "Test Video"
+    # Story 6.9: Add retry-related attributes
+    task.retry_count = 0
+    task.next_retry_at = None
+    task.max_retry_attempts = 5
 
     # Mock NotionClient
     mock_client = AsyncMock(spec=NotionClient)

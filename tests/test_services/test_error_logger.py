@@ -348,10 +348,13 @@ async def test_partial_progress_included_from_story_63(async_session, caplog):
             db=async_session,
         )
 
-    # Parse log
+    # Parse log (get the ERROR log, not the INFO checkpoint log)
     import json
 
-    log_data = json.loads(caplog.records[0].getMessage())
+    # Filter to ERROR logs only
+    error_records = [r for r in caplog.records if r.levelname == "ERROR"]
+    assert len(error_records) > 0, "Expected at least one ERROR log"
+    log_data = json.loads(error_records[0].getMessage())
 
     # Verify checkpoint progress included
     assert "partial_progress" in log_data

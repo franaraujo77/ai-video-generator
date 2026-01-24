@@ -5,7 +5,7 @@ from app.models import Task, TaskStatus
 
 
 def create_task(
-    channel_id: str = "poke1",
+    channel_id: UUID | str | None = None,
     notion_page_id: str | None = None,
     title: str = "Test Pokemon Documentary",
     topic: str = "Nature Documentary",
@@ -18,7 +18,7 @@ def create_task(
     """Create a test task for use in tests.
 
     Args:
-        channel_id: Channel identifier (UUID) - MUST be passed explicitly in tests
+        channel_id: Channel identifier - accepts UUID, valid UUID string, or None (auto-generates)
         notion_page_id: Notion page UUID (auto-generated if None)
         title: Video title
         topic: Video topic
@@ -35,6 +35,17 @@ def create_task(
         For correlation_id, we use task.id as the correlation since Task model
         doesn't have a separate correlation_id field yet.
     """
+    # Convert channel_id to UUID if needed
+    if channel_id is None:
+        channel_id = uuid4()
+    elif isinstance(channel_id, str):
+        # Try to parse as UUID, or generate new if invalid format
+        try:
+            channel_id = UUID(channel_id)
+        except ValueError:
+            # Invalid UUID string (e.g., "poke1") - generate valid UUID
+            channel_id = uuid4()
+
     # Generate notion_page_id if not provided
     if notion_page_id is None:
         notion_page_id = str(uuid4())
@@ -42,7 +53,7 @@ def create_task(
     # Create task with minimal required fields
     task = Task(
         id=correlation_id or uuid4(),  # Use correlation_id as task.id if provided
-        channel_id=channel_id,  # Use provided channel_id (must be valid UUID)
+        channel_id=channel_id,  # Now guaranteed to be UUID
         notion_page_id=notion_page_id,
         title=title,
         topic=topic,

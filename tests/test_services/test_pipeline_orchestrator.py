@@ -39,11 +39,11 @@ class TestPipelineOrchestratorInit:
     """Test PipelineOrchestrator initialization."""
 
     def test_orchestrator_initialization(self):
-        """Test orchestrator initializes with task_id and empty step completions."""
+        """Test orchestrator initializes with task_id and logger (Story 6.3: step completions moved to checkpoint_service)."""
         orchestrator = PipelineOrchestrator(task_id="test-task-123")
 
         assert orchestrator.task_id == "test-task-123"
-        assert orchestrator.step_completions == {}
+        # Story 6.3: step_completions removed - now tracked in DB via checkpoint_service
         assert orchestrator.log is not None
 
 
@@ -55,10 +55,20 @@ class TestExecutePipeline:
         """Test pipeline executes first step and halts at ASSETS_READY review gate.
 
         Story 5.2 Update: Pipeline now halts at review gates for human approval.
+        Story 6.3 Update: Uses checkpoint_service instead of instance methods.
         The 'happy path' for a fresh task is to complete asset generation and halt
         at ASSETS_READY, awaiting approval before proceeding.
         """
-        orchestrator = PipelineOrchestrator(task_id="test-task-123")
+        from uuid import uuid4
+
+        task_id = str(uuid4())
+        orchestrator = PipelineOrchestrator(task_id=task_id)
+
+        # Mock async_session_factory (used by checkpoint service)
+        mock_db = AsyncMock()
+        mock_session_ctx = AsyncMock()
+        mock_session_ctx.__aenter__ = AsyncMock(return_value=mock_db)
+        mock_session_ctx.__aexit__ = AsyncMock()
 
         # Mock task data loading
         with patch.object(orchestrator, "_load_task_data", new_callable=AsyncMock) as mock_load:
@@ -69,38 +79,62 @@ class TestExecutePipeline:
                 "story_direction": "Forest evolution story",
             }
 
-            # Mock load_step_completion_metadata (returns empty dict - no steps complete)
-            with patch.object(
-                orchestrator, "load_step_completion_metadata", new_callable=AsyncMock
-            ) as mock_metadata:
-                mock_metadata.return_value = {}
+            # Story 6.3: Mock async_session_factory
+            with patch(
+                "app.services.pipeline_orchestrator.async_session_factory",
+                return_value=mock_session_ctx,
+            ):
+                # Story 6.3: Mock checkpoint_service functions (no steps complete)
+                with patch(
+                    "app.services.pipeline_orchestrator.is_step_complete", new_callable=AsyncMock
+                ) as mock_is_complete:
+                    mock_is_complete.return_value = False
 
-                # Mock all execute_step calls to succeed
-                with patch.object(
-                    orchestrator, "execute_step", new_callable=AsyncMock
-                ) as mock_step:
-                    mock_step.return_value = StepCompletion(
-                        step=PipelineStep.ASSET_GENERATION,
-                        completed=True,
-                        duration_seconds=10.0,
-                    )
-
-                    # Mock status updates
-                    with patch.object(orchestrator, "update_task_status", new_callable=AsyncMock):
-                        # Mock save_step_completion
-                        with patch.object(
-                            orchestrator, "save_step_completion", new_callable=AsyncMock
+                    # Story 6.3: Mock clear_step_metadata
+                    with patch(
+                        "app.services.pipeline_orchestrator.clear_step_metadata",
+                        new_callable=AsyncMock,
+                    ):
+                        # Story 6.3: Mock save_step_checkpoint
+                        with patch(
+                            "app.services.pipeline_orchestrator.save_step_checkpoint",
+                            new_callable=AsyncMock,
                         ):
-                            # Mock performance tracking methods
+                            # Mock all execute_step calls to succeed
                             with patch.object(
-                                orchestrator, "_update_pipeline_start_time", new_callable=AsyncMock
-                            ):
-                                # Execute pipeline
-                                await orchestrator.execute_pipeline()
+                                orchestrator, "execute_step", new_callable=AsyncMock
+                            ) as mock_step:
+                                mock_step.return_value = StepCompletion(
+                                    step=PipelineStep.ASSET_GENERATION,
+                                    completed=True,
+                                    duration_seconds=10.0,
+                                )
 
-                                # Story 5.2: Pipeline now halts at first review gate (ASSETS_READY)
-                                # Verify only asset generation step was executed
-                                assert mock_step.call_count == 1
+                                # Mock status updates
+                                with patch.object(
+                                    orchestrator, "update_task_status", new_callable=AsyncMock
+                                ):
+                                    # Mock performance tracking methods
+                                    with patch.object(
+                                        orchestrator,
+                                        "_update_pipeline_start_time",
+                                        new_callable=AsyncMock,
+                                    ):
+                                        # Story 6.5: Mock error logger functions
+                                        with patch(
+                                            "app.services.pipeline_orchestrator.log_pipeline_step_started",
+                                            new_callable=AsyncMock,
+                                        ):
+                                            with patch(
+                                                "app.services.pipeline_orchestrator.log_pipeline_step_completed",
+                                                new_callable=AsyncMock,
+                                            ):
+                                                # Execute pipeline
+                                                await orchestrator.execute_pipeline()
+
+                                                # Story 5.2: Pipeline now halts at first review gate (ASSETS_READY)
+                                                # Verify only asset generation step was executed
+                                                assert mock_step.call_count == 1
 
     @pytest.mark.asyncio
     async def test_execute_pipeline_task_not_found(self):
