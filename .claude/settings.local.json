@@ -82,7 +82,9 @@
       "Bash(alembic revision:*)",
       "Bash(export DATABASE_URL=\"sqlite+aiosqlite:///./test.db\")",
       "Bash(ruff check:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(git pull:*)",
+      "Bash(git reset:*)"
     ],
     "deny": [],
     "ask": []
