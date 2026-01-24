@@ -1,6 +1,6 @@
 """Task factories for test data generation (Story 6.5)."""
 
-from uuid import uuid4
+from uuid import uuid4, UUID
 from app.models import Task, TaskStatus
 
 
@@ -11,7 +11,7 @@ def create_task(
     topic: str = "Nature Documentary",
     story_direction: str = "Documentary about a wild Pokemon",
     status: TaskStatus = TaskStatus.QUEUED,
-    correlation_id: uuid4 | None = None,
+    correlation_id: UUID | None = None,
     retry_count: int = 0,
     **kwargs,
 ) -> Task:

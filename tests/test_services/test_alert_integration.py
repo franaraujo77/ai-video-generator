@@ -8,7 +8,7 @@ Tests cover:
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.models import Task, TaskStatus

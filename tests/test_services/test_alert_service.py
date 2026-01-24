@@ -11,7 +11,7 @@ Tests cover:
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from datetime import datetime, timedelta, UTC
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 import httpx
 
@@ -234,7 +234,7 @@ def test_should_send_alert_allows_after_batch_window():
     should_send_alert(alert_type, channel_id, force=False)
 
     # Manually expire the batch window
-    _alert_history[(alert_type, channel_id)] = datetime.now(UTC) - timedelta(seconds=61)
+    _alert_history[(alert_type, channel_id)] = datetime.now(timezone.utc) - timedelta(seconds=61)
 
     # Second alert after window should be allowed
     result = should_send_alert(alert_type, channel_id, force=False)
