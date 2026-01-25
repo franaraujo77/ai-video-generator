@@ -709,9 +709,16 @@ class Task(Base):
     )
 
     # YouTube output
+    youtube_video_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+        comment="YouTube video ID after successful upload (e.g., 'dQw4w9WgXcQ')",
+    )
+
     youtube_url: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
+        comment="Full YouTube URL (e.g., 'https://youtube.com/watch?v=dQw4w9WgXcQ')",
     )
 
     # Cost tracking (Epic 8 - Story 3.3 requirement)
