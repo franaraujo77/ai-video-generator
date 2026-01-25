@@ -371,6 +371,29 @@ class Channel(Base):
         comment="True if YouTube refresh token is invalid/revoked (requires re-auth)",
     )
 
+    # Video metadata configuration (Story 7.3 - FR62)
+    # Default tags for all videos uploaded from this channel
+    default_tags: Mapped[list[str] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Default tags for all channel videos (e.g., ['nature', 'documentary'])",
+    )
+    # Format-string template for video description with placeholders
+    # Placeholders: {title}, {topic}, {channel_name}, {story_direction_summary}, {channel_links}, {topic_slug}
+    description_template: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Description template with {placeholders} for title, topic, channel_name, etc.",
+    )
+    # Default privacy setting for uploads ("private", "unlisted", "public")
+    default_privacy: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="unlisted",
+        server_default="unlisted",
+        comment="Default privacy for uploads: 'private', 'unlisted', or 'public' (Story 7.8)",
+    )
+
     # Relationship to tasks (one-to-many)
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="channel")
 

@@ -21,3 +21,44 @@ max_concurrent: 3
 
 # Notion database ID for task tracking
 notion_database_id: "6b870ef4134346168f14367291bc89e6"
+
+# Story 7.3: YouTube Metadata Configuration
+# Default tags for all videos uploaded from this channel
+default_tags:
+  - pokemon
+  - nature
+  - documentary
+  - wildlife
+  - ai-generated
+
+# Description template with placeholders for video metadata
+# Available placeholders:
+#   {title} - Video title from Notion
+#   {topic} - Topic/Pokemon name from Notion
+#   {channel_name} - Channel name (Pokemon Nature Documentary)
+#   {story_direction_summary} - First paragraph from Story Direction field
+#   {channel_links} - Channel subscription links (placeholder)
+#   {topic_slug} - Slugified topic for hashtags (e.g., "pikachu")
+description_template: |
+  {title}
+
+  Welcome to the world of {topic}. This nature documentary explores the fascinating life,
+  habitat, and behavior of {topic} in their natural environment.
+
+  {story_direction_summary}
+
+  Credits:
+  - Produced by {channel_name}
+  - Narration: David Attenborough Style AI Voice
+  - Music: Original Composition
+  - Technology: AI-Generated Documentary
+
+  More videos like this: {channel_links}
+  Subscribe for more nature documentaries!
+
+  #{topic_slug} #nature #documentary #pokemon #shorts
+
+# Default privacy setting for uploads
+# Options: "private", "unlisted", "public"
+# Recommendation: Use "unlisted" until YouTube API verification complete
+default_privacy: "unlisted"

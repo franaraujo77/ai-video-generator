@@ -212,3 +212,48 @@ def create_channel_with_notion_storage(
     channel = create_channel(channel_id=channel_id, **kwargs)
     channel.storage_strategy = "notion"
     return channel
+
+
+def create_channel_with_metadata(
+    channel_id: str | None = None,
+    default_tags: list[str] | None = None,
+    description_template: str | None = None,
+    default_privacy: str = "unlisted",
+    **kwargs,
+) -> Channel:
+    """Create a Channel with YouTube metadata configuration (Story 7.3).
+
+    Useful for testing metadata generation service without manual field setup.
+
+    Args:
+        channel_id: Business identifier.
+        default_tags: Default tags for all channel videos (e.g., ['pokemon', 'nature']).
+        description_template: Template with {placeholders} for description.
+        default_privacy: Default privacy setting ('private', 'unlisted', 'public').
+        **kwargs: Additional channel attributes.
+
+    Returns:
+        Channel model instance with metadata fields configured.
+
+    Example:
+        >>> channel = create_channel_with_metadata(
+        ...     channel_id="poke1",
+        ...     default_tags=["pokemon", "nature", "documentary"],
+        ...     description_template="{title}\\n\\n{topic} video by {channel_name}"
+        ... )
+    """
+    channel = create_channel(channel_id=channel_id, **kwargs)
+    channel.default_tags = default_tags or ["test", "nature", "documentary"]
+    channel.description_template = description_template or (
+        "{title}\n\n"
+        "Welcome to the world of {topic}. This nature documentary explores the fascinating life, "
+        "habitat, and behavior of {topic} in their natural environment.\n\n"
+        "{story_direction_summary}\n\n"
+        "Credits:\n"
+        "- Produced by {channel_name}\n"
+        "- Technology: AI-Generated Documentary\n\n"
+        "More videos: {channel_links}\n\n"
+        "#{topic_slug} #nature #documentary #shorts"
+    )
+    channel.default_privacy = default_privacy
+    return channel
