@@ -31,6 +31,7 @@ dependencies = [
     "google-api-python-client>=2.116.0",  # YouTube Data API v3 client
     "google-auth-oauthlib>=1.2.0",  # OAuth 2.0 flow for CLI apps
     "google-auth-httplib2>=0.2.0",  # HTTP transport for google-auth
+    "notion-client>=2.7.0",
 ]
 
 [dependency-groups]

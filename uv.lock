@@ -1193,6 +1193,18 @@ wheels = [
 ]
 
 [[package]]
+name = "notion-client"
+version = "2.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9b/ff/06695dca5d0691346fbd89ba300a2ceeeaf0b0632fe8235b588e83e505a3/notion_client-2.7.0.tar.gz", hash = "sha256:31bde3ae03ede77650cadce136152916efdd86579ff65f49fc6705fbe462e2fb", size = 26384, upload-time = "2025-10-31T12:10:15.264Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/2a/6a/9716315432f5aba4c82979f9677aeb101018f0e790835721dc4e01deb933/notion_client-2.7.0-py2.py3-none-any.whl", hash = "sha256:9057a8ac2103ff245556c2a5102bde1d2ccdd3505f66bcc130fc31857731d91e", size = 16999, upload-time = "2025-10-31T12:10:13.835Z" },
+]
+
+[[package]]
 name = "oauthlib"
 version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1376,6 +1388,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
     { name = "google-generativeai" },
     { name = "httpx" },
+    { name = "notion-client" },
     { name = "pgqueuer", extra = ["asyncpg"] },
     { name = "pillow" },
     { name = "pydantic" },
@@ -1419,6 +1432,7 @@ requires-dist = [
     { name = "google-auth-oauthlib", specifier = ">=1.2.0" },
     { name = "google-generativeai", specifier = ">=0.8.0" },
     { name = "httpx", specifier = ">=0.28.1" },
+    { name = "notion-client", specifier = ">=2.7.0" },
     { name = "pgqueuer", extras = ["asyncpg"], specifier = ">=0.10.0" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "pydantic", specifier = ">=2.8.0" },

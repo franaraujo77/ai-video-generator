@@ -797,6 +797,11 @@ class Task(Base):
     # Relationship to channel
     channel: Mapped["Channel"] = relationship("Channel", back_populates="tasks")
 
+    # Relationship to fallback URLs (one-to-many)
+    fallback_urls: Mapped[list["FallbackYouTubeURL"]] = relationship(
+        "FallbackYouTubeURL", back_populates="task", cascade="all, delete-orphan"
+    )
+
     # Indexes for efficient queue queries
     # Note: Migration is source of truth for indexes. Model defines indexes
     # for SQLAlchemy awareness. Additional indexes in migration:
@@ -1338,4 +1343,112 @@ class AutoRecoveryMetrics(Base):
             f"<AutoRecoveryMetrics(channel_id={self.channel_id!s:.8}, "
             f"week={self.week_starting_date!s}, success_rate={self.success_rate:.1f}%, "
             f"recovered={self.total_auto_recovered}/{self.total_retry_attempts})>"
+        )
+
+
+class FallbackYouTubeURL(Base):
+    """Fallback storage for YouTube URLs when Notion sync fails (Story 7.5).
+
+    Provides manual recovery mechanism when YouTube upload succeeds but Notion
+    database update fails. This ensures the YouTube URL is never lost, even if
+    Notion API is temporarily unavailable or permissions are incorrect.
+
+    Use Case:
+        - YouTube upload completes successfully (video is published)
+        - Notion API call fails (rate limit, permissions, service outage)
+        - URL stored here for manual recovery via Story 6.7 manual retry trigger
+
+    Manual Recovery Process:
+        1. Discord alert sent to operators with task_id and fallback_id
+        2. Operator investigates Notion API failure (check token, permissions)
+        3. Fix root cause (refresh token, update permissions, wait for service recovery)
+        4. Trigger Story 6.7 manual retry with task_id
+        5. Retry syncs URL to Notion and deletes fallback record
+
+    Attributes:
+        id: Internal UUID primary key.
+        task_id: Foreign key to tasks.id (task that failed Notion sync).
+        channel_id: Foreign key to channels.id (for filtering by channel).
+        video_id: YouTube video ID (11 chars, Base64 format, e.g., "dQw4w9WgXcQ").
+        youtube_url: Full YouTube URL (e.g., "https://www.youtube.com/watch?v=dQw4w9WgXcQ").
+        created_at: When the fallback record was created (UTC).
+
+    Indexes:
+        - ix_fallback_youtube_urls_task_id: Fast lookup by task for manual recovery
+
+    Foreign Keys:
+        - task_id references tasks.id with ondelete='CASCADE' (cleanup when task deleted)
+        - channel_id references channels.id with ondelete='CASCADE' (cleanup when channel deleted)
+
+    Security Note:
+        Fallback table contains sensitive data for unlisted videos. The YouTube URL
+        is the access key for unlisted videos—protect like a password. Restrict database
+        access and audit all fallback URL retrievals.
+
+    Related:
+        - Story 7.5: YouTube URL Retrieval & Notion Update
+        - Story 6.7: Manual Retry Trigger (recovery mechanism)
+        - Story 6.6: Alert System (Discord notifications)
+        - FR25: YouTube URL population in Notion
+        - AC4: Handle Notion update failures gracefully
+    """
+
+    __tablename__ = "fallback_youtube_urls"
+
+    # Primary key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # Foreign keys
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # YouTube metadata
+    video_id: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        comment="YouTube video ID (11 chars, e.g., 'dQw4w9WgXcQ')",
+    )
+
+    youtube_url: Mapped[str] = mapped_column(
+        String(512),
+        nullable=False,
+        comment="Full YouTube URL (https://www.youtube.com/watch?v={video_id})",
+    )
+
+    # Metadata
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    # Relationships
+    task: Mapped["Task"] = relationship("Task", back_populates="fallback_urls")
+    channel: Mapped["Channel"] = relationship("Channel")
+
+    # Indexes
+    __table_args__ = (Index("ix_fallback_youtube_urls_task_id", "task_id"),)
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging.
+
+        SECURITY: Do NOT include youtube_url in repr to prevent sensitive URLs
+        from appearing in logs (unlisted URLs are access keys).
+        """
+        return (
+            f"<FallbackYouTubeURL(id={self.id!s:.8}, "
+            f"task_id={self.task_id!s:.8}, video_id={self.video_id})>"
         )
