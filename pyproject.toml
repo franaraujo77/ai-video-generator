@@ -32,6 +32,7 @@ dependencies = [
     "google-auth-oauthlib>=1.2.0",  # OAuth 2.0 flow for CLI apps
     "google-auth-httplib2>=0.2.0",  # HTTP transport for google-auth
     "notion-client>=2.7.0",
+    "pytz>=2024.2",  # Story 7.6: Timezone handling for PST quota reset
 ]
 
 [dependency-groups]

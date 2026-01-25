@@ -1,7 +1,8 @@
-"""YouTube Publishing Integration - Upload + Notion Sync (Story 7.5).
+"""YouTube Publishing Integration - Upload + Notion Sync (Stories 7.5 + 7.6).
 
-This module integrates Story 7.4 (YouTube Upload) with Story 7.5 (Notion URL Sync).
-Provides a complete publishing flow that can be called by the pipeline orchestrator.
+This module integrates Story 7.4 (YouTube Upload), Story 7.5 (Notion URL Sync),
+and Story 7.6 (Upload Error Handling). Provides a complete publishing flow that
+can be called by the pipeline orchestrator.
 
 Integration Flow:
     1. Upload video to YouTube (Story 7.4: upload_video)
@@ -10,8 +11,11 @@ Integration Flow:
     4. Update task status to PUBLISHED
     5. Handle fallback storage on Notion failures
 
-Error Handling:
-    - Upload errors: Re-raised as YouTubeUploadError/YouTubeUploadRetryError
+Error Handling (Story 7.6):
+    - YouTube upload errors: Classified and handled by youtube_error_handler
+        - Quota errors: Pause until midnight PST, send quota alert
+        - Transient errors: Exponential backoff retry (1min → 5min → 15min → 1hr)
+        - Permanent errors: Mark as terminal, send alert, no retry
     - Notion permanent errors: Fallback URL stored, task still updated to PUBLISHED
     - Notion transient errors: Re-raised as NotionSyncRetryError for retry
 """
@@ -20,6 +24,8 @@ import structlog
 from typing import Optional
 from uuid import UUID
 
+from googleapiclient.errors import HttpError
+from google.api_core.exceptions import GoogleAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task, TaskStatus
@@ -27,6 +33,12 @@ from app.services.youtube_uploader import (
     upload_video,
     YouTubeUploadError,
     YouTubeUploadRetryError,
+)
+from app.services.youtube_error_handler import (
+    handle_youtube_upload_error,
+    YouTubeQuotaExceededError,
+    YouTubeBadRequestError,
+    YouTubeTransientError,
 )
 from app.services.notion_sync_service import (
     construct_youtube_url,
@@ -101,11 +113,13 @@ async def publish_video_to_youtube(
             assert task.status == TaskStatus.PUBLISHED
             assert task.youtube_url is not None
     """
-    # Step 1: Upload video to YouTube (Story 7.4)
+    # Step 1: Upload video to YouTube (Story 7.4 + Story 7.6 error handling)
     try:
         video_id = await upload_video(task, metadata, db)
-    except (YouTubeUploadError, YouTubeUploadRetryError):
-        # Re-raise upload errors for caller to handle
+    except (HttpError, GoogleAPIError, Exception) as e:
+        # Story 7.6: Handle all YouTube upload errors with comprehensive error handling
+        await handle_youtube_upload_error(task, e, db, webhook_url)
+        # handle_youtube_upload_error updates task status and re-raises classified error
         raise
 
     # Step 2: Construct YouTube URL (Story 7.5)

@@ -119,6 +119,7 @@ class TaskStatus(enum.Enum):
     VIDEO_ERROR = "video_error"
     AUDIO_ERROR = "audio_error"
     UPLOAD_ERROR = "upload_error"
+    UPLOAD_ERROR_RETRYING = "upload_error_retrying"  # Story 7.6: Transient upload error, retry scheduled
 
 
 # Status groupings for capacity tracking (FR13, FR16)
@@ -497,7 +498,7 @@ class Task(Base):
         # Final review and upload phase (MANDATORY review gate - YouTube compliance)
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
         TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING],
-        TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR],
+        TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR, TaskStatus.UPLOAD_ERROR_RETRYING],
         # Terminal states with manual re-queue capability (requires user intervention):
         # - PUBLISHED → QUEUED: Update content after publish (e.g., compliance changes)
         # - CANCELLED → QUEUED: Un-cancel if user changes mind
@@ -512,6 +513,10 @@ class Task(Base):
             TaskStatus.QUEUED,
             TaskStatus.FINAL_REVIEW,
         ],  # Allow full retry or re-review
+        TaskStatus.UPLOAD_ERROR_RETRYING: [
+            TaskStatus.UPLOADING,  # Retry upload
+            TaskStatus.UPLOAD_ERROR,  # Exhausted retries
+        ],
     }
 
     # Primary key
