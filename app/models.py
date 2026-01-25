@@ -120,6 +120,7 @@ class TaskStatus(enum.Enum):
     AUDIO_ERROR = "audio_error"
     UPLOAD_ERROR = "upload_error"
     UPLOAD_ERROR_RETRYING = "upload_error_retrying"  # Story 7.6: Transient upload error, retry scheduled
+    COMPLIANCE_VIOLATION = "compliance_violation"  # Story 7.7: YouTube compliance checks failed (terminal)
 
 
 # Status groupings for capacity tracking (FR13, FR16)
@@ -497,8 +498,8 @@ class Task(Base):
         TaskStatus.ASSEMBLY_READY: [TaskStatus.FINAL_REVIEW],
         # Final review and upload phase (MANDATORY review gate - YouTube compliance)
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
-        TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING],
-        TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR, TaskStatus.UPLOAD_ERROR_RETRYING],
+        TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING, TaskStatus.COMPLIANCE_VIOLATION],
+        TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR, TaskStatus.UPLOAD_ERROR_RETRYING, TaskStatus.COMPLIANCE_VIOLATION],
         # Terminal states with manual re-queue capability (requires user intervention):
         # - PUBLISHED → QUEUED: Update content after publish (e.g., compliance changes)
         # - CANCELLED → QUEUED: Un-cancel if user changes mind
@@ -517,6 +518,10 @@ class Task(Base):
             TaskStatus.UPLOADING,  # Retry upload
             TaskStatus.UPLOAD_ERROR,  # Exhausted retries
         ],
+        # Compliance violation (Story 7.7) - terminal state requiring manual fix
+        # Can only recover by returning to QUEUED after addressing compliance issues
+        # (e.g., regenerate content for uniqueness, wait for upload frequency window)
+        TaskStatus.COMPLIANCE_VIOLATION: [TaskStatus.QUEUED],
     }
 
     # Primary key
@@ -772,6 +777,25 @@ class Task(Base):
     )
     pipeline_cost_usd: Mapped[float | None] = mapped_column(
         nullable=True,
+    )
+
+    # YouTube Partner Program compliance tracking (Story 7.7)
+    # Evidence package demonstrating human involvement (creative decisions, QA, review artifacts)
+    # Built by HumanReviewEvidenceTracker, validated before upload
+    # Stored as JSONB in PostgreSQL (JSON in SQLite for tests)
+    compliance_evidence: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON,
+        nullable=True,
+        comment="Human review evidence package (creative_decisions, review_artifacts, production_timeline)",
+    )
+
+    # Compliance validation timestamp (Story 7.7)
+    # Set when PreUploadComplianceValidator successfully validates all checks
+    # NULL if never validated (task not yet ready for upload)
+    compliance_validated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        comment="Timestamp when compliance checks passed (uniqueness, duplicate detection, frequency throttling)",
     )
 
     # Review gate timing (Story 5.2)

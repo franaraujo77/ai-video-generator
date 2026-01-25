@@ -28,7 +28,7 @@ from googleapiclient.errors import HttpError
 from google.api_core.exceptions import GoogleAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Task, TaskStatus
+from app.models import Task, TaskStatus, utcnow
 from app.services.youtube_uploader import (
     upload_video,
     YouTubeUploadError,
@@ -47,6 +47,12 @@ from app.services.notion_sync_service import (
     NotionSyncRetryError,
 )
 from app.services.metadata_service import generate_metadata, MetadataDict
+from app.services.compliance.pre_upload_compliance_validator import (
+    PreUploadComplianceValidator,
+)
+from app.services.compliance.exceptions import ComplianceViolationError
+from app.services.compliance.ai_disclosure_manager import AIDisclosureManager
+from app.services.alert_service import send_discord_alert
 
 log = structlog.get_logger(__name__)
 
@@ -57,9 +63,10 @@ async def publish_video_to_youtube(
     db: AsyncSession,
     webhook_url: Optional[str] = None,
 ) -> str:
-    """Publish video to YouTube and sync URL to Notion (Stories 7.4 + 7.5).
+    """Publish video to YouTube and sync URL to Notion (Stories 7.4 + 7.5 + 7.7).
 
     This function orchestrates the complete YouTube publishing flow:
+    0. Validate YouTube Partner Program compliance (Story 7.7)
     1. Upload video to YouTube using resumable upload (Story 7.4)
     2. Extract video_id from upload response
     3. Construct YouTube URL (Story 7.5)
@@ -81,6 +88,7 @@ async def publish_video_to_youtube(
         YouTube video ID (e.g., "dQw4w9WgXcQ")
 
     Raises:
+        ComplianceViolationError: Compliance checks failed (uniqueness, duplicate, frequency, evidence)
         YouTubeUploadError: Permanent upload failure (invalid metadata, credentials, quota)
         YouTubeUploadRetryError: Transient upload failure (network error, rate limit)
         NotionSyncRetryError: Transient Notion failure (rate limit, conflict, service down)
@@ -113,6 +121,70 @@ async def publish_video_to_youtube(
             assert task.status == TaskStatus.PUBLISHED
             assert task.youtube_url is not None
     """
+    # Step 0: Validate YouTube Partner Program compliance (Story 7.7)
+    # CRITICAL: Compliance checks MUST pass before upload to prevent policy violations
+    compliance_validator = PreUploadComplianceValidator()
+
+    try:
+        # Build video metadata dict for compliance checks
+        video_metadata = {
+            "title": metadata.get("title"),
+            "description": metadata.get("description"),
+            "tags": metadata.get("tags", []),
+            "thumbnail_path": task.metadata.get("thumbnail_path") if task.metadata else None,
+            "composite_path": task.metadata.get("composite_path") if task.metadata else None,
+            "story_script": task.story_direction,
+        }
+
+        compliance_result = await compliance_validator.validate_before_upload(
+            task, video_metadata, db
+        )
+
+        # Fix Issue #8: Don't set compliance_validated_at yet
+        # Will be set after successful upload + AI disclosure (see Step 4)
+
+        log.info(
+            "compliance_validation_passed",
+            correlation_id=str(task.id),
+            uniqueness_scores=compliance_result["uniqueness_scores"],
+            scheduled_upload_time=compliance_result["scheduled_upload_time"].isoformat(),
+        )
+
+    except ComplianceViolationError as e:
+        # Compliance checks failed - update task status and re-raise
+        task.status = TaskStatus.COMPLIANCE_VIOLATION
+        task.error_log = (
+            f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] COMPLIANCE VIOLATION: {str(e)}\n"
+            f"Violation Type: {e.violation_type}\n"
+            f"Validation Results: {e.validation_results}"
+        )
+        await db.commit()
+
+        log.error(
+            "compliance_violation",
+            correlation_id=str(task.id),
+            violation_type=e.violation_type,
+            validation_results=e.validation_results,
+        )
+
+        # Fix Issue #5: Send Discord alert for compliance violations
+        if webhook_url:
+            await send_discord_alert(
+                webhook_url=webhook_url,
+                title="🚨 YouTube Compliance Violation",
+                description=f"Task {task.id} failed compliance checks and cannot be uploaded",
+                fields={
+                    "Task ID": str(task.id),
+                    "Channel ID": str(task.channel_id),
+                    "Violation Type": e.violation_type,
+                    "Details": str(e)[:500],  # Truncate long error messages
+                    "Action": "Manual review required - fix issues and requeue task",
+                },
+                color="error",
+            )
+
+        raise
+
     # Step 1: Upload video to YouTube (Story 7.4 + Story 7.6 error handling)
     try:
         video_id = await upload_video(task, metadata, db)
@@ -121,6 +193,59 @@ async def publish_video_to_youtube(
         await handle_youtube_upload_error(task, e, db, webhook_url)
         # handle_youtube_upload_error updates task status and re-raises classified error
         raise
+
+    # Step 1.5: Set AI disclosure via YouTube Data API (Story 7.7 - Fix Issue #3)
+    # CRITICAL: Must be called after upload, before video goes public
+    ai_disclosure_manager = AIDisclosureManager()
+
+    try:
+        # Get YouTube service from credentials
+        from app.services.youtube_service import get_youtube_service
+        youtube_service = await get_youtube_service(task.channel_id, db)
+
+        # Set hasAlteredContent=true via YouTube Data API
+        ai_disclosure_manager.set_ai_disclosure(video_id, youtube_service)
+
+        # Validate disclosure was successfully set
+        ai_disclosure_manager.validate_disclosure_set(video_id, youtube_service)
+
+        log.info(
+            "ai_disclosure_set_and_validated",
+            correlation_id=str(task.id),
+            video_id=video_id,
+        )
+    except Exception as e:
+        # AI disclosure failed - this is a compliance violation, must not publish
+        log.error(
+            "ai_disclosure_failed",
+            correlation_id=str(task.id),
+            video_id=video_id,
+            error=str(e),
+        )
+
+        # Update task status to compliance violation
+        task.status = TaskStatus.COMPLIANCE_VIOLATION
+        task.error_log = (
+            f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] AI DISCLOSURE FAILED: {str(e)}\n"
+            f"Video uploaded but AI disclosure could not be set. Upload blocked to prevent policy violation."
+        )
+        await db.commit()
+
+        if webhook_url:
+            await send_discord_alert(
+                webhook_url=webhook_url,
+                title="🚨 AI Disclosure Failed",
+                description=f"Video {video_id} uploaded but AI disclosure could not be set",
+                fields={
+                    "Task ID": str(task.id),
+                    "Video ID": video_id,
+                    "Error": str(e)[:500],
+                    "Action": "Manual intervention required - set AI disclosure via YouTube Studio",
+                },
+                color="error",
+            )
+
+        raise ValueError(f"AI disclosure failed for video {video_id}: {str(e)}")
 
     # Step 2: Construct YouTube URL (Story 7.5)
     youtube_url = await construct_youtube_url(video_id)
@@ -159,6 +284,11 @@ async def publish_video_to_youtube(
     task.youtube_video_id = video_id
     task.youtube_url = youtube_url
     task.status = TaskStatus.PUBLISHED
+
+    # Fix Issue #8: Set compliance_validated_at AFTER successful upload + AI disclosure
+    # Only mark as validated when the entire compliance flow (checks + upload + disclosure) succeeds
+    task.compliance_validated_at = utcnow()
+
     await db.commit()
 
     log.info(
@@ -166,6 +296,7 @@ async def publish_video_to_youtube(
         correlation_id=str(task.id),
         video_id=video_id,
         status=TaskStatus.PUBLISHED.value,
+        compliance_validated=True,
     )
 
     return video_id
