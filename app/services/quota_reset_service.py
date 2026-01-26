@@ -12,12 +12,13 @@ Key Features:
 """
 
 import os
-import structlog
 from datetime import date
+
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Channel, YouTubeQuotaUsage, GeminiQuotaUsage
+from app.models import Channel, GeminiQuotaUsage, YouTubeQuotaUsage
 
 # Get logger
 log = structlog.get_logger()
@@ -27,8 +28,7 @@ QUOTA_TIMEZONE = os.getenv("QUOTA_TIMEZONE", "America/Los_Angeles")
 
 
 async def reset_youtube_quotas(reset_date: date, db: AsyncSession) -> int:
-    """
-    Reset YouTube quotas for all active channels.
+    """Reset YouTube quotas for all active channels.
 
     Creates new YouTubeQuotaUsage rows with units_used=0 for the specified date.
     Clears youtube_quota_exhausted flags for all active channels.
@@ -87,8 +87,7 @@ async def reset_youtube_quotas(reset_date: date, db: AsyncSession) -> int:
 
 
 async def reset_gemini_quotas(reset_date: date, db: AsyncSession) -> int:
-    """
-    Reset Gemini quotas for all active channels.
+    """Reset Gemini quotas for all active channels.
 
     Creates new GeminiQuotaUsage rows with requests_used=0 for the specified date.
     Clears gemini_quota_exhausted flags for all active channels.

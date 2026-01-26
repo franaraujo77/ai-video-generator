@@ -82,9 +82,7 @@ async def client(async_session: AsyncSession) -> AsyncClient:
 
     app.dependency_overrides[get_session] = override_get_session
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
     # Clean up overrides
@@ -188,9 +186,7 @@ class TestManualQuotaReset:
         assert data["quota_exhausted_flag_cleared"] is True
 
         # Verify quota created in database
-        quota = await async_session.get(
-            YouTubeQuotaUsage, (active_channel.id, date(2026, 1, 25))
-        )
+        quota = await async_session.get(YouTubeQuotaUsage, (active_channel.id, date(2026, 1, 25)))
         assert quota is not None
         assert quota.units_used == 0
         assert quota.daily_limit == 10000
@@ -225,9 +221,7 @@ class TestManualQuotaReset:
         assert data["quota_exhausted_flag_cleared"] is True
 
         # Verify quota created in database
-        quota = await async_session.get(
-            GeminiQuotaUsage, (active_channel.id, date(2026, 1, 25))
-        )
+        quota = await async_session.get(GeminiQuotaUsage, (active_channel.id, date(2026, 1, 25)))
         assert quota is not None
         assert quota.requests_used == 0
         assert quota.daily_limit == 1500
@@ -236,9 +230,7 @@ class TestManualQuotaReset:
         await async_session.refresh(active_channel)
         assert active_channel.gemini_quota_exhausted is False
 
-    async def test_channel_not_found_returns_400(
-        self, client: AsyncClient, admin_api_key: str
-    ):
+    async def test_channel_not_found_returns_400(self, client: AsyncClient, admin_api_key: str):
         """Test that non-existent channel ID returns 400 Bad Request."""
         fake_uuid = str(uuid4())
         response = await client.post(
@@ -276,9 +268,7 @@ class TestManualQuotaReset:
         assert data["success"] is True
 
         # Verify quota created even for inactive channel
-        quota = await async_session.get(
-            YouTubeQuotaUsage, (inactive_channel.id, date(2026, 1, 25))
-        )
+        quota = await async_session.get(YouTubeQuotaUsage, (inactive_channel.id, date(2026, 1, 25)))
         assert quota is not None
 
     @freeze_time("2026-01-25 08:00:00")  # Midnight PST = 08:00 UTC
@@ -328,9 +318,7 @@ class TestManualQuotaReset:
         assert data["date"] == "2026-01-20"
 
         # Verify quota created for specified date
-        quota = await async_session.get(
-            YouTubeQuotaUsage, (active_channel.id, date(2026, 1, 20))
-        )
+        quota = await async_session.get(YouTubeQuotaUsage, (active_channel.id, date(2026, 1, 20)))
         assert quota is not None
 
     @freeze_time("2026-01-25 08:00:00")  # Midnight PST = 08:00 UTC

@@ -21,38 +21,30 @@ Error Handling (Story 7.6):
 """
 
 import structlog
-from typing import Optional
-from uuid import UUID
-
-from googleapiclient.errors import HttpError
 from google.api_core.exceptions import GoogleAPIError
+from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task, TaskStatus, utcnow
-from app.services.youtube_uploader import (
-    upload_video,
-    YouTubeUploadError,
-    YouTubeUploadRetryError,
-)
-from app.services.youtube_error_handler import (
-    handle_youtube_upload_error,
-    YouTubeQuotaExceededError,
-    YouTubeBadRequestError,
-    YouTubeTransientError,
-)
-from app.services.notion_sync_service import (
-    construct_youtube_url,
-    sync_youtube_url_to_notion,
-    NotionSyncError,
-    NotionSyncRetryError,
-)
-from app.services.metadata_service import generate_metadata, MetadataDict
+from app.services.alert_service import send_discord_alert
+from app.services.compliance.ai_disclosure_manager import AIDisclosureManager
+from app.services.compliance.exceptions import ComplianceViolationError
 from app.services.compliance.pre_upload_compliance_validator import (
     PreUploadComplianceValidator,
 )
-from app.services.compliance.exceptions import ComplianceViolationError
-from app.services.compliance.ai_disclosure_manager import AIDisclosureManager
-from app.services.alert_service import send_discord_alert
+from app.services.metadata_service import MetadataDict
+from app.services.notion_sync_service import (
+    NotionSyncError,
+    NotionSyncRetryError,
+    construct_youtube_url,
+    sync_youtube_url_to_notion,
+)
+from app.services.youtube_error_handler import (
+    handle_youtube_upload_error,
+)
+from app.services.youtube_uploader import (
+    upload_video,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -61,7 +53,7 @@ async def publish_video_to_youtube(
     task: Task,
     metadata: MetadataDict,
     db: AsyncSession,
-    webhook_url: Optional[str] = None,
+    webhook_url: str | None = None,
 ) -> str:
     """Publish video to YouTube and sync URL to Notion (Stories 7.4 + 7.5 + 7.7).
 
@@ -154,7 +146,7 @@ async def publish_video_to_youtube(
         # Compliance checks failed - update task status and re-raise
         task.status = TaskStatus.COMPLIANCE_VIOLATION
         task.error_log = (
-            f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] COMPLIANCE VIOLATION: {str(e)}\n"
+            f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] COMPLIANCE VIOLATION: {e!s}\n"
             f"Violation Type: {e.violation_type}\n"
             f"Validation Results: {e.validation_results}"
         )
@@ -201,6 +193,7 @@ async def publish_video_to_youtube(
     try:
         # Get YouTube service from credentials
         from app.services.youtube_service import get_youtube_service
+
         youtube_service = await get_youtube_service(task.channel_id, db)
 
         # Set hasAlteredContent=true via YouTube Data API
@@ -226,7 +219,7 @@ async def publish_video_to_youtube(
         # Update task status to compliance violation
         task.status = TaskStatus.COMPLIANCE_VIOLATION
         task.error_log = (
-            f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] AI DISCLOSURE FAILED: {str(e)}\n"
+            f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] AI DISCLOSURE FAILED: {e!s}\n"
             f"Video uploaded but AI disclosure could not be set. Upload blocked to prevent policy violation."
         )
         await db.commit()
@@ -245,7 +238,7 @@ async def publish_video_to_youtube(
                 color="error",
             )
 
-        raise ValueError(f"AI disclosure failed for video {video_id}: {str(e)}")
+        raise ValueError(f"AI disclosure failed for video {video_id}: {e!s}")
 
     # Step 2: Construct YouTube URL (Story 7.5)
     youtube_url = await construct_youtube_url(video_id)

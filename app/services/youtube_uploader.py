@@ -41,7 +41,6 @@ Usage:
 import asyncio
 import os
 from datetime import date
-from pathlib import Path
 from uuid import UUID
 
 import structlog
@@ -188,7 +187,7 @@ async def check_quota_available(
             error=str(e),
             error_type=type(e).__name__,
         )
-        raise YouTubeUploadError(f"Quota check failed: {str(e)}") from e
+        raise YouTubeUploadError(f"Quota check failed: {e!s}") from e
 
 
 async def update_quota_usage(channel_id: str, operation: str, db: AsyncSession) -> None:
@@ -421,7 +420,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                                 max_retries=MAX_UPLOAD_RETRIES,
                             )
                             raise YouTubeUploadRetryError(
-                                f"YouTube server error ({e.resp.status}) after {MAX_UPLOAD_RETRIES} retries: {str(e)}"
+                                f"YouTube server error ({e.resp.status}) after {MAX_UPLOAD_RETRIES} retries: {e!s}"
                             ) from e
                     elif e.resp.status == 429:
                         # Rate limit - retriable
@@ -452,7 +451,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                             correlation_id=str(task.id),
                             error=str(e),
                         )
-                        raise YouTubeUploadError(f"Invalid metadata: {str(e)}") from e
+                        raise YouTubeUploadError(f"Invalid metadata: {e!s}") from e
                     elif e.resp.status in [401, 403]:
                         # Auth error - permanent
                         log.error(
@@ -461,7 +460,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                             error_code=e.resp.status,
                             error=str(e),
                         )
-                        raise YouTubeUploadError(f"Authentication error: {str(e)}") from e
+                        raise YouTubeUploadError(f"Authentication error: {e!s}") from e
                     else:
                         # Unknown error - permanent
                         log.error(
@@ -470,7 +469,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                             error_code=e.resp.status,
                             error=str(e),
                         )
-                        raise YouTubeUploadError(f"Upload failed: {str(e)}") from e
+                        raise YouTubeUploadError(f"Upload failed: {e!s}") from e
 
                 except (ConnectionError, TimeoutError) as e:
                     # Network error - retriable
@@ -496,7 +495,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                             max_retries=MAX_UPLOAD_RETRIES,
                         )
                         raise YouTubeUploadRetryError(
-                            f"Network error after {MAX_UPLOAD_RETRIES} retries: {str(e)}"
+                            f"Network error after {MAX_UPLOAD_RETRIES} retries: {e!s}"
                         ) from e
 
             # If we didn't successfully upload chunk after all retries, break outer loop
@@ -531,4 +530,4 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
             error=str(e),
             error_type=type(e).__name__,
         )
-        raise YouTubeUploadError(f"Unexpected upload error: {str(e)}") from e
+        raise YouTubeUploadError(f"Unexpected upload error: {e!s}") from e

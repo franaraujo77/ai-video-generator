@@ -1,5 +1,4 @@
-"""
-Human review evidence tracking for YouTube Partner Program compliance.
+"""Human review evidence tracking for YouTube Partner Program compliance.
 
 Builds evidence packages demonstrating human involvement in video production:
 - Creative decisions (story development, visual direction, final edit)
@@ -18,8 +17,7 @@ log = structlog.get_logger(__name__)
 
 
 class HumanReviewEvidenceTracker:
-    """
-    Track and build evidence of human involvement in video production.
+    """Track and build evidence of human involvement in video production.
 
     Evidence proves:
     1. Creative decisions made by humans
@@ -27,11 +25,8 @@ class HumanReviewEvidenceTracker:
     3. Review process completed before upload
     """
 
-    def build_evidence_package(
-        self, task: object, production_data: dict
-    ) -> dict:
-        """
-        Create evidence package demonstrating human involvement.
+    def build_evidence_package(self, task: object, production_data: dict) -> dict:
+        """Create evidence package demonstrating human involvement.
 
         Args:
             task: Task object with compliance_evidence field
@@ -54,9 +49,7 @@ class HumanReviewEvidenceTracker:
                 },
                 "visual_direction": {
                     "asset_approval_count": production_data.get("asset_approvals", 0),
-                    "composition_decisions": production_data.get(
-                        "composite_choices", []
-                    ),
+                    "composition_decisions": production_data.get("composite_choices", []),
                     "rejected_generations": production_data.get("regeneration_log", []),
                 },
                 "final_edit": {
@@ -70,9 +63,7 @@ class HumanReviewEvidenceTracker:
             "review_artifacts": {
                 "qa_checklist": self.generate_qa_checklist(task, production_data),
                 "approval_signature": production_data.get("human_approver", "System"),
-                "review_duration_minutes": production_data.get(
-                    "total_review_time", 0
-                ),
+                "review_duration_minutes": production_data.get("total_review_time", 0),
             },
             "production_timeline": {
                 "started": production_data.get(
@@ -98,9 +89,7 @@ class HumanReviewEvidenceTracker:
                 truncating=True,
             )
             # Truncate rejected_generations log if too large
-            evidence["creative_decisions"]["visual_direction"][
-                "rejected_generations"
-            ] = []
+            evidence["creative_decisions"]["visual_direction"]["rejected_generations"] = []
 
         log.info(
             "human_review_evidence_built",
@@ -113,8 +102,7 @@ class HumanReviewEvidenceTracker:
         return evidence
 
     def generate_qa_checklist(self, task: object, production_data: dict) -> dict:
-        """
-        Generate standardized QA checklist proving human oversight.
+        """Generate standardized QA checklist proving human oversight.
 
         Args:
             task: Task object
@@ -138,8 +126,7 @@ class HumanReviewEvidenceTracker:
         }
 
     def validate_evidence_present(self, task: object) -> bool:
-        """
-        Validate that human review evidence exists and is complete.
+        """Validate that human review evidence exists and is complete.
 
         Args:
             task: Task object with compliance_evidence field

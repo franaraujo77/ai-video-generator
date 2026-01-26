@@ -109,9 +109,7 @@ class TestCompleteComplianceFlow:
         identical_task.story_direction = video_metadata["story_script"]
         identical_task.updated_at = datetime.now(timezone.utc) - timedelta(hours=12)
 
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [
-            identical_task
-        ]
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [identical_task]
 
         # Should raise ComplianceViolationError due to low uniqueness
         with pytest.raises(ComplianceViolationError) as exc_info:
@@ -162,9 +160,7 @@ class TestUniquenessValidation:
         different_task.story_direction = "Charizard flies over mountains"
         different_task.updated_at = datetime.now(timezone.utc) - timedelta(days=1)
 
-        mock_db.execute.return_value.scalars.return_value.all.return_value = [
-            different_task
-        ]
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [different_task]
 
         result = await validator.validate_before_upload(mock_task, video_metadata, mock_db)
 
@@ -247,9 +243,7 @@ class TestEdgeCases:
     """Test edge cases and error handling."""
 
     @pytest.mark.asyncio
-    async def test_channel_not_found(
-        self, validator, mock_task, video_metadata, mock_db
-    ):
+    async def test_channel_not_found(self, validator, mock_task, video_metadata, mock_db):
         """Test handling when channel not found."""
         # Mock channel not found
         mock_db.get.return_value = None

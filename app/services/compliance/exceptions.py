@@ -2,8 +2,7 @@
 
 
 class ComplianceViolationError(Exception):
-    """
-    Raised when YouTube Partner Program compliance checks fail.
+    """Raised when YouTube Partner Program compliance checks fail.
 
     This exception indicates that a video cannot be uploaded due to:
     - Content uniqueness failure (below 70% threshold)
@@ -24,8 +23,7 @@ class ComplianceViolationError(Exception):
         violation_type: str | None = None,
         validation_results: dict | None = None,
     ):
-        """
-        Initialize compliance violation error.
+        """Initialize compliance violation error.
 
         Args:
             message: Human-readable error description

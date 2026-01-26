@@ -1,5 +1,4 @@
-"""
-Content uniqueness validation for YouTube Partner Program compliance.
+"""Content uniqueness validation for YouTube Partner Program compliance.
 
 Validates videos against duplicate content requirements by checking:
 - Visual uniqueness (perceptual hashing of thumbnails/composites)
@@ -9,12 +8,12 @@ Validates videos against duplicate content requirements by checking:
 All dimensions must exceed 70% uniqueness threshold.
 """
 
-import imagehash
-from PIL import Image
 from difflib import SequenceMatcher
 from pathlib import Path
 
+import imagehash
 import structlog
+from PIL import Image
 
 log = structlog.get_logger(__name__)
 
@@ -36,18 +35,14 @@ UNIQUENESS_THRESHOLDS = {
 
 
 class ContentUniquenessValidator:
-    """
-    Validate video uniqueness across visual, narrative, and metadata dimensions.
+    """Validate video uniqueness across visual, narrative, and metadata dimensions.
 
     Enforces YouTube Partner Program requirements that AI-generated content must
     demonstrate uniqueness to avoid "inauthentic content" demonetization.
     """
 
-    def validate_video_uniqueness(
-        self, video_metadata: dict, recent_videos: list[dict]
-    ) -> dict:
-        """
-        Validate video against duplicate content requirements.
+    def validate_video_uniqueness(self, video_metadata: dict, recent_videos: list[dict]) -> dict:
+        """Validate video against duplicate content requirements.
 
         Args:
             video_metadata: Current video metadata with thumbnail_path, story_script, title, description, tags
@@ -95,8 +90,7 @@ class ContentUniquenessValidator:
 
         # ALL checks must pass 70% threshold
         passes_all = all(
-            score >= UNIQUENESS_THRESHOLDS[dimension]
-            for dimension, score in scores.items()
+            score >= UNIQUENESS_THRESHOLDS[dimension] for dimension, score in scores.items()
         )
 
         overall_score = sum(scores.values()) / len(scores)
@@ -113,11 +107,8 @@ class ContentUniquenessValidator:
 
         return {"passes": passes_all, "scores": scores, "overall_score": overall_score}
 
-    def check_visual_variation(
-        self, video_metadata: dict, recent_videos: list[dict]
-    ) -> float:
-        """
-        Compare visual elements against recent uploads using perceptual hashing.
+    def check_visual_variation(self, video_metadata: dict, recent_videos: list[dict]) -> float:
+        """Compare visual elements against recent uploads using perceptual hashing.
 
         Analyzes:
         - Different Pokemon behaviors/actions
@@ -138,9 +129,7 @@ class ContentUniquenessValidator:
         )
 
         if not thumbnail_path or not Path(thumbnail_path).exists():
-            log.warning(
-                "visual_uniqueness_check_skipped", reason="no_thumbnail_found"
-            )
+            log.warning("visual_uniqueness_check_skipped", reason="no_thumbnail_found")
             return 1.0  # Conservative: assume unique if no thumbnail
 
         # Security: Check file size before processing (Issue #6 fix)
@@ -212,11 +201,8 @@ class ContentUniquenessValidator:
 
         return uniqueness_score
 
-    def check_story_uniqueness(
-        self, video_metadata: dict, recent_videos: list[dict]
-    ) -> float:
-        """
-        Validate narrative originality using story structure fingerprinting.
+    def check_story_uniqueness(self, video_metadata: dict, recent_videos: list[dict]) -> float:
+        """Validate narrative originality using story structure fingerprinting.
 
         Analyzes:
         - Different behavioral sequences (feeding vs hunting vs social)
@@ -247,9 +233,7 @@ class ContentUniquenessValidator:
                 continue
 
             recent_structure = self.extract_story_structure(recent_story)
-            similarity = self.compare_story_structures(
-                current_structure, recent_structure
-            )
+            similarity = self.compare_story_structures(current_structure, recent_structure)
             similarity_scores.append(similarity)
 
         if not similarity_scores:
@@ -260,8 +244,7 @@ class ContentUniquenessValidator:
         return uniqueness_score
 
     def extract_story_structure(self, story_script: str | dict) -> list[str]:
-        """
-        Extract story fingerprint from narrative content.
+        """Extract story fingerprint from narrative content.
 
         Returns:
             List of behavior categories for the story sequence
@@ -284,8 +267,7 @@ class ContentUniquenessValidator:
         return ["general"]
 
     def classify_behavior(self, clip_description: str) -> str:
-        """
-        Classify narrative content into behavior category.
+        """Classify narrative content into behavior category.
 
         Categories: feeding, hunting, social, defensive, migration, mating,
                    resting, exploration, communication, parenting, general
@@ -317,11 +299,8 @@ class ContentUniquenessValidator:
 
         return "general"
 
-    def compare_story_structures(
-        self, structure1: list[str], structure2: list[str]
-    ) -> float:
-        """
-        Calculate similarity between two story structures.
+    def compare_story_structures(self, structure1: list[str], structure2: list[str]) -> float:
+        """Calculate similarity between two story structures.
 
         Uses sequence matching to measure behavioral pattern similarity.
 
@@ -337,11 +316,8 @@ class ContentUniquenessValidator:
 
         return similarity
 
-    def check_metadata_variation(
-        self, video_metadata: dict, recent_videos: list[dict]
-    ) -> float:
-        """
-        Ensure metadata diversity across title, description, and tags.
+    def check_metadata_variation(self, video_metadata: dict, recent_videos: list[dict]) -> float:
+        """Ensure metadata diversity across title, description, and tags.
 
         Args:
             video_metadata: Current video with title, description, tags
@@ -374,25 +350,19 @@ class ContentUniquenessValidator:
             # Tag overlap
             recent_tags = set(recent_video.get("tags", []))
             if recent_tags and current_tags:
-                overlap_ratio = len(current_tags & recent_tags) / len(
-                    current_tags | recent_tags
-                )
+                overlap_ratio = len(current_tags & recent_tags) / len(current_tags | recent_tags)
                 tag_overlaps.append(overlap_ratio)
 
         # Calculate average dissimilarity for each metadata dimension
         avg_title_dissimilarity = (
-            1 - (sum(title_similarities) / len(title_similarities))
-            if title_similarities
-            else 1.0
+            1 - (sum(title_similarities) / len(title_similarities)) if title_similarities else 1.0
         )
         avg_description_dissimilarity = (
             1 - (sum(description_similarities) / len(description_similarities))
             if description_similarities
             else 1.0
         )
-        avg_tag_dissimilarity = (
-            1 - (sum(tag_overlaps) / len(tag_overlaps)) if tag_overlaps else 1.0
-        )
+        avg_tag_dissimilarity = 1 - (sum(tag_overlaps) / len(tag_overlaps)) if tag_overlaps else 1.0
 
         # Weighted average (title most important for discovery)
         uniqueness_score = (

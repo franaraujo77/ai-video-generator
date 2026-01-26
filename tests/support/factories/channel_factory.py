@@ -239,7 +239,7 @@ def create_channel_with_metadata(
         >>> channel = create_channel_with_metadata(
         ...     channel_id="poke1",
         ...     default_tags=["pokemon", "nature", "documentary"],
-        ...     description_template="{title}\\n\\n{topic} video by {channel_name}"
+        ...     description_template="{title}\\n\\n{topic} video by {channel_name}",
         ... )
     """
     channel = create_channel(channel_id=channel_id, **kwargs)

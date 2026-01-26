@@ -108,7 +108,8 @@ def valid_credentials(mock_refresh_token, youtube_service):
         token_uri="https://oauth2.googleapis.com/token",
         client_id=youtube_service.client_id,
         client_secret=youtube_service.client_secret,
-        expiry=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),  # Expires in 1 hour (fresh)
+        expiry=datetime.now(UTC).replace(tzinfo=None)
+        + timedelta(hours=1),  # Expires in 1 hour (fresh)
         scopes=[
             "https://www.googleapis.com/auth/youtube.upload",
             "https://www.googleapis.com/auth/youtube.force-ssl",
@@ -150,7 +151,8 @@ def expiring_soon_credentials(mock_refresh_token, youtube_service):
         token_uri="https://oauth2.googleapis.com/token",
         client_id=youtube_service.client_id,
         client_secret=youtube_service.client_secret,
-        expiry=datetime.now(UTC).replace(tzinfo=None) + timedelta(minutes=4),  # Expires in 4 min (< 5 min threshold)
+        expiry=datetime.now(UTC).replace(tzinfo=None)
+        + timedelta(minutes=4),  # Expires in 4 min (< 5 min threshold)
         scopes=[
             "https://www.googleapis.com/auth/youtube.upload",
             "https://www.googleapis.com/auth/youtube.force-ssl",
@@ -178,9 +180,7 @@ async def test_get_credentials_cache_miss_fetches_from_db(
 ):
     """Test cache miss fetches refresh token from DB, creates credentials, and caches."""
     # Mock CredentialService.get_youtube_token() to return fake refresh token
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock Credentials.refresh() to simulate successful refresh
         with patch("google.auth.transport.requests.Request"):
 
@@ -190,7 +190,9 @@ async def test_get_credentials_cache_miss_fetches_from_db(
                 self_creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
 
             # Patch the refresh method on Credentials class
-            with patch.object(Credentials, "refresh", autospec=True, side_effect=mock_refresh_callback):
+            with patch.object(
+                Credentials, "refresh", autospec=True, side_effect=mock_refresh_callback
+            ):
                 # Get credentials (should fetch, create, refresh, cache)
                 creds = await youtube_service.get_credentials("poke1", async_session)
 
@@ -211,9 +213,7 @@ async def test_get_credentials_no_refresh_token_raises_error(youtube_service, as
 
 
 @pytest.mark.asyncio
-async def test_expired_token_triggers_refresh(
-    youtube_service, async_session, expired_credentials
-):
+async def test_expired_token_triggers_refresh(youtube_service, async_session, expired_credentials):
     """Test expired access token triggers automatic refresh."""
     # Pre-populate cache with expired credentials
     youtube_service._credentials_cache["poke1"] = expired_credentials
@@ -224,7 +224,9 @@ async def test_expired_token_triggers_refresh(
 
             def refresh_token(request):
                 expired_credentials.token = "refreshed-access-token"
-                expired_credentials.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                expired_credentials.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(
+                    hours=1
+                )
 
             mock_refresh.side_effect = refresh_token
 
@@ -250,7 +252,9 @@ async def test_proactive_refresh_when_expiring_soon(
 
             def refresh_token(request):
                 expiring_soon_credentials.token = "proactively-refreshed-token"
-                expiring_soon_credentials.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                expiring_soon_credentials.expiry = datetime.now(UTC).replace(
+                    tzinfo=None
+                ) + timedelta(hours=1)
 
             mock_refresh.side_effect = refresh_token
 
@@ -268,14 +272,10 @@ async def test_refresh_error_sends_alert_and_marks_invalid(
 ):
     """Test RefreshError triggers alert, marks token invalid, and raises YouTubeAuthError."""
     # Mock CredentialService.get_youtube_token()
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock Credentials.refresh() to raise RefreshError
         with patch("google.auth.transport.requests.Request"):
-            with patch.object(
-                Credentials, "refresh", side_effect=RefreshError("invalid_grant")
-            ):
+            with patch.object(Credentials, "refresh", side_effect=RefreshError("invalid_grant")):
                 # Mock send_alert
                 with patch("app.services.youtube_service.send_alert") as mock_alert:
                     # Attempt to get credentials (should raise YouTubeAuthError)
@@ -303,9 +303,7 @@ async def test_multi_channel_isolation(
 ):
     """Test cache isolates credentials per channel."""
     # Mock CredentialService.get_youtube_token()
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock Credentials.refresh()
         with patch("google.auth.transport.requests.Request"):
             with patch.object(Credentials, "refresh") as mock_refresh:
@@ -338,13 +336,10 @@ async def test_concurrent_access_thread_safe(
 ):
     """Test cache lock prevents race conditions during concurrent access."""
     # Mock CredentialService.get_youtube_token()
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock Credentials.refresh()
         with patch("google.auth.transport.requests.Request"):
             with patch.object(Credentials, "refresh") as mock_refresh:
-
                 refresh_count = 0
 
                 def refresh_token(request):
@@ -358,9 +353,7 @@ async def test_concurrent_access_thread_safe(
                 mock_refresh.side_effect = refresh_token
 
                 # Launch 5 concurrent requests for same channel
-                tasks = [
-                    youtube_service.get_credentials("poke1", async_session) for _ in range(5)
-                ]
+                tasks = [youtube_service.get_credentials("poke1", async_session) for _ in range(5)]
 
                 results = await asyncio.gather(*tasks)
 
@@ -409,14 +402,10 @@ async def test_build_youtube_client_with_invalid_token(
 ):
     """Test build_youtube_client raises YouTubeAuthError when refresh fails."""
     # Mock CredentialService.get_youtube_token()
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock Credentials.refresh() to raise RefreshError
         with patch("google.auth.transport.requests.Request"):
-            with patch.object(
-                Credentials, "refresh", side_effect=RefreshError("invalid_grant")
-            ):
+            with patch.object(Credentials, "refresh", side_effect=RefreshError("invalid_grant")):
                 # Mock send_alert
                 with patch("app.services.youtube_service.send_alert"):
                     # Attempt to build client (should raise YouTubeAuthError)

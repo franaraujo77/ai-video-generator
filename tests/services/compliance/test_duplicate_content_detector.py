@@ -174,9 +174,7 @@ class TestStoryComparison:
 
         assert similarity > 0.95  # Nearly identical
 
-    def test_completely_different_stories(
-        self, detector, video_metadata, all_channel_videos
-    ):
+    def test_completely_different_stories(self, detector, video_metadata, all_channel_videos):
         """Test story comparison with completely different narratives."""
         video_metadata["story_script"] = "Pikachu explores the forest"
         all_channel_videos[0]["story_script"] = "Charizard flies over mountains"
@@ -239,9 +237,7 @@ class TestEdgeCases:
         # Should handle gracefully (skip visual check)
         assert result["is_duplicate"] is False
 
-    def test_corrupt_thumbnail_file(
-        self, detector, video_metadata, all_channel_videos
-    ):
+    def test_corrupt_thumbnail_file(self, detector, video_metadata, all_channel_videos):
         """Test handling of corrupt thumbnail file."""
         # Create corrupt file
         Path(video_metadata["thumbnail_path"]).write_text("corrupt")

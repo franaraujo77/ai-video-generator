@@ -107,9 +107,7 @@ async def setup_oauth(channel_id: str, client_secrets_path: str, quiet: bool = F
             print("   Please authorize the application in your browser")
             print()
 
-        flow = InstalledAppFlow.from_client_secrets_file(
-            str(client_secrets), scopes=YOUTUBE_SCOPES
-        )
+        flow = InstalledAppFlow.from_client_secrets_file(str(client_secrets), scopes=YOUTUBE_SCOPES)
 
         # Run local server and get credentials
         # port=0 means random available port

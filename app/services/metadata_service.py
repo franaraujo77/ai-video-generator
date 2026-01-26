@@ -27,12 +27,13 @@ Usage:
 """
 
 import re
-import structlog
 from typing import TypedDict
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from app.models import Task, Channel, TaskStatus
+import structlog
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Channel, Task, TaskStatus
 
 log = structlog.get_logger(__name__)
 
@@ -146,9 +147,7 @@ async def generate_metadata(task: Task, db: AsyncSession) -> MetadataDict:
         # Validate required task fields are non-empty
         # Title is always required (YouTube requirement)
         if not task.title or len(task.title.strip()) == 0:
-            raise MetadataGenerationError(
-                f"Task title is required but empty (task_id: {task.id})"
-            )
+            raise MetadataGenerationError(f"Task title is required but empty (task_id: {task.id})")
         # Topic and story_direction are optional (graceful degradation)
         # - If topic is empty, tags will come from channel defaults only
         # - If story_direction is empty, description summary will be empty string
@@ -247,10 +246,12 @@ async def generate_metadata(task: Task, db: AsyncSession) -> MetadataDict:
             error=str(e),
             error_type=type(e).__name__,
         )
-        raise MetadataGenerationError(f"Unexpected error: {str(e)}") from e
+        raise MetadataGenerationError(f"Unexpected error: {e!s}") from e
 
 
-def _resolve_privacy_status(task: Task, channel: Channel) -> str:  # "public" | "unlisted" | "private"
+def _resolve_privacy_status(
+    task: Task, channel: Channel
+) -> str:  # "public" | "unlisted" | "private"
     """Resolve YouTube privacy status using priority hierarchy (Story 7.8 AC5-7).
 
     Privacy resolution follows this priority:
@@ -395,7 +396,9 @@ def _generate_description(task: Task, channel: Channel) -> str:
 
     Example:
         >>> task = Task(title="Pikachu Video", topic="Pikachu", story_direction="Story here")
-        >>> channel = Channel(channel_name="Pokemon Channel", description_template="{title}\\n\\n{topic}")
+        >>> channel = Channel(
+        ...     channel_name="Pokemon Channel", description_template="{title}\\n\\n{topic}"
+        ... )
         >>> desc = _generate_description(task, channel)
         >>> assert "Pikachu Video" in desc
         >>> assert "{title}" not in desc  # Placeholders replaced
@@ -600,8 +603,7 @@ async def _validate_metadata(metadata: MetadataDict) -> tuple[bool, list[str]]:
 
     if len(metadata["title"]) > 100:
         warnings.append(
-            f"Title exceeds 100 chars ({len(metadata['title'])} chars) - "
-            f"should have been truncated"
+            f"Title exceeds 100 chars ({len(metadata['title'])} chars) - should have been truncated"
         )
 
     # Description validation
@@ -617,9 +619,7 @@ async def _validate_metadata(metadata: MetadataDict) -> tuple[bool, list[str]]:
             f"Tag count exceeds 30 ({len(metadata['tags'])} tags) - should have been trimmed"
         )
 
-    total_tag_chars = sum(len(tag) for tag in metadata["tags"]) + max(
-        0, len(metadata["tags"]) - 1
-    )
+    total_tag_chars = sum(len(tag) for tag in metadata["tags"]) + max(0, len(metadata["tags"]) - 1)
     if total_tag_chars > 500:
         warnings.append(
             f"Tag total characters exceed 500 limit ({total_tag_chars} chars) - "
@@ -630,8 +630,7 @@ async def _validate_metadata(metadata: MetadataDict) -> tuple[bool, list[str]]:
     valid_privacy = ["private", "unlisted", "public"]
     if metadata["privacy_status"] not in valid_privacy:
         return False, [
-            f"Invalid privacy_status: {metadata['privacy_status']}. "
-            f"Must be one of: {valid_privacy}"
+            f"Invalid privacy_status: {metadata['privacy_status']}. Must be one of: {valid_privacy}"
         ]
 
     return True, warnings

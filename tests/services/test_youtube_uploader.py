@@ -252,7 +252,9 @@ async def test_upload_fails_when_video_file_not_found(
 
 
 @pytest.mark.asyncio
-async def test_upload_fails_when_quota_insufficient(async_session, sample_task, sample_metadata, tmp_path):
+async def test_upload_fails_when_quota_insufficient(
+    async_session, sample_task, sample_metadata, tmp_path
+):
     """Upload should fail when quota would be exceeded."""
     # Create video file
     video_file = tmp_path / f"{sample_task.id}_final.mp4"

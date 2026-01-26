@@ -932,7 +932,9 @@ async def test_enqueue_task_from_notion_page_privacy_case_insensitive(async_sess
 
 
 @pytest.mark.asyncio
-async def test_enqueue_task_from_notion_page_privacy_invalid_logs_warning(async_session, test_channel):
+async def test_enqueue_task_from_notion_page_privacy_invalid_logs_warning(
+    async_session, test_channel
+):
     """Test that invalid Privacy value logs warning and sets privacy_override=None (Story 7.8 AC4)."""
     page = create_mock_notion_page(
         notion_page_id="page_privacy_invalid",

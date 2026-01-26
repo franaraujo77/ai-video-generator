@@ -52,9 +52,7 @@ def production_data():
 class TestEvidencePackageBuilding:
     """Test building evidence packages from production data."""
 
-    def test_build_complete_evidence_package(
-        self, evidence_tracker, mock_task, production_data
-    ):
+    def test_build_complete_evidence_package(self, evidence_tracker, mock_task, production_data):
         """Test building complete evidence package."""
         evidence = evidence_tracker.build_evidence_package(mock_task, production_data)
 
@@ -64,7 +62,10 @@ class TestEvidencePackageBuilding:
         assert "production_timeline" in evidence
 
         # Validate creative decisions
-        assert evidence["creative_decisions"]["story_development"]["human_author"] == "Alice (Human Editor)"
+        assert (
+            evidence["creative_decisions"]["story_development"]["human_author"]
+            == "Alice (Human Editor)"
+        )
         assert evidence["creative_decisions"]["story_development"]["revision_count"] == 3
         assert evidence["creative_decisions"]["visual_direction"]["asset_approval_count"] == 22
 
@@ -91,9 +92,7 @@ class TestEvidencePackageBuilding:
     def test_evidence_size_limit_enforcement(self, evidence_tracker, mock_task):
         """Test that evidence packages are limited to 100KB."""
         # Create huge production data with massive regeneration log
-        huge_data = {
-            "rejected_generations": ["Rejected asset #" + str(i) for i in range(10000)]
-        }
+        huge_data = {"rejected_generations": ["Rejected asset #" + str(i) for i in range(10000)]}
 
         evidence = evidence_tracker.build_evidence_package(mock_task, huge_data)
 
@@ -128,9 +127,7 @@ class TestQAChecklist:
 class TestEvidenceValidation:
     """Test evidence presence validation."""
 
-    def test_validate_evidence_present_complete(
-        self, evidence_tracker, mock_task, production_data
-    ):
+    def test_validate_evidence_present_complete(self, evidence_tracker, mock_task, production_data):
         """Test validation with complete evidence."""
         # Build and attach evidence to task
         evidence = evidence_tracker.build_evidence_package(mock_task, production_data)
@@ -200,8 +197,6 @@ class TestEdgeCases:
         task_without_id.id = None
 
         # Should not crash
-        evidence = evidence_tracker.build_evidence_package(
-            task_without_id, production_data
-        )
+        evidence = evidence_tracker.build_evidence_package(task_without_id, production_data)
 
         assert "creative_decisions" in evidence

@@ -1,5 +1,4 @@
-"""
-Duplicate content detection for YouTube Partner Program compliance.
+"""Duplicate content detection for YouTube Partner Program compliance.
 
 Detects if a video is a duplicate of existing channel content using:
 - Perceptual hashing of thumbnails (visual similarity)
@@ -9,12 +8,12 @@ Detects if a video is a duplicate of existing channel content using:
 Videos with >90% similarity across all dimensions are blocked as duplicates.
 """
 
-import imagehash
-from PIL import Image
 from difflib import SequenceMatcher
 from pathlib import Path
 
+import imagehash
 import structlog
+from PIL import Image
 
 log = structlog.get_logger(__name__)
 
@@ -24,18 +23,14 @@ DUPLICATE_SIMILARITY_THRESHOLD = 0.90  # >90% similarity = duplicate
 
 
 class DuplicateContentDetector:
-    """
-    Detect duplicate or near-duplicate videos to prevent upload failures.
+    """Detect duplicate or near-duplicate videos to prevent upload failures.
 
     YouTube's "inauthentic content" policy (July 2025) blocks uploads that are
     duplicates or near-duplicates of existing channel content.
     """
 
-    def detect_duplicate(
-        self, video_metadata: dict, all_channel_videos: list[dict]
-    ) -> dict:
-        """
-        Detect if video is duplicate of existing content.
+    def detect_duplicate(self, video_metadata: dict, all_channel_videos: list[dict]) -> dict:
+        """Detect if video is duplicate of existing content.
 
         Args:
             video_metadata: Current video metadata with thumbnail_path, story_script, title, description
@@ -52,9 +47,7 @@ class DuplicateContentDetector:
         """
         if not all_channel_videos:
             # First video on channel - cannot be duplicate
-            log.info(
-                "duplicate_check_passed", reason="no_prior_uploads", is_first_video=True
-            )
+            log.info("duplicate_check_passed", reason="no_prior_uploads", is_first_video=True)
             return {
                 "is_duplicate": False,
                 "duplicate_of": None,
@@ -90,9 +83,9 @@ class DuplicateContentDetector:
 
         # Check each existing video for duplicate match
         for existing_video in all_channel_videos:
-            existing_thumbnail = existing_video.get(
-                "thumbnail_path"
-            ) or existing_video.get("composite_path")
+            existing_thumbnail = existing_video.get("thumbnail_path") or existing_video.get(
+                "composite_path"
+            )
 
             if not existing_thumbnail or not Path(existing_thumbnail).exists():
                 continue
@@ -104,12 +97,8 @@ class DuplicateContentDetector:
                 # Hash distance < 5 indicates near-identical images
                 if hash_distance < DUPLICATE_HASH_DISTANCE:
                     # Visual similarity detected - check story and metadata
-                    story_similarity = self.compare_stories(
-                        video_metadata, existing_video
-                    )
-                    metadata_similarity = self.compare_metadata(
-                        video_metadata, existing_video
-                    )
+                    story_similarity = self.compare_stories(video_metadata, existing_video)
+                    metadata_similarity = self.compare_metadata(video_metadata, existing_video)
 
                     visual_similarity = 1 - (hash_distance / 64.0)
                     combined_similarity = (
@@ -155,11 +144,8 @@ class DuplicateContentDetector:
             "duplicate_type": None,
         }
 
-    def compare_stories(
-        self, video_metadata: dict, existing_video: dict
-    ) -> float:
-        """
-        Compare story structure between two videos.
+    def compare_stories(self, video_metadata: dict, existing_video: dict) -> float:
+        """Compare story structure between two videos.
 
         Args:
             video_metadata: Current video story_script
@@ -181,11 +167,8 @@ class DuplicateContentDetector:
         matcher = SequenceMatcher(None, current_str, existing_str)
         return matcher.ratio()
 
-    def compare_metadata(
-        self, video_metadata: dict, existing_video: dict
-    ) -> float:
-        """
-        Compare metadata (title, description, tags) between two videos.
+    def compare_metadata(self, video_metadata: dict, existing_video: dict) -> float:
+        """Compare metadata (title, description, tags) between two videos.
 
         Args:
             video_metadata: Current video metadata

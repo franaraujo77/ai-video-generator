@@ -1,5 +1,4 @@
-"""
-Organic upload frequency throttling for YouTube Partner Program compliance.
+"""Organic upload frequency throttling for YouTube Partner Program compliance.
 
 Schedules uploads with human-like patterns to avoid spam detection:
 - Daily limits: 2-3 videos per day (channel age dependent)
@@ -43,8 +42,7 @@ TIME_WINDOWS = {
 
 
 class OrganicUploadScheduler:
-    """
-    Schedule uploads with organic timing patterns to avoid spam detection.
+    """Schedule uploads with organic timing patterns to avoid spam detection.
 
     YouTube's spam detection flags accounts based on:
     - High-frequency uploads with low engagement
@@ -58,8 +56,7 @@ class OrganicUploadScheduler:
         channel_config: dict,
         recent_uploads: list[dict],
     ) -> datetime:
-        """
-        Schedule upload with organic timing patterns.
+        """Schedule upload with organic timing patterns.
 
         Args:
             video_metadata: Current video metadata
@@ -102,7 +99,9 @@ class OrganicUploadScheduler:
 
         if len(today_uploads) >= limits["daily_max"]:
             # Daily limit hit - schedule for next day
-            next_slot = datetime.now(timezone.utc).replace(hour=9, minute=0, second=0, microsecond=0) + timedelta(days=1)
+            next_slot = datetime.now(timezone.utc).replace(
+                hour=9, minute=0, second=0, microsecond=0
+            ) + timedelta(days=1)
 
             log.warning(
                 "daily_limit_hit",
@@ -119,17 +118,13 @@ class OrganicUploadScheduler:
 
             if isinstance(last_upload_time, str):
                 # Parse ISO format timestamp
-                last_upload_time = datetime.fromisoformat(
-                    last_upload_time.replace("Z", "+00:00")
-                )
+                last_upload_time = datetime.fromisoformat(last_upload_time.replace("Z", "+00:00"))
 
             # Ensure timezone-aware
             if last_upload_time.tzinfo is None:
                 last_upload_time = last_upload_time.replace(tzinfo=timezone.utc)
 
-            min_next_time = last_upload_time + timedelta(
-                hours=limits["min_hours_between"]
-            )
+            min_next_time = last_upload_time + timedelta(hours=limits["min_hours_between"])
 
             now = datetime.now(timezone.utc)
             if now < min_next_time:
@@ -163,11 +158,8 @@ class OrganicUploadScheduler:
 
         return next_slot
 
-    def add_stagger_variance(
-        self, base_time: datetime, variance_hours: float
-    ) -> datetime:
-        """
-        Add random variance to upload time (human-like unpredictability).
+    def add_stagger_variance(self, base_time: datetime, variance_hours: float) -> datetime:
+        """Add random variance to upload time (human-like unpredictability).
 
         Args:
             base_time: Base upload time
@@ -188,11 +180,8 @@ class OrganicUploadScheduler:
 
         return adjusted_time
 
-    def vary_time_of_day(
-        self, base_time: datetime, recent_uploads: list[dict]
-    ) -> datetime:
-        """
-        Rotate upload times to avoid predictable patterns.
+    def vary_time_of_day(self, base_time: datetime, recent_uploads: list[dict]) -> datetime:
+        """Rotate upload times to avoid predictable patterns.
 
         Distributes uploads across time windows:
         - Morning (9-11am)
@@ -220,9 +209,7 @@ class OrganicUploadScheduler:
 
         # Count usage of each time window
         window_usage = {
-            window: sum(
-                1 for h in recent_hours if start <= h < end
-            )
+            window: sum(1 for h in recent_hours if start <= h < end)
             for window, (start, end) in TIME_WINDOWS.items()
         }
 
@@ -240,7 +227,9 @@ class OrganicUploadScheduler:
         target_hour = random.randint(start_hour, end_hour - 1)
         target_minute = random.randint(0, 59)
 
-        adjusted_time = base_time.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+        adjusted_time = base_time.replace(
+            hour=target_hour, minute=target_minute, second=0, microsecond=0
+        )
 
         # If adjusted time is in the past, move to next day
         now = datetime.now(timezone.utc)
@@ -250,8 +239,7 @@ class OrganicUploadScheduler:
         return adjusted_time
 
     def classify_channel(self, channel_config: dict) -> str:
-        """
-        Classify channel as new or established.
+        """Classify channel as new or established.
 
         Args:
             channel_config: Channel configuration with total_videos_uploaded, created_at

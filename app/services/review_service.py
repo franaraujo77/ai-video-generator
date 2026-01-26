@@ -46,6 +46,7 @@ from app.config import get_notion_api_token
 from app.constants import INTERNAL_TO_NOTION_STATUS
 from app.exceptions import InvalidStateTransitionError
 from app.models import Task, TaskStatus
+from app.services.review_audit_service import ReviewAuditService
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -96,6 +97,7 @@ class ReviewService:
     def __init__(self) -> None:
         """Initialize ReviewService with shared NotionClient for rate limiting."""
         self._notion_client: NotionClient | None = None
+        self._audit_service = ReviewAuditService()  # Story 7.9: Audit logging
 
     def _get_notion_client(self) -> NotionClient | None:
         """Get or create shared NotionClient instance.
@@ -115,6 +117,9 @@ class ReviewService:
         task_id: UUID,
         notion_page_id: str | None = None,
         correlation_id: str | None = None,
+        reviewer_user_id: str | None = None,
+        reviewer_name: str | None = None,
+        reviewer_email: str | None = None,
     ) -> dict[str, str]:
         """Approve generated videos, advancing task to VIDEO_APPROVED.
 
@@ -179,6 +184,19 @@ class ReviewService:
                 new_status=task.status.value,
             )
 
+            # Story 7.9: Create immutable audit log entry (AC1)
+            await self._audit_service.log_review_action(
+                db=db,
+                task_id=task.id,
+                channel_id=task.channel_id,
+                action_type="approve",
+                action_status=task.status.value,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_email=reviewer_email,
+                correlation_id=correlation_id,
+            )
+
             # Commit happens in caller's transaction context
             # This allows batch operations and rollback if needed
 
@@ -214,6 +232,9 @@ class ReviewService:
         reason: str,
         notion_page_id: str | None = None,
         correlation_id: str | None = None,
+        reviewer_user_id: str | None = None,
+        reviewer_name: str | None = None,
+        reviewer_email: str | None = None,
     ) -> dict[str, str]:
         """Reject generated videos, sending task back to VIDEO_ERROR.
 
@@ -295,6 +316,20 @@ class ReviewService:
                 reason=reason,
             )
 
+            # Story 7.9: Create immutable audit log entry (AC1)
+            await self._audit_service.log_review_action(
+                db=db,
+                task_id=task.id,
+                channel_id=task.channel_id,
+                action_type="reject",
+                action_status=task.status.value,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_email=reviewer_email,
+                reason=reason,
+                correlation_id=correlation_id,
+            )
+
             # Commit happens in caller's transaction context
 
             # Sync to Notion asynchronously (non-blocking)
@@ -329,6 +364,9 @@ class ReviewService:
         task_id: UUID,
         notion_page_id: str | None = None,
         correlation_id: str | None = None,
+        reviewer_user_id: str | None = None,
+        reviewer_name: str | None = None,
+        reviewer_email: str | None = None,
     ) -> dict[str, str]:
         """Approve generated audio, advancing task to AUDIO_APPROVED.
 
@@ -395,6 +433,19 @@ class ReviewService:
                 new_status=task.status.value,
             )
 
+            # Story 7.9: Create immutable audit log entry (AC1)
+            await self._audit_service.log_review_action(
+                db=db,
+                task_id=task.id,
+                channel_id=task.channel_id,
+                action_type="approve",
+                action_status=task.status.value,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_email=reviewer_email,
+                correlation_id=correlation_id,
+            )
+
             # Commit happens in caller's transaction context
             # This allows batch operations and rollback if needed
 
@@ -431,6 +482,9 @@ class ReviewService:
         failed_clip_numbers: list[int] | None = None,
         notion_page_id: str | None = None,
         correlation_id: str | None = None,
+        reviewer_user_id: str | None = None,
+        reviewer_name: str | None = None,
+        reviewer_email: str | None = None,
     ) -> dict[str, str | list[int]]:
         """Reject generated audio, sending task back to AUDIO_ERROR.
 
@@ -533,6 +587,21 @@ class ReviewService:
                 failed_clip_numbers=failed_clip_numbers,
             )
 
+            # Story 7.9: Create immutable audit log entry (AC1)
+            await self._audit_service.log_review_action(
+                db=db,
+                task_id=task.id,
+                channel_id=task.channel_id,
+                action_type="reject",
+                action_status=task.status.value,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_email=reviewer_email,
+                reason=reason,
+                affected_clip_numbers=failed_clip_numbers,
+                correlation_id=correlation_id,
+            )
+
             # Commit happens in caller's transaction context
 
             # Sync to Notion asynchronously (non-blocking)
@@ -569,6 +638,9 @@ class ReviewService:
         target_status: TaskStatus,
         channel_id: str,
         correlation_id: str | None = None,
+        reviewer_user_id: str | None = None,
+        reviewer_name: str | None = None,
+        reviewer_email: str | None = None,
     ) -> BulkOperationResult:
         """Approve multiple tasks in a single transaction.
 
@@ -682,7 +754,21 @@ class ReviewService:
         for task in tasks:
             task.status = target_status
 
-        # Step 4: Flush and commit to persist changes
+        # Step 3.5: Create audit log entries for all approved tasks (Story 7.9 AC1)
+        for task in tasks:
+            await self._audit_service.log_review_action(
+                db=db,
+                task_id=task.id,
+                channel_id=task.channel_id,
+                action_type="bulk_approve",
+                action_status=target_status.value,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_email=reviewer_email,
+                correlation_id=correlation_id,
+            )
+
+        # Step 4: Flush and commit to persist changes (including audit logs)
         await db.flush()
         await db.commit()
 
@@ -742,6 +828,9 @@ class ReviewService:
         target_status: TaskStatus,
         channel_id: str,
         correlation_id: str | None = None,
+        reviewer_user_id: str | None = None,
+        reviewer_name: str | None = None,
+        reviewer_email: str | None = None,
     ) -> BulkOperationResult:
         """Reject multiple tasks with common reason in a single transaction.
 
@@ -853,7 +942,22 @@ class ReviewService:
             else:
                 task.error_log = f"Bulk rejection: {reason}"
 
-        # Step 3: Flush and commit to persist changes
+        # Step 2.5: Create audit log entries for all rejected tasks (Story 7.9 AC1)
+        for task in tasks:
+            await self._audit_service.log_review_action(
+                db=db,
+                task_id=task.id,
+                channel_id=task.channel_id,
+                action_type="bulk_reject",
+                action_status=target_status.value,
+                reviewer_user_id=reviewer_user_id,
+                reviewer_name=reviewer_name,
+                reviewer_email=reviewer_email,
+                reason=reason,
+                correlation_id=correlation_id,
+            )
+
+        # Step 3: Flush and commit to persist changes (including audit logs)
         await db.flush()
         await db.commit()
 

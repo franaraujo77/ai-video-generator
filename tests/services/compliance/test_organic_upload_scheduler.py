@@ -94,27 +94,21 @@ class TestChannelClassification:
 class TestDailyLimitEnforcement:
     """Test daily upload limit enforcement."""
 
-    def test_first_upload_of_day_allowed(
-        self, scheduler, new_channel_config, recent_uploads
-    ):
+    def test_first_upload_of_day_allowed(self, scheduler, new_channel_config, recent_uploads):
         """Test first upload of the day is allowed immediately."""
         # Recent uploads from previous days only
         recent_uploads_yesterday = [
             {"uploaded_at": datetime.now(timezone.utc) - timedelta(days=1, hours=2)}
         ]
 
-        scheduled_time = scheduler.schedule_upload(
-            {}, new_channel_config, recent_uploads_yesterday
-        )
+        scheduled_time = scheduler.schedule_upload({}, new_channel_config, recent_uploads_yesterday)
 
         # Should schedule for today or tomorrow depending on time-of-day rotation
         # (might push to next day if time windows already used today)
         now = datetime.now(timezone.utc)
         assert scheduled_time.date() in [now.date(), (now + timedelta(days=1)).date()]
 
-    def test_daily_limit_hit_new_channel(
-        self, scheduler, new_channel_config, recent_uploads
-    ):
+    def test_daily_limit_hit_new_channel(self, scheduler, new_channel_config, recent_uploads):
         """Test daily limit enforcement for new channel (2/day)."""
         # Two uploads already today
         today_uploads = [
@@ -122,16 +116,12 @@ class TestDailyLimitEnforcement:
             {"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=6)},
         ]
 
-        scheduled_time = scheduler.schedule_upload(
-            {}, new_channel_config, today_uploads
-        )
+        scheduled_time = scheduler.schedule_upload({}, new_channel_config, today_uploads)
 
         # Should schedule for next day (daily limit hit)
         assert scheduled_time.date() > datetime.now(timezone.utc).date()
 
-    def test_daily_limit_hit_established_channel(
-        self, scheduler, established_channel_config
-    ):
+    def test_daily_limit_hit_established_channel(self, scheduler, established_channel_config):
         """Test daily limit enforcement for established channel (3/day)."""
         # Three uploads already today
         today_uploads = [
@@ -140,9 +130,7 @@ class TestDailyLimitEnforcement:
             {"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=8)},
         ]
 
-        scheduled_time = scheduler.schedule_upload(
-            {}, established_channel_config, today_uploads
-        )
+        scheduled_time = scheduler.schedule_upload({}, established_channel_config, today_uploads)
 
         # Should schedule for next day (daily limit hit)
         assert scheduled_time.date() > datetime.now(timezone.utc).date()
@@ -151,16 +139,12 @@ class TestDailyLimitEnforcement:
 class TestMinimumSpacingEnforcement:
     """Test minimum spacing between uploads."""
 
-    def test_minimum_spacing_enforced_new_channel(
-        self, scheduler, new_channel_config
-    ):
+    def test_minimum_spacing_enforced_new_channel(self, scheduler, new_channel_config):
         """Test 6-hour minimum spacing for new channel."""
         # Last upload was 3 hours ago (below 6-hour minimum)
         recent_uploads = [{"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=3)}]
 
-        scheduled_time = scheduler.schedule_upload(
-            {}, new_channel_config, recent_uploads
-        )
+        scheduled_time = scheduler.schedule_upload({}, new_channel_config, recent_uploads)
 
         # Should schedule at least 6 hours from last upload
         hours_from_now = (scheduled_time - datetime.now(timezone.utc)).total_seconds() / 3600
@@ -171,9 +155,7 @@ class TestMinimumSpacingEnforcement:
         # Last upload was 7 hours ago (exceeds 6-hour minimum)
         recent_uploads = [{"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=7)}]
 
-        scheduled_time = scheduler.schedule_upload(
-            {}, new_channel_config, recent_uploads
-        )
+        scheduled_time = scheduler.schedule_upload({}, new_channel_config, recent_uploads)
 
         # Should schedule within reasonable time (may be pushed to next day for time rotation)
         hours_from_now = (scheduled_time - datetime.now(timezone.utc)).total_seconds() / 3600
@@ -186,9 +168,7 @@ class TestMinimumSpacingEnforcement:
         # Last upload was 2 hours ago (below 4-hour minimum)
         recent_uploads = [{"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=2)}]
 
-        scheduled_time = scheduler.schedule_upload(
-            {}, established_channel_config, recent_uploads
-        )
+        scheduled_time = scheduler.schedule_upload({}, established_channel_config, recent_uploads)
 
         # Should schedule at least 4 hours from last upload
         hours_from_now = (scheduled_time - datetime.now(timezone.utc)).total_seconds() / 3600
@@ -207,9 +187,7 @@ class TestStaggerVariance:
         adjusted_time = scheduler.add_stagger_variance(base_time, variance_hours=2.0)
 
         # Should add 1 hour (mocked random value)
-        assert (adjusted_time - base_time).total_seconds() == pytest.approx(
-            3600.0, abs=1.0
-        )
+        assert (adjusted_time - base_time).total_seconds() == pytest.approx(3600.0, abs=1.0)
 
     def test_stagger_variance_range(self, scheduler):
         """Test variance stays within expected range."""
@@ -217,9 +195,7 @@ class TestStaggerVariance:
 
         # Run multiple times to test randomness
         for _ in range(10):
-            adjusted_time = scheduler.add_stagger_variance(
-                base_time, variance_hours=2.0
-            )
+            adjusted_time = scheduler.add_stagger_variance(base_time, variance_hours=2.0)
 
             # Variance should be between 0 and 2 hours
             variance_hours = (adjusted_time - base_time).total_seconds() / 3600
@@ -268,9 +244,7 @@ class TestTimeOfDayRotation:
         base_time = datetime.now(timezone.utc).replace(hour=23, minute=0)  # 11 PM
 
         # Recent uploads in afternoon
-        recent_uploads = [
-            {"uploaded_at": datetime.now(timezone.utc).replace(hour=14, minute=30)}
-        ]
+        recent_uploads = [{"uploaded_at": datetime.now(timezone.utc).replace(hour=14, minute=30)}]
 
         adjusted_time = scheduler.vary_time_of_day(base_time, recent_uploads)
 
@@ -297,9 +271,7 @@ class TestEdgeCases:
         ]
 
         # Should parse and handle correctly
-        scheduled_time = scheduler.schedule_upload(
-            {}, new_channel_config, recent_uploads
-        )
+        scheduled_time = scheduler.schedule_upload({}, new_channel_config, recent_uploads)
 
         assert isinstance(scheduled_time, datetime)
 

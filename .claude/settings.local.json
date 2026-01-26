@@ -86,7 +86,12 @@
       "Bash(git pull:*)",
       "Bash(git reset:*)",
       "WebFetch(domain:googleapis.github.io)",
-      "WebFetch(domain:thepythoncode.com)"
+      "WebFetch(domain:thepythoncode.com)",
+      "mcp__plugin_context7_context7__resolve-library-id",
+      "mcp__plugin_context7_context7__query-docs",
+      "WebFetch(domain:developers.notion.com)",
+      "WebFetch(domain:developers.google.com)",
+      "WebFetch(domain:support.google.com)"
     ],
     "deny": [],
     "ask": []

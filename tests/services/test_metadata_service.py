@@ -183,7 +183,8 @@ class TestMetadataDescription:
             assert mock_log.warning.call_count >= 1
             # Find the description_truncated call
             warning_calls = [
-                call for call in mock_log.warning.call_args_list
+                call
+                for call in mock_log.warning.call_args_list
                 if call[0][0] == "description_truncated"
             ]
             assert len(warning_calls) == 1
@@ -224,9 +225,7 @@ class TestMetadataTags:
     @pytest.mark.asyncio
     async def test_metadata_tags_include_defaults(self, async_session: AsyncSession):
         """Tags should include channel.default_tags (AC: channel default tags)."""
-        channel = create_channel_with_metadata(
-            default_tags=["pokemon", "nature", "documentary"]
-        )
+        channel = create_channel_with_metadata(default_tags=["pokemon", "nature", "documentary"])
         async_session.add(channel)
         await async_session.commit()
 
@@ -321,9 +320,7 @@ class TestMetadataTags:
         metadata = await generate_metadata(task, async_session)
 
         # Verify total chars <= 500 (including commas)
-        total_chars = sum(len(tag) for tag in metadata["tags"]) + max(
-            0, len(metadata["tags"]) - 1
-        )
+        total_chars = sum(len(tag) for tag in metadata["tags"]) + max(0, len(metadata["tags"]) - 1)
         assert total_chars <= 500
 
     @pytest.mark.asyncio
@@ -468,7 +465,9 @@ class TestMetadataPrivacy:
         assert metadata["privacy_status"] == "public"
 
     @pytest.mark.asyncio
-    async def test_metadata_privacy_invalid_override_uses_channel_default(self, async_session: AsyncSession):
+    async def test_metadata_privacy_invalid_override_uses_channel_default(
+        self, async_session: AsyncSession
+    ):
         """If privacy_override is invalid, should fall back to channel default (Story 7.8 AC6 robustness)."""
         channel = create_channel_with_metadata(default_privacy="unlisted")
         async_session.add(channel)
@@ -492,7 +491,9 @@ class TestMetadataPrivacy:
         assert metadata["privacy_status"] == "unlisted"
 
     @pytest.mark.asyncio
-    async def test_metadata_privacy_uses_channel_default_when_no_override(self, async_session: AsyncSession):
+    async def test_metadata_privacy_uses_channel_default_when_no_override(
+        self, async_session: AsyncSession
+    ):
         """Should use channel default when no per-video override (Story 7.8 AC6)."""
         channel = create_channel_with_metadata(default_privacy="unlisted")
         async_session.add(channel)
@@ -535,9 +536,7 @@ class TestMetadataErrors:
         async_session.add(task)
         await async_session.commit()
 
-        with pytest.raises(
-            MetadataGenerationError, match="Status must be APPROVED"
-        ) as exc_info:
+        with pytest.raises(MetadataGenerationError, match="Status must be APPROVED") as exc_info:
             await generate_metadata(task, async_session)
 
         assert "queued" in str(exc_info.value)  # Lowercase status value
@@ -559,9 +558,7 @@ class TestMetadataErrors:
         async_session.add(task)
         await async_session.commit()
 
-        with pytest.raises(
-            MetadataGenerationError, match="Channel .* not found"
-        ) as exc_info:
+        with pytest.raises(MetadataGenerationError, match="Channel .* not found") as exc_info:
             await generate_metadata(task, async_session)
 
         assert str(fake_channel_id) in str(exc_info.value)

@@ -17,14 +17,15 @@ Usage:
 """
 
 import os
-import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+import structlog
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
+
 from app.database import AsyncSessionLocal
-from app.services.quota_reset_service import reset_youtube_quotas, reset_gemini_quotas
+from app.services.quota_reset_service import reset_gemini_quotas, reset_youtube_quotas
 
 # Get logger
 log = structlog.get_logger()
@@ -44,8 +45,7 @@ async def _reset_quota_job(
     daily_limit: int,
     exhausted_flag: str,
 ):
-    """
-    Generic scheduled job to reset API quotas at midnight Pacific Time.
+    """Generic scheduled job to reset API quotas at midnight Pacific Time.
 
     This is a DRY refactor to eliminate code duplication between YouTube and Gemini jobs.
 
@@ -93,7 +93,7 @@ async def _reset_quota_job(
                 f"**Service:** {service_name}\n"
                 f"**Date:** {today}\n"
                 f"**Timezone:** {QUOTA_TIMEZONE}\n"
-                f"**Error:** {str(e)}\n\n"
+                f"**Error:** {e!s}\n\n"
                 f"**Manual Fallback Instructions:**\n"
                 f"Run this SQL to manually reset {service_name.title()} quotas:\n"
                 f"```sql\n"
@@ -144,8 +144,7 @@ async def _reset_gemini_quotas_job():
 
 
 async def start_quota_reset_scheduler():
-    """
-    Start APScheduler with daily quota reset jobs.
+    """Start APScheduler with daily quota reset jobs.
 
     Registers two jobs:
     1. YouTube quota reset at midnight Pacific Time
@@ -201,8 +200,7 @@ async def start_quota_reset_scheduler():
 
 
 def shutdown_quota_reset_scheduler():
-    """
-    Gracefully shut down the quota reset scheduler.
+    """Gracefully shut down the quota reset scheduler.
 
     Stops the scheduler and waits for running jobs to complete.
     Called on worker termination.
@@ -222,8 +220,7 @@ def shutdown_quota_reset_scheduler():
 
 
 def is_scheduler_running() -> bool:
-    """
-    Check if quota reset scheduler is running.
+    """Check if quota reset scheduler is running.
 
     Used for health check endpoint.
 

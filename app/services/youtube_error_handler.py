@@ -23,13 +23,12 @@ Integration:
 import json
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
-from uuid import UUID
+from typing import Any
 
 import pytz
 import structlog
-from googleapiclient.errors import HttpError
 from google.api_core.exceptions import GoogleAPIError
+from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Task, TaskStatus
@@ -53,7 +52,7 @@ RETRY_DELAYS = [
 MAX_ERROR_LOG_SIZE = 10240
 
 
-def _truncate_error_log(error_data: Dict[str, Any]) -> str:
+def _truncate_error_log(error_data: dict[str, Any]) -> str:
     """Truncate error log if it exceeds MAX_ERROR_LOG_SIZE.
 
     Args:
@@ -85,7 +84,7 @@ class YouTubeUploadError(Exception):
         raw_response: Full error response for debugging
     """
 
-    def __init__(self, error_content: Dict[str, Any], raw_response: str | None = None):
+    def __init__(self, error_content: dict[str, Any], raw_response: str | None = None):
         """Initialize YouTubeUploadError.
 
         Args:
@@ -205,13 +204,15 @@ def classify_youtube_upload_error(http_error: HttpError) -> YouTubeUploadError:
         >>> # Mock HttpError for quota exceeded
         >>> http_error = HttpError(
         ...     resp=MagicMock(status=403),
-        ...     content=json.dumps({
-        ...         "error": {
-        ...             "code": 403,
-        ...             "message": "Quota exceeded",
-        ...             "errors": [{"reason": "quotaExceeded", "domain": "youtube.quota"}]
+        ...     content=json.dumps(
+        ...         {
+        ...             "error": {
+        ...                 "code": 403,
+        ...                 "message": "Quota exceeded",
+        ...                 "errors": [{"reason": "quotaExceeded", "domain": "youtube.quota"}],
+        ...             }
         ...         }
-        ...     }).encode('utf-8')
+        ...     ).encode("utf-8"),
         ... )
         >>> classify_youtube_upload_error(http_error)  # doctest: +SKIP
         YouTubeQuotaExceededError(...)
@@ -241,7 +242,9 @@ def classify_youtube_upload_error(http_error: HttpError) -> YouTubeUploadError:
 
     # Quota exceeded - pause until midnight PST
     if error_code == 403 and error_reason == "quotaExceeded":
-        return YouTubeQuotaExceededError(error_content, raw_response=http_error.content.decode("utf-8"))
+        return YouTubeQuotaExceededError(
+            error_content, raw_response=http_error.content.decode("utf-8")
+        )
 
     # Transient errors - retry with exponential backoff
     if error_code in [500, 502, 503, 429] or error_reason in [
@@ -350,25 +353,31 @@ async def handle_youtube_upload_error(
         webhook_url = os.getenv("DISCORD_WEBHOOK_URL", "")
 
     # Validate webhook URL (must be non-empty string for alerts to work)
-    webhook_url_valid = webhook_url and isinstance(webhook_url, str) and len(webhook_url.strip()) > 0
+    webhook_url_valid = (
+        webhook_url and isinstance(webhook_url, str) and len(webhook_url.strip()) > 0
+    )
 
     # Handle quota exceeded
     if isinstance(youtube_error, YouTubeQuotaExceededError):
         reset_time = calculate_quota_reset_time()
-        hours_until_reset = (reset_time - datetime.now(pytz.timezone("US/Pacific"))).total_seconds() / 3600
+        hours_until_reset = (
+            reset_time - datetime.now(pytz.timezone("US/Pacific"))
+        ).total_seconds() / 3600
 
         # Update task
         task.retry_count += 1
         task.next_retry_at = reset_time
         task.status = TaskStatus.UPLOAD_ERROR_RETRYING
-        task.error_log = _truncate_error_log({
-            "error": youtube_error.message,
-            "error_code": youtube_error.status_code,
-            "error_reason": youtube_error.error_reason,
-            "category": "quota",
-            "retry_count": task.retry_count,
-            "quota_reset_at": reset_time.isoformat(),
-        })
+        task.error_log = _truncate_error_log(
+            {
+                "error": youtube_error.message,
+                "error_code": youtube_error.status_code,
+                "error_reason": youtube_error.error_reason,
+                "category": "quota",
+                "retry_count": task.retry_count,
+                "quota_reset_at": reset_time.isoformat(),
+            }
+        )
         await db.commit()
 
         # Send quota alert
@@ -402,13 +411,15 @@ async def handle_youtube_upload_error(
     elif isinstance(youtube_error, YouTubeBadRequestError):
         # Mark as permanent failure
         task.status = TaskStatus.UPLOAD_ERROR
-        task.error_log = _truncate_error_log({
-            "error": youtube_error.message,
-            "error_code": youtube_error.status_code,
-            "error_reason": youtube_error.error_reason,
-            "category": "permanent",
-            "failed_at": datetime.now(timezone.utc).isoformat(),
-        })
+        task.error_log = _truncate_error_log(
+            {
+                "error": youtube_error.message,
+                "error_code": youtube_error.status_code,
+                "error_reason": youtube_error.error_reason,
+                "category": "permanent",
+                "failed_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
         await db.commit()
 
         # Send terminal failure alert
@@ -444,14 +455,16 @@ async def handle_youtube_upload_error(
         if task.retry_count >= MAX_RETRIES:
             # Mark as terminal failure
             task.status = TaskStatus.UPLOAD_ERROR
-            task.error_log = _truncate_error_log({
-                "error": youtube_error.message,
-                "error_code": youtube_error.status_code,
-                "error_reason": youtube_error.error_reason,
-                "category": "transient",
-                "retry_attempts": task.retry_count,
-                "exhausted_at": datetime.now(timezone.utc).isoformat(),
-            })
+            task.error_log = _truncate_error_log(
+                {
+                    "error": youtube_error.message,
+                    "error_code": youtube_error.status_code,
+                    "error_reason": youtube_error.error_reason,
+                    "category": "transient",
+                    "retry_attempts": task.retry_count,
+                    "exhausted_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
             await db.commit()
 
             # Send retry exhaustion alert
@@ -487,14 +500,16 @@ async def handle_youtube_upload_error(
         task.retry_count += 1
         task.next_retry_at = next_retry_at
         task.status = TaskStatus.UPLOAD_ERROR_RETRYING
-        task.error_log = _truncate_error_log({
-            "error": youtube_error.message,
-            "error_code": youtube_error.status_code,
-            "error_reason": youtube_error.error_reason,
-            "category": "transient",
-            "retry_count": task.retry_count,
-            "next_retry_at": next_retry_at.isoformat(),
-        })
+        task.error_log = _truncate_error_log(
+            {
+                "error": youtube_error.message,
+                "error_code": youtube_error.status_code,
+                "error_reason": youtube_error.error_reason,
+                "category": "transient",
+                "retry_count": task.retry_count,
+                "next_retry_at": next_retry_at.isoformat(),
+            }
+        )
         await db.commit()
 
         log.warning(

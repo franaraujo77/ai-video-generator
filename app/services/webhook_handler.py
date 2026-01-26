@@ -29,6 +29,7 @@ from app.database import async_session_factory
 from app.models import NotionWebhookEvent, Task, TaskStatus
 from app.schemas.webhook import NotionWebhookPayload
 from app.services.notion_sync import extract_select
+from app.services.review_audit_service import ReviewAuditService
 from app.services.task_service import enqueue_task_from_notion_page
 
 log = structlog.get_logger()
@@ -67,6 +68,63 @@ def _extract_clip_numbers(text: str) -> list[int]:
 
     # Return sorted, deduplicated list
     return sorted(set(clip_numbers))
+
+
+def extract_reviewer_info(page: dict[str, Any]) -> tuple[str | None, str | None, str | None]:
+    """Extract reviewer information from Notion page object (Story 7.9 AC1).
+
+    Extracts human reviewer attribution from Notion page's last_edited_by field.
+    This is THE CRITICAL EVIDENCE for YouTube Partner Program compliance showing
+    human oversight of all uploaded content.
+
+    Notion API Structure:
+        {
+          "last_edited_by": {
+            "object": "user",
+            "id": "user-uuid-123",
+            "name": "John Doe",
+            "type": "person",
+            "person": {
+              "email": "john@example.com"
+            }
+          }
+        }
+
+    Args:
+        page: Full Notion page data from API response
+
+    Returns:
+        Tuple of (user_id, name, email):
+            - user_id: Notion user UUID (always present)
+            - name: Human name from user object (may be None)
+            - email: Email from person object (may be None for bot users)
+
+    Example:
+        >>> page = {"last_edited_by": {"id": "abc123", "name": "John Doe", ...}}
+        >>> user_id, name, email = extract_reviewer_info(page)
+        >>> print(f"Reviewed by {name} ({email})")
+        Reviewed by John Doe (john@example.com)
+
+    Related:
+        - Story 7.9: Human Review Audit Logging
+        - AC1: Capture reviewer user_id, name, email
+        - Story 7.7: YouTube Partner Program compliance evidence
+    """
+    last_edited_by = page.get("last_edited_by", {})
+
+    # Extract user ID (always present)
+    user_id = last_edited_by.get("id")
+
+    # Extract user name (may be None)
+    name = last_edited_by.get("name")
+
+    # Extract email from person object (only for person type users, not bots)
+    email = None
+    if last_edited_by.get("type") == "person":
+        person = last_edited_by.get("person", {})
+        email = person.get("email")
+
+    return user_id, name, email
 
 
 # Constants
@@ -169,6 +227,7 @@ async def _handle_approval_status_change(
     page_id: str,
     notion_status: str,
     correlation_id: str,
+    page: dict[str, Any] | None = None,
 ) -> None:
     """Handle approval status changes from Notion.
 
@@ -245,6 +304,24 @@ async def _handle_approval_status_change(
         task.status = internal_status
         # Then immediately transition to queued (both changes committed together)
         task.status = TaskStatus.QUEUED
+
+        # Story 7.9: Extract reviewer info and create audit log entry (AC1)
+        reviewer_user_id, reviewer_name, reviewer_email = None, None, None
+        if page:
+            reviewer_user_id, reviewer_name, reviewer_email = extract_reviewer_info(page)
+
+        audit_service = ReviewAuditService()
+        await audit_service.log_review_action(
+            db=session,
+            task_id=task.id,
+            channel_id=task.channel_id,
+            action_type="approve",
+            action_status=internal_status.value,
+            reviewer_user_id=reviewer_user_id,
+            reviewer_name=reviewer_name,
+            reviewer_email=reviewer_email,
+            correlation_id=correlation_id,
+        )
 
         log.info(
             "review_approved_task_requeued",
@@ -365,6 +442,24 @@ async def _handle_rejection_status_change(
 
         # Update task status to error state
         task.status = internal_status
+
+        # Story 7.9: Extract reviewer info and create audit log entry (AC1)
+        reviewer_user_id, reviewer_name, reviewer_email = extract_reviewer_info(page)
+
+        audit_service = ReviewAuditService()
+        await audit_service.log_review_action(
+            db=session,
+            task_id=task.id,
+            channel_id=task.channel_id,
+            action_type="reject",
+            action_status=internal_status.value,
+            reviewer_user_id=reviewer_user_id,
+            reviewer_name=reviewer_name,
+            reviewer_email=reviewer_email,
+            reason=rejection_reason or "No rejection reason provided",
+            affected_clip_numbers=clip_numbers if notion_status == "Video Error" else None,
+            correlation_id=correlation_id,
+        )
 
         log.info(
             "review_rejected_task_marked_error",

@@ -97,8 +97,7 @@ class YouTubeService:
         >>> from app.config import get_config
         >>> config = get_config()
         >>> service = YouTubeService(
-        ...     client_id=config.google_client_id,
-        ...     client_secret=config.google_client_secret
+        ...     client_id=config.google_client_id, client_secret=config.google_client_secret
         ... )
         >>> creds = await service.get_credentials("poke1", db)
         >>> youtube = await service.build_youtube_client("poke1", db)
@@ -234,9 +233,7 @@ class YouTubeService:
 
         except RefreshError as e:
             # Refresh token is invalid or revoked (permanent failure)
-            log.critical(
-                "youtube_token_refresh_failed", channel_id=channel_id, error=str(e)
-            )
+            log.critical("youtube_token_refresh_failed", channel_id=channel_id, error=str(e))
 
             # Send alert to operators
             await send_alert(

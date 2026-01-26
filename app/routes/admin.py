@@ -22,15 +22,15 @@ from typing import Literal
 from uuid import UUID
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.services.quota_reset_service import reset_youtube_quotas, reset_gemini_quotas
 from app.models import Channel
+from app.services.quota_reset_service import reset_gemini_quotas, reset_youtube_quotas
 
 # Initialize router
 router = APIRouter(prefix="/api/v1/admin", tags=["admin"])
@@ -47,13 +47,23 @@ class QuotaResetRequest(BaseModel):
     """Request schema for manual quota reset."""
 
     channel_id: UUID = Field(description="Channel UUID to reset quota for")
-    service: Literal["youtube", "gemini"] = Field(description="Service to reset (youtube or gemini)")
+    service: Literal["youtube", "gemini"] = Field(
+        description="Service to reset (youtube or gemini)"
+    )
     date: date_type | None = Field(
         default=None,
         description="Date to reset quota for (defaults to today in Pacific timezone)",
     )
 
-    model_config = {"json_schema_extra": {"example": {"channel_id": "12345678-1234-1234-1234-123456789012", "service": "youtube", "date": "2026-01-25"}}}
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "channel_id": "12345678-1234-1234-1234-123456789012",
+                "service": "youtube",
+                "date": "2026-01-25",
+            }
+        }
+    }
 
 
 class QuotaResetResponse(BaseModel):
@@ -108,8 +118,7 @@ async def manual_quota_reset(
     db: AsyncSession = Depends(get_session),
     _admin: None = Depends(verify_admin_key),
 ) -> QuotaResetResponse:
-    """
-    Manually reset quota for a specific channel and service.
+    """Manually reset quota for a specific channel and service.
 
     Allows ops team to manually trigger quota reset in emergency situations
     (e.g., scheduler failure, midnight missed, quota incorrectly marked exhausted).
@@ -156,7 +165,10 @@ async def manual_quota_reset(
         )
         raise HTTPException(
             status_code=400,
-            detail=f"Cannot reset quota for future date. Reset date: {reset_date}, Today: {today_pacific}",
+            detail=(
+                f"Cannot reset quota for future date. "
+                f"Reset date: {reset_date}, Today: {today_pacific}"
+            ),
         )
 
     # Verify channel exists and is active
@@ -231,7 +243,10 @@ async def manual_quota_reset(
 
         return QuotaResetResponse(
             success=True,
-            message=f"Successfully reset {quota_request.service} quota for channel {quota_request.channel_id}",
+            message=(
+                f"Successfully reset {quota_request.service} quota "
+                f"for channel {quota_request.channel_id}"
+            ),
             channel_id=quota_request.channel_id,
             service=quota_request.service,
             date=reset_date,

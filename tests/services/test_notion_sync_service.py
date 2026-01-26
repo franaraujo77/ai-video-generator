@@ -188,9 +188,7 @@ async def test_sync_youtube_url_success(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             await sync_youtube_url_to_notion(
                 task=sample_task,
@@ -210,9 +208,7 @@ async def test_sync_youtube_url_success(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_missing_notion_page_id(
-    async_session, sample_channel
-):
+async def test_sync_youtube_url_missing_notion_page_id(async_session, sample_channel):
     """Test sync fails when task has empty notion_page_id."""
     task = Task(
         id=uuid4(),
@@ -243,9 +239,7 @@ async def test_sync_youtube_url_missing_notion_page_id(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_permanent_error_400(
-    async_session, sample_task, mock_notion_client
-):
+async def test_sync_youtube_url_permanent_error_400(async_session, sample_task, mock_notion_client):
     """Test 400 validation_error raises NotionSyncError and stores fallback."""
     # Mock 400 response
     import httpx
@@ -265,9 +259,7 @@ async def test_sync_youtube_url_permanent_error_400(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncError) as exc_info:
                 await sync_youtube_url_to_notion(
@@ -293,9 +285,7 @@ async def test_sync_youtube_url_permanent_error_400(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_permanent_error_401(
-    async_session, sample_task, mock_notion_client
-):
+async def test_sync_youtube_url_permanent_error_401(async_session, sample_task, mock_notion_client):
     """Test 401 unauthorized raises NotionSyncError and stores fallback."""
     mock_response = create_mock_response(401)
     mock_notion_client.pages.update.side_effect = APIResponseError(
@@ -309,9 +299,7 @@ async def test_sync_youtube_url_permanent_error_401(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncError):
                 await sync_youtube_url_to_notion(
@@ -323,9 +311,7 @@ async def test_sync_youtube_url_permanent_error_401(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_permanent_error_403(
-    async_session, sample_task, mock_notion_client
-):
+async def test_sync_youtube_url_permanent_error_403(async_session, sample_task, mock_notion_client):
     """Test 403 restricted_resource raises NotionSyncError and stores fallback."""
     mock_response = create_mock_response(403)
     mock_notion_client.pages.update.side_effect = APIResponseError(
@@ -339,9 +325,7 @@ async def test_sync_youtube_url_permanent_error_403(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncError):
                 await sync_youtube_url_to_notion(
@@ -353,9 +337,7 @@ async def test_sync_youtube_url_permanent_error_403(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_permanent_error_404(
-    async_session, sample_task, mock_notion_client
-):
+async def test_sync_youtube_url_permanent_error_404(async_session, sample_task, mock_notion_client):
     """Test 404 object_not_found raises NotionSyncError and stores fallback."""
     mock_response = create_mock_response(404)
     mock_notion_client.pages.update.side_effect = APIResponseError(
@@ -369,9 +351,7 @@ async def test_sync_youtube_url_permanent_error_404(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncError):
                 await sync_youtube_url_to_notion(
@@ -383,9 +363,7 @@ async def test_sync_youtube_url_permanent_error_404(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_rate_limited_429(
-    async_session, sample_task, mock_notion_client
-):
+async def test_sync_youtube_url_rate_limited_429(async_session, sample_task, mock_notion_client):
     """Test 429 rate_limited raises NotionSyncRetryError."""
     mock_response = create_mock_response(429, {"Retry-After": "5"})
     mock_notion_client.pages.update.side_effect = APIResponseError(
@@ -399,9 +377,7 @@ async def test_sync_youtube_url_rate_limited_429(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncRetryError) as exc_info:
                 await sync_youtube_url_to_notion(
@@ -415,9 +391,7 @@ async def test_sync_youtube_url_rate_limited_429(
 
 
 @pytest.mark.asyncio
-async def test_sync_youtube_url_conflict_409(
-    async_session, sample_task, mock_notion_client
-):
+async def test_sync_youtube_url_conflict_409(async_session, sample_task, mock_notion_client):
     """Test 409 conflict raises NotionSyncRetryError."""
     mock_response = create_mock_response(409)
     mock_notion_client.pages.update.side_effect = APIResponseError(
@@ -431,9 +405,7 @@ async def test_sync_youtube_url_conflict_409(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncRetryError):
                 await sync_youtube_url_to_notion(
@@ -461,9 +433,7 @@ async def test_sync_youtube_url_service_unavailable_503(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncRetryError):
                 await sync_youtube_url_to_notion(
@@ -507,9 +477,7 @@ async def test_store_fallback_url_creates_record(async_session, sample_task):
 @pytest.mark.asyncio
 async def test_store_fallback_url_sends_discord_alert(async_session, sample_task):
     """Test Discord alert is sent when fallback URL is stored."""
-    with patch(
-        "app.services.notion_sync_service.send_discord_alert"
-    ) as mock_alert:
+    with patch("app.services.notion_sync_service.send_discord_alert") as mock_alert:
         mock_alert.return_value = True
 
         await store_fallback_url(
@@ -530,13 +498,9 @@ async def test_store_fallback_url_sends_discord_alert(async_session, sample_task
 
 
 @pytest.mark.asyncio
-async def test_store_fallback_url_no_alert_when_webhook_none(
-    async_session, sample_task
-):
+async def test_store_fallback_url_no_alert_when_webhook_none(async_session, sample_task):
     """Test Discord alert is NOT sent when webhook_url is None."""
-    with patch(
-        "app.services.notion_sync_service.send_discord_alert"
-    ) as mock_alert:
+    with patch("app.services.notion_sync_service.send_discord_alert") as mock_alert:
         await store_fallback_url(
             task=sample_task,
             video_id="dQw4w9WgXcQ",
@@ -566,9 +530,7 @@ async def test_end_to_end_sync_success(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             # Execute sync
             await sync_youtube_url_to_notion(
@@ -605,9 +567,7 @@ async def test_end_to_end_sync_failure_with_fallback(
         return_value=mock_notion_client,
     ):
         with patch("app.services.notion_sync_service.CredentialService") as mock_cred:
-            mock_cred.return_value.get_notion_token = AsyncMock(
-                return_value="mock_token"
-            )
+            mock_cred.return_value.get_notion_token = AsyncMock(return_value="mock_token")
 
             with pytest.raises(NotionSyncError):
                 await sync_youtube_url_to_notion(

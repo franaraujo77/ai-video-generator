@@ -247,7 +247,9 @@ async def test_handle_quota_exceeded_error(async_test_session):
 
         # Handle error
         with pytest.raises(YouTubeQuotaExceededError):
-            await handle_youtube_upload_error(task, http_error, async_test_session, webhook_url="https://discord.com/webhook")
+            await handle_youtube_upload_error(
+                task, http_error, async_test_session, webhook_url="https://discord.com/webhook"
+            )
 
     # Refresh task
     await async_test_session.refresh(task)
@@ -303,7 +305,9 @@ async def test_handle_quota_error_no_webhook_configured(async_test_session):
     # Handle error WITHOUT webhook URL
     with patch("app.services.youtube_error_handler.send_discord_alert") as mock_alert:
         with pytest.raises(YouTubeQuotaExceededError):
-            await handle_youtube_upload_error(task, http_error, async_test_session, webhook_url=None)
+            await handle_youtube_upload_error(
+                task, http_error, async_test_session, webhook_url=None
+            )
 
         # Assert alert NOT called when webhook is None
         mock_alert.assert_not_called()
@@ -363,7 +367,11 @@ async def test_handle_transient_error_first_retry(async_test_session):
     now = datetime.now(timezone.utc)
     expected_retry = now + timedelta(minutes=1)
     # Convert naive datetime from SQLite to timezone-aware for comparison
-    task_retry_time = task.next_retry_at.replace(tzinfo=timezone.utc) if task.next_retry_at.tzinfo is None else task.next_retry_at
+    task_retry_time = (
+        task.next_retry_at.replace(tzinfo=timezone.utc)
+        if task.next_retry_at.tzinfo is None
+        else task.next_retry_at
+    )
     assert abs((task_retry_time - expected_retry).total_seconds()) < 5  # Within 5 seconds
 
 
@@ -398,7 +406,9 @@ async def test_handle_transient_error_retry_exhausted(async_test_session):
     # Handle error
     with patch("app.services.youtube_error_handler.send_discord_alert") as mock_alert:
         with pytest.raises(ValueError, match="Retry exhausted"):
-            await handle_youtube_upload_error(task, http_error, async_test_session, webhook_url="https://discord.com/webhook")
+            await handle_youtube_upload_error(
+                task, http_error, async_test_session, webhook_url="https://discord.com/webhook"
+            )
 
         # Verify terminal failure alert sent with correct content
         mock_alert.assert_called_once()
@@ -469,7 +479,11 @@ async def test_handle_transient_error_exponential_backoff(async_test_session):
         now = datetime.now(timezone.utc)
         expected_retry = now + expected_delay
         # Convert naive datetime from SQLite to timezone-aware for comparison
-    task_retry_time = task.next_retry_at.replace(tzinfo=timezone.utc) if task.next_retry_at.tzinfo is None else task.next_retry_at
+    task_retry_time = (
+        task.next_retry_at.replace(tzinfo=timezone.utc)
+        if task.next_retry_at.tzinfo is None
+        else task.next_retry_at
+    )
     assert abs((task_retry_time - expected_retry).total_seconds()) < 5  # Within 5 seconds
 
 
@@ -539,7 +553,9 @@ async def test_handle_permanent_error_400(async_test_session):
     # Handle error
     with patch("app.services.youtube_error_handler.send_discord_alert") as mock_alert:
         with pytest.raises(YouTubeBadRequestError):
-            await handle_youtube_upload_error(task, http_error, async_test_session, webhook_url="https://discord.com/webhook")
+            await handle_youtube_upload_error(
+                task, http_error, async_test_session, webhook_url="https://discord.com/webhook"
+            )
 
         # Verify terminal failure alert sent with correct content
         mock_alert.assert_called_once()

@@ -63,9 +63,7 @@ class TestResetYouTubeQuotas:
         reset_count = await reset_youtube_quotas(reset_date, async_session)
 
         # Verify new quota row created
-        quota = await async_session.get(
-            YouTubeQuotaUsage, (active_channel.id, reset_date)
-        )
+        quota = await async_session.get(YouTubeQuotaUsage, (active_channel.id, reset_date))
         assert quota is not None
         assert quota.units_used == 0
         assert quota.daily_limit == 10000
@@ -103,9 +101,7 @@ class TestResetYouTubeQuotas:
         assert reset_count == 1
 
         # Verify active channel has quota row
-        active_quota = await async_session.get(
-            YouTubeQuotaUsage, (active_channel.id, reset_date)
-        )
+        active_quota = await async_session.get(YouTubeQuotaUsage, (active_channel.id, reset_date))
         assert active_quota is not None
 
         # Verify inactive channel has NO quota row
@@ -160,9 +156,7 @@ class TestResetYouTubeQuotas:
 
         # Verify quota rows for all channels
         for channel in channels:
-            quota = await async_session.get(
-                YouTubeQuotaUsage, (channel.id, reset_date)
-            )
+            quota = await async_session.get(YouTubeQuotaUsage, (channel.id, reset_date))
             assert quota is not None
             assert quota.units_used == 0
 
@@ -184,9 +178,7 @@ class TestResetYouTubeQuotas:
         await reset_youtube_quotas(reset_date, async_session)
 
         # Verify quota created for correct date
-        quota = await async_session.get(
-            YouTubeQuotaUsage, (active_channel.id, reset_date)
-        )
+        quota = await async_session.get(YouTubeQuotaUsage, (active_channel.id, reset_date))
         assert quota is not None
         assert quota.date == date(2026, 1, 25)
 
@@ -204,9 +196,7 @@ class TestResetGeminiQuotas:
         reset_count = await reset_gemini_quotas(reset_date, async_session)
 
         # Verify new quota row created
-        quota = await async_session.get(
-            GeminiQuotaUsage, (active_channel.id, reset_date)
-        )
+        quota = await async_session.get(GeminiQuotaUsage, (active_channel.id, reset_date))
         assert quota is not None
         assert quota.requests_used == 0
         assert quota.daily_limit == 1500
@@ -244,9 +234,7 @@ class TestResetGeminiQuotas:
         assert reset_count == 1
 
         # Verify active channel has quota row
-        active_quota = await async_session.get(
-            GeminiQuotaUsage, (active_channel.id, reset_date)
-        )
+        active_quota = await async_session.get(GeminiQuotaUsage, (active_channel.id, reset_date))
         assert active_quota is not None
 
         # Verify inactive channel has NO quota row

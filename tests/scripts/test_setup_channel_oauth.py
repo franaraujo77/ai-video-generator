@@ -334,7 +334,9 @@ async def test_integration_setup_and_retrieve(async_session, encryption_env):
 
     assert refreshed_channel.youtube_token_encrypted is not None
     assert isinstance(refreshed_channel.youtube_token_encrypted, bytes)
-    assert b"integration_test_token" not in refreshed_channel.youtube_token_encrypted  # Not plaintext
+    assert (
+        b"integration_test_token" not in refreshed_channel.youtube_token_encrypted
+    )  # Not plaintext
 
 
 @pytest.mark.asyncio
@@ -427,7 +429,9 @@ async def test_no_plaintext_token_in_output(async_session, encryption_env, capsy
 
     # CRITICAL: Verify plaintext token NEVER appears in output
     assert test_token not in combined_output, "SECURITY VIOLATION: Plaintext token found in output!"
-    assert "SUPER_SECRET" not in combined_output, "SECURITY VIOLATION: Token substring found in output!"
+    assert "SUPER_SECRET" not in combined_output, (
+        "SECURITY VIOLATION: Token substring found in output!"
+    )
 
     # Verify channel_id (non-sensitive) CAN appear
     assert "poke1" in combined_output or "Test Channel" in combined_output

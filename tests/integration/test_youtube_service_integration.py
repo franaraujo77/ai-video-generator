@@ -59,9 +59,7 @@ def youtube_service():
 
 
 @pytest.mark.asyncio
-async def test_full_refresh_flow_with_database(
-    youtube_service, async_session, test_channel
-):
+async def test_full_refresh_flow_with_database(youtube_service, async_session, test_channel):
     """Test complete token refresh flow with database integration.
 
     Verifies:
@@ -74,9 +72,7 @@ async def test_full_refresh_flow_with_database(
     mock_refresh_token = "1//0gBtest-integration-refresh-token"
 
     # Mock CredentialService to return refresh token from database
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock google-auth refresh
         with patch("google.auth.transport.requests.Request"):
             with patch.object(Credentials, "refresh", autospec=True) as mock_refresh:
@@ -84,9 +80,7 @@ async def test_full_refresh_flow_with_database(
                 def mock_refresh_callback(self_creds, request):
                     # Simulate successful token refresh (modify credentials object)
                     self_creds.token = "fresh-access-token"
-                    self_creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(
-                        hours=1
-                    )
+                    self_creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
 
                 mock_refresh.side_effect = mock_refresh_callback
 
@@ -110,9 +104,7 @@ async def test_full_refresh_flow_with_database(
 
 
 @pytest.mark.asyncio
-async def test_refresh_error_updates_database_flag(
-    youtube_service, async_session, test_channel
-):
+async def test_refresh_error_updates_database_flag(youtube_service, async_session, test_channel):
     """Test RefreshError properly updates database youtube_token_invalid flag.
 
     Verifies:
@@ -124,17 +116,12 @@ async def test_refresh_error_updates_database_flag(
     mock_refresh_token = "1//0gBinvalid-refresh-token"
 
     # Mock CredentialService
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock google-auth to raise RefreshError
         with patch("google.auth.transport.requests.Request"):
-            with patch.object(
-                Credentials, "refresh", side_effect=RefreshError("invalid_grant")
-            ):
+            with patch.object(Credentials, "refresh", side_effect=RefreshError("invalid_grant")):
                 # Mock send_alert
                 with patch("app.services.youtube_service.send_alert") as mock_alert:
-
                     # Attempt refresh (should fail and update DB)
                     with pytest.raises(YouTubeAuthError):
                         await youtube_service.get_credentials(
@@ -151,10 +138,7 @@ async def test_refresh_error_updates_database_flag(
                     assert test_channel.youtube_token_invalid is True
 
                     # Verify cache cleared
-                    assert (
-                        "integration_test_channel"
-                        not in youtube_service._credentials_cache
-                    )
+                    assert "integration_test_channel" not in youtube_service._credentials_cache
 
 
 @pytest.mark.asyncio
@@ -173,9 +157,7 @@ async def test_network_error_clears_cache_but_not_database_flag(
     mock_refresh_token = "1//0gBvalid-but-network-failed"
 
     # Mock CredentialService
-    with patch.object(
-        CredentialService, "get_youtube_token", return_value=mock_refresh_token
-    ):
+    with patch.object(CredentialService, "get_youtube_token", return_value=mock_refresh_token):
         # Mock google-auth to raise ConnectionError
         with patch("google.auth.transport.requests.Request"):
             with patch.object(
@@ -183,12 +165,9 @@ async def test_network_error_clears_cache_but_not_database_flag(
                 "refresh",
                 side_effect=ConnectionError("Network unreachable"),
             ):
-
                 # Attempt refresh (should fail with network error)
                 with pytest.raises(ConnectionError):
-                    await youtube_service.get_credentials(
-                        "integration_test_channel", async_session
-                    )
+                    await youtube_service.get_credentials("integration_test_channel", async_session)
 
                 # Refresh channel from database
                 await async_session.refresh(test_channel)
@@ -197,6 +176,4 @@ async def test_network_error_clears_cache_but_not_database_flag(
                 assert test_channel.youtube_token_invalid is False
 
                 # Verify cache cleared (prevent using stale creds)
-                assert (
-                    "integration_test_channel" not in youtube_service._credentials_cache
-                )
+                assert "integration_test_channel" not in youtube_service._credentials_cache

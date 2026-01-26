@@ -90,9 +90,7 @@ class TestUniquenessValidation:
         Path(recent_videos[0]["thumbnail_path"]).touch()
 
         try:
-            result = validator.validate_video_uniqueness(
-                video_metadata, recent_videos
-            )
+            result = validator.validate_video_uniqueness(video_metadata, recent_videos)
 
             # 32/64 = 50% similarity → 50% uniqueness
             assert result["scores"]["visual_uniqueness"] == pytest.approx(0.5, abs=0.1)
@@ -111,9 +109,7 @@ class TestUniquenessValidation:
         # Should score moderate to high uniqueness (>50%)
         assert result["scores"]["narrative_uniqueness"] > 0.5
 
-    def test_narrative_uniqueness_similar_behaviors(
-        self, validator, video_metadata, recent_videos
-    ):
+    def test_narrative_uniqueness_similar_behaviors(self, validator, video_metadata, recent_videos):
         """Test story uniqueness with similar behavior sequences."""
         # Make recent video similar to current video
         recent_videos[0]["story_script"] = {
@@ -130,9 +126,7 @@ class TestUniquenessValidation:
         # Should score lower uniqueness
         assert result["scores"]["narrative_uniqueness"] < 0.5
 
-    def test_metadata_uniqueness_different_titles(
-        self, validator, video_metadata, recent_videos
-    ):
+    def test_metadata_uniqueness_different_titles(self, validator, video_metadata, recent_videos):
         """Test metadata uniqueness with different titles/descriptions/tags."""
         result = validator.validate_video_uniqueness(video_metadata, recent_videos)
 
@@ -141,9 +135,7 @@ class TestUniquenessValidation:
         # Note: Some overlap in tags ("pokemon") lowers uniqueness score
         assert result["scores"]["metadata_uniqueness"] > 0.5
 
-    def test_metadata_uniqueness_similar_titles(
-        self, validator, video_metadata, recent_videos
-    ):
+    def test_metadata_uniqueness_similar_titles(self, validator, video_metadata, recent_videos):
         """Test metadata uniqueness with similar titles/descriptions/tags."""
         # Make recent video similar to current video
         recent_videos[0]["title"] = "Pikachu's Forest Journey"
@@ -155,9 +147,7 @@ class TestUniquenessValidation:
         # Very similar metadata
         assert result["scores"]["metadata_uniqueness"] < 0.5
 
-    def test_uniqueness_threshold_enforcement(
-        self, validator, video_metadata, recent_videos
-    ):
+    def test_uniqueness_threshold_enforcement(self, validator, video_metadata, recent_videos):
         """Test that all scores must pass 70% threshold."""
         # Make story very similar (below threshold)
         recent_videos[0]["story_script"] = video_metadata["story_script"]
@@ -166,7 +156,9 @@ class TestUniquenessValidation:
 
         # Even if visual and metadata are unique, narrative fails → overall fails
         assert result["passes"] is False
-        assert result["scores"]["narrative_uniqueness"] < UNIQUENESS_THRESHOLDS["narrative_uniqueness"]
+        assert (
+            result["scores"]["narrative_uniqueness"] < UNIQUENESS_THRESHOLDS["narrative_uniqueness"]
+        )
 
 
 class TestBehaviorClassification:

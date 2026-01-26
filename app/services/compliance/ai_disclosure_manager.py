@@ -1,5 +1,4 @@
-"""
-AI disclosure automation for YouTube Partner Program compliance.
+"""AI disclosure automation for YouTube Partner Program compliance.
 
 Sets mandatory AI disclosure labels via YouTube Data API v3:
 - hasAlteredContent=true (MANDATORY as of May 21, 2025)
@@ -15,8 +14,7 @@ log = structlog.get_logger(__name__)
 
 
 class AIDisclosureManager:
-    """
-    Manage AI disclosure labels for YouTube uploads.
+    """Manage AI disclosure labels for YouTube uploads.
 
     YouTube's May 2025 mandate requires ALL synthetic/altered content to be labeled:
     - Synthetic voices (ElevenLabs narration)
@@ -25,8 +23,7 @@ class AIDisclosureManager:
     """
 
     def set_ai_disclosure(self, video_id: str, youtube_service) -> None:
-        """
-        Set AI disclosure via YouTube Data API v3.
+        """Set AI disclosure via YouTube Data API v3.
 
         MUST be called after video upload, before video goes public.
 
@@ -48,9 +45,7 @@ class AIDisclosureManager:
 
         try:
             # Update video via YouTube Data API
-            youtube_service.videos().update(
-                part="contentDetails", body=video_metadata
-            ).execute()
+            youtube_service.videos().update(part="contentDetails", body=video_metadata).execute()
 
             log.info(
                 "ai_disclosure_set",
@@ -69,8 +64,7 @@ class AIDisclosureManager:
             raise
 
     def add_disclosure_to_description(self, description: str) -> str:
-        """
-        Add text disclosure to video description (belt-and-suspenders approach).
+        """Add text disclosure to video description (belt-and-suspenders approach).
 
         Adds disclosure section at the beginning of description for maximum visibility.
 
@@ -105,8 +99,7 @@ class AIDisclosureManager:
         return updated_description
 
     def validate_disclosure_set(self, video_id: str, youtube_service) -> bool:
-        """
-        Verify AI disclosure was successfully set on YouTube.
+        """Verify AI disclosure was successfully set on YouTube.
 
         Args:
             video_id: YouTube video ID
@@ -120,11 +113,7 @@ class AIDisclosureManager:
         """
         try:
             # Fetch video metadata to verify disclosure
-            video = (
-                youtube_service.videos()
-                .list(part="contentDetails", id=video_id)
-                .execute()
-            )
+            video = youtube_service.videos().list(part="contentDetails", id=video_id).execute()
 
             if not video.get("items"):
                 raise ValueError(f"Video {video_id} not found in YouTube API response")

@@ -18,9 +18,7 @@ def mock_youtube_service():
     service = Mock()
     service.videos().update().execute = Mock(return_value={"id": "test_video_123"})
     service.videos().list().execute = Mock(
-        return_value={
-            "items": [{"contentDetails": {"hasAlteredContent": True}}]
-        }
+        return_value={"items": [{"contentDetails": {"hasAlteredContent": True}}]}
     )
     return service
 
@@ -39,20 +37,14 @@ class TestAIDisclosureAPI:
 
     def test_set_ai_disclosure_api_error(self, disclosure_manager, mock_youtube_service):
         """Test handling of YouTube API errors."""
-        mock_youtube_service.videos().update().execute.side_effect = Exception(
-            "API quota exceeded"
-        )
+        mock_youtube_service.videos().update().execute.side_effect = Exception("API quota exceeded")
 
         with pytest.raises(Exception, match="API quota exceeded"):
             disclosure_manager.set_ai_disclosure("test_video_123", mock_youtube_service)
 
-    def test_validate_disclosure_set_success(
-        self, disclosure_manager, mock_youtube_service
-    ):
+    def test_validate_disclosure_set_success(self, disclosure_manager, mock_youtube_service):
         """Test validation of successfully set disclosure."""
-        result = disclosure_manager.validate_disclosure_set(
-            "test_video_123", mock_youtube_service
-        )
+        result = disclosure_manager.validate_disclosure_set("test_video_123", mock_youtube_service)
 
         assert result is True
         mock_youtube_service.videos().list.assert_called()
@@ -66,9 +58,7 @@ class TestAIDisclosureAPI:
         }
 
         with pytest.raises(ValueError, match="AI disclosure not set"):
-            disclosure_manager.validate_disclosure_set(
-                "test_video_123", mock_youtube_service
-            )
+            disclosure_manager.validate_disclosure_set("test_video_123", mock_youtube_service)
 
 
 class TestDescriptionDisclosure:
@@ -78,9 +68,7 @@ class TestDescriptionDisclosure:
         """Test prepending AI disclosure to description."""
         original_description = "Watch Pikachu hunt for food in this nature documentary!"
 
-        updated_description = disclosure_manager.add_disclosure_to_description(
-            original_description
-        )
+        updated_description = disclosure_manager.add_disclosure_to_description(original_description)
 
         # Check disclosure prepended
         assert "🤖 AI DISCLOSURE" in updated_description
@@ -96,9 +84,7 @@ class TestDescriptionDisclosure:
         original_description = "Pokemon nature doc"
 
         # Add disclosure twice
-        description_v1 = disclosure_manager.add_disclosure_to_description(
-            original_description
-        )
+        description_v1 = disclosure_manager.add_disclosure_to_description(original_description)
         description_v2 = disclosure_manager.add_disclosure_to_description(description_v1)
 
         # Should be identical (no duplicate disclosure)
@@ -116,26 +102,18 @@ class TestDescriptionDisclosure:
 class TestEdgeCases:
     """Test edge cases and error handling."""
 
-    def test_validate_disclosure_video_not_found(
-        self, disclosure_manager, mock_youtube_service
-    ):
+    def test_validate_disclosure_video_not_found(self, disclosure_manager, mock_youtube_service):
         """Test validation when video not found in API response."""
         mock_youtube_service.videos().list().execute.return_value = {"items": []}
 
         with pytest.raises(ValueError, match="Video .* not found"):
-            disclosure_manager.validate_disclosure_set(
-                "nonexistent_video", mock_youtube_service
-            )
+            disclosure_manager.validate_disclosure_set("nonexistent_video", mock_youtube_service)
 
-    def test_validate_disclosure_malformed_response(
-        self, disclosure_manager, mock_youtube_service
-    ):
+    def test_validate_disclosure_malformed_response(self, disclosure_manager, mock_youtube_service):
         """Test validation with malformed API response."""
         mock_youtube_service.videos().list().execute.return_value = {
             "items": [{}]  # Missing contentDetails
         }
 
         with pytest.raises(ValueError, match="AI disclosure not set"):
-            disclosure_manager.validate_disclosure_set(
-                "test_video_123", mock_youtube_service
-            )
+            disclosure_manager.validate_disclosure_set("test_video_123", mock_youtube_service)

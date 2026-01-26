@@ -345,8 +345,7 @@ class ChannelConfigSchema(BaseModel):
         allowed = {"public", "unlisted", "private"}
         if v.lower() not in allowed:
             raise ValueError(
-                f"default_privacy must be one of: {allowed} "
-                "(YouTube privacy status values)"
+                f"default_privacy must be one of: {allowed} (YouTube privacy status values)"
             )
         return v.lower()
 

@@ -1,5 +1,4 @@
-"""
-Pre-upload compliance validation orchestrator.
+"""Pre-upload compliance validation orchestrator.
 
 Coordinates all YouTube Partner Program compliance checks before upload:
 1. Content uniqueness validation (70% threshold)
@@ -15,29 +14,27 @@ import json
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import structlog
-
-from app.models import Task, Channel, TaskStatus
+from app.models import Channel, Task, TaskStatus
+from app.services.compliance.ai_disclosure_manager import AIDisclosureManager
 from app.services.compliance.content_uniqueness_validator import (
     ContentUniquenessValidator,
 )
 from app.services.compliance.duplicate_content_detector import DuplicateContentDetector
-from app.services.compliance.organic_upload_scheduler import OrganicUploadScheduler
-from app.services.compliance.ai_disclosure_manager import AIDisclosureManager
+from app.services.compliance.exceptions import ComplianceViolationError
 from app.services.compliance.human_review_evidence_tracker import (
     HumanReviewEvidenceTracker,
 )
-from app.services.compliance.exceptions import ComplianceViolationError
+from app.services.compliance.organic_upload_scheduler import OrganicUploadScheduler
 
 log = structlog.get_logger(__name__)
 
 
 class PreUploadComplianceValidator:
-    """
-    Orchestrate all compliance checks before YouTube upload.
+    """Orchestrate all compliance checks before YouTube upload.
 
     Enforces YouTube Partner Program requirements:
     - Content uniqueness (AC1)
@@ -58,8 +55,7 @@ class PreUploadComplianceValidator:
     async def validate_before_upload(
         self, task: Task, video_metadata: dict, db: AsyncSession
     ) -> dict:
-        """
-        Run all compliance checks before uploading.
+        """Run all compliance checks before uploading.
 
         Args:
             task: Task object for the video
@@ -85,9 +81,7 @@ class PreUploadComplianceValidator:
         )
 
         # Load recent uploads for comparison
-        recent_uploads = await self.get_recent_uploads(
-            task.channel_id, db, days=30
-        )
+        recent_uploads = await self.get_recent_uploads(task.channel_id, db, days=30)
 
         # 1. Content Uniqueness Validation (AC1)
         log.info(
@@ -177,7 +171,9 @@ class PreUploadComplianceValidator:
         )
 
         if scheduled_upload_time > datetime.now(timezone.utc):
-            throttle_hours = (scheduled_upload_time - datetime.now(timezone.utc)).total_seconds() / 3600
+            throttle_hours = (
+                scheduled_upload_time - datetime.now(timezone.utc)
+            ).total_seconds() / 3600
 
             log.warning(
                 "upload_throttled",
@@ -278,8 +274,7 @@ class PreUploadComplianceValidator:
     async def get_recent_uploads(
         self, channel_id: UUID, db: AsyncSession, days: int = 30
     ) -> list[Task]:
-        """
-        Get recent uploads for compliance comparison.
+        """Get recent uploads for compliance comparison.
 
         Args:
             channel_id: Channel UUID
@@ -313,8 +308,7 @@ class PreUploadComplianceValidator:
         return tasks
 
     def _task_to_video_dict(self, task: Task) -> dict:
-        """
-        Convert Task object to video metadata dict for compliance checks.
+        """Convert Task object to video metadata dict for compliance checks.
 
         Args:
             task: Task object
@@ -342,8 +336,7 @@ class PreUploadComplianceValidator:
         }
 
     def _task_to_upload_dict(self, task: Task) -> dict:
-        """
-        Convert Task object to upload log dict for frequency throttling.
+        """Convert Task object to upload log dict for frequency throttling.
 
         Args:
             task: Task object

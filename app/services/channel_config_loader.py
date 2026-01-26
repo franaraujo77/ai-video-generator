@@ -83,7 +83,7 @@ class ChannelConfigLoader:
                     channel_id=config.channel_id,
                     file=str(file_path),
                     message="default_privacy not set in YAML. Defaulting to 'private'. "
-                           "Consider setting explicit privacy for production channels.",
+                    "Consider setting explicit privacy for production channels.",
                 )
 
             log.info("config_loaded", channel_id=config.channel_id, file=str(file_path))

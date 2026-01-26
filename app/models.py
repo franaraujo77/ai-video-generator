@@ -23,6 +23,7 @@ from datetime import date, datetime, timezone
 from typing import Any, ClassVar
 
 from sqlalchemy import (
+    ARRAY,
     Boolean,
     CheckConstraint,
     Date,
@@ -119,8 +120,12 @@ class TaskStatus(enum.Enum):
     VIDEO_ERROR = "video_error"
     AUDIO_ERROR = "audio_error"
     UPLOAD_ERROR = "upload_error"
-    UPLOAD_ERROR_RETRYING = "upload_error_retrying"  # Story 7.6: Transient upload error, retry scheduled
-    COMPLIANCE_VIOLATION = "compliance_violation"  # Story 7.7: YouTube compliance checks failed (terminal)
+    UPLOAD_ERROR_RETRYING = (
+        "upload_error_retrying"  # Story 7.6: Transient upload error, retry scheduled
+    )
+    COMPLIANCE_VIOLATION = (
+        "compliance_violation"  # Story 7.7: YouTube compliance checks failed (terminal)
+    )
 
 
 # Status groupings for capacity tracking (FR13, FR16)
@@ -381,7 +386,8 @@ class Channel(Base):
         comment="Default tags for all channel videos (e.g., ['nature', 'documentary'])",
     )
     # Format-string template for video description with placeholders
-    # Placeholders: {title}, {topic}, {channel_name}, {story_direction_summary}, {channel_links}, {topic_slug}
+    # Placeholders: {title}, {topic}, {channel_name}, {story_direction_summary},
+    # {channel_links}, {topic_slug}
     description_template: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
@@ -399,6 +405,9 @@ class Channel(Base):
 
     # Relationship to tasks (one-to-many)
     tasks: Mapped[list["Task"]] = relationship("Task", back_populates="channel")
+
+    # Relationship to audit logs (one-to-many)
+    audit_logs: Mapped[list["ReviewActionAuditLog"]] = relationship("ReviewActionAuditLog")
 
     def __repr__(self) -> str:
         """Return string representation for debugging.
@@ -499,8 +508,17 @@ class Task(Base):
         TaskStatus.ASSEMBLY_READY: [TaskStatus.FINAL_REVIEW],
         # Final review and upload phase (MANDATORY review gate - YouTube compliance)
         TaskStatus.FINAL_REVIEW: [TaskStatus.APPROVED, TaskStatus.CANCELLED],
-        TaskStatus.APPROVED: [TaskStatus.QUEUED, TaskStatus.UPLOADING, TaskStatus.COMPLIANCE_VIOLATION],
-        TaskStatus.UPLOADING: [TaskStatus.PUBLISHED, TaskStatus.UPLOAD_ERROR, TaskStatus.UPLOAD_ERROR_RETRYING, TaskStatus.COMPLIANCE_VIOLATION],
+        TaskStatus.APPROVED: [
+            TaskStatus.QUEUED,
+            TaskStatus.UPLOADING,
+            TaskStatus.COMPLIANCE_VIOLATION,
+        ],
+        TaskStatus.UPLOADING: [
+            TaskStatus.PUBLISHED,
+            TaskStatus.UPLOAD_ERROR,
+            TaskStatus.UPLOAD_ERROR_RETRYING,
+            TaskStatus.COMPLIANCE_VIOLATION,
+        ],
         # Terminal states with manual re-queue capability (requires user intervention):
         # - PUBLISHED → QUEUED: Update content after publish (e.g., compliance changes)
         # - CANCELLED → QUEUED: Un-cancel if user changes mind
@@ -796,7 +814,10 @@ class Task(Base):
     compliance_evidence: Mapped[dict[str, Any] | None] = mapped_column(
         JSON,
         nullable=True,
-        comment="Human review evidence package (creative_decisions, review_artifacts, production_timeline)",
+        comment=(
+            "Human review evidence package "
+            "(creative_decisions, review_artifacts, production_timeline)"
+        ),
     )
 
     # Compliance validation timestamp (Story 7.7)
@@ -805,7 +826,10 @@ class Task(Base):
     compliance_validated_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
-        comment="Timestamp when compliance checks passed (uniqueness, duplicate detection, frequency throttling)",
+        comment=(
+            "Timestamp when compliance checks passed "
+            "(uniqueness, duplicate detection, frequency throttling)"
+        ),
     )
 
     # Review gate timing (Story 5.2)
@@ -840,6 +864,9 @@ class Task(Base):
     fallback_urls: Mapped[list["FallbackYouTubeURL"]] = relationship(
         "FallbackYouTubeURL", back_populates="task", cascade="all, delete-orphan"
     )
+
+    # Relationship to audit logs (one-to-many)
+    audit_logs: Mapped[list["ReviewActionAuditLog"]] = relationship("ReviewActionAuditLog")
 
     # Indexes for efficient queue queries
     # Note: Migration is source of truth for indexes. Model defines indexes
@@ -1490,4 +1517,212 @@ class FallbackYouTubeURL(Base):
         return (
             f"<FallbackYouTubeURL(id={self.id!s:.8}, "
             f"task_id={self.task_id!s:.8}, video_id={self.video_id})>"
+        )
+
+
+class ReviewActionAuditLog(Base):
+    """Immutable audit log for all human review actions (Story 7.9).
+
+    YouTube Partner Program compliance requirement: Evidence of human oversight
+    for all uploaded content. This table provides queryable audit trail showing
+    who reviewed what content, when, and what decision was made.
+
+    Immutability (AC2):
+        - Append-only table: INSERT operations only
+        - No UPDATE/DELETE operations permitted (application-level enforcement)
+        - Database-level protection via trigger/policy (future enhancement)
+        - Critical for compliance: audit logs must never be modified after creation
+
+    Retention Policy (AC3):
+        - 2-year retention minimum (YouTube Partner Program requirement)
+        - Archive (not delete) logs older than 2 years for compliance
+        - Archived logs stored offline for potential YouTube audits
+
+    Audit Trail Captures:
+        - Reviewer attribution (user_id, name, email from Notion)
+        - Review action (approve/reject/bulk operations)
+        - Review timestamp (UTC timezone-aware)
+        - Task and channel context
+        - Rejection reasons and affected clips
+
+    Composite Primary Key:
+        Single UUID primary key (id) - standard audit log pattern
+
+    Attributes:
+        id: Internal UUID primary key.
+        task_id: Foreign key to tasks.id (task that was reviewed).
+        channel_id: Foreign key to channels.id (channel context).
+        action_type: Type of review action ("approve", "reject", "bulk_approve", "bulk_reject").
+        action_status: TaskStatus value at time of action (e.g., "VIDEO_APPROVED", "AUDIO_ERROR").
+        reviewer_user_id: Notion user ID (UUID format from last_edited_by).
+        reviewer_name: Human name from Notion user object.
+        reviewer_email: Email from Notion user object (nullable).
+        reason: Rejection reason text (nullable, only for rejections).
+        affected_clip_numbers: Array of clip indices for partial audio rejection (nullable).
+        action_timestamp: When review action occurred (UTC, indexed).
+        correlation_id: UUID for tracing review action across pipeline (nullable).
+
+    Indexes:
+        - ix_audit_logs_task_id: Fast lookup by task
+        - ix_audit_logs_channel_id: Fast lookup by channel
+        - ix_audit_logs_action_timestamp: Time-based queries
+        - ix_audit_logs_reviewer_user_id: Reviewer-based queries
+        - ix_audit_logs_channel_timestamp: Composite for compliance queries
+        - ix_audit_logs_reviewer_timestamp: Composite for reviewer queries
+
+    Foreign Keys:
+        - task_id references tasks.id with ondelete='CASCADE' (cleanup when task deleted)
+        - channel_id references channels.id with ondelete='CASCADE' (cleanup when channel deleted)
+
+    Check Constraints:
+        - action_type IN ('approve', 'reject', 'bulk_approve', 'bulk_reject')
+
+    Usage (AC1):
+        # Log review action
+        audit_entry = ReviewActionAuditLog(
+            task_id=task.id,
+            channel_id=task.channel_id,
+            action_type="approve",
+            action_status="VIDEO_APPROVED",
+            reviewer_user_id="notion-user-123",
+            reviewer_name="John Doe",
+            reviewer_email="john@example.com",
+            action_timestamp=datetime.now(timezone.utc),
+            correlation_id="corr-456"
+        )
+        db.add(audit_entry)
+        await db.commit()
+
+    Compliance Queries (AC4):
+        # Get all reviews for channel in date range
+        stmt = (
+            select(ReviewActionAuditLog)
+            .where(ReviewActionAuditLog.channel_id == channel_id)
+            .where(ReviewActionAuditLog.action_timestamp >= date_from)
+            .where(ReviewActionAuditLog.action_timestamp <= date_to)
+            .order_by(ReviewActionAuditLog.action_timestamp.desc())
+        )
+
+        # Get complete review history for task
+        stmt = (
+            select(ReviewActionAuditLog)
+            .where(ReviewActionAuditLog.task_id == task_id)
+            .order_by(ReviewActionAuditLog.action_timestamp.asc())
+        )
+
+    Related:
+        - Story 7.9: Human Review Audit Logging
+        - Story 5.2: Review Gate Enforcement (review timestamps)
+        - Story 5.4: Video Review Interface (approve_videos, reject_videos)
+        - Story 5.5: Audio Review Interface (approve_audio, reject_audio)
+        - Story 5.8: Bulk Review Operations (bulk_approve_tasks, bulk_reject_tasks)
+        - Story 7.7: YouTube Compliance Enforcement (compliance evidence tracking)
+        - FR73: Immutable audit log for human review actions
+        - AC1: Audit log entry creation on review actions
+        - AC2: Immutable audit log storage
+        - AC3: 2-year retention policy
+        - AC4: Audit log export for compliance
+    """
+
+    __tablename__ = "review_action_audit_logs"
+
+    # Primary key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # Foreign keys
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+
+    # Review action details
+    action_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="approve, reject, bulk_approve, bulk_reject",
+    )
+
+    action_status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        comment="TaskStatus value at time of action (e.g., VIDEO_APPROVED, AUDIO_ERROR)",
+    )
+
+    # Reviewer tracking (THE CRITICAL EVIDENCE for YouTube Partner Program)
+    reviewer_user_id: Mapped[str | None] = mapped_column(
+        String(100),
+        index=True,
+        comment="Notion user ID (UUID format from last_edited_by)",
+    )
+
+    reviewer_name: Mapped[str | None] = mapped_column(
+        String(200),
+        comment="Human name from Notion user object",
+    )
+
+    reviewer_email: Mapped[str | None] = mapped_column(
+        String(200),
+        comment="Email from Notion user object (optional)",
+    )
+
+    # Review details
+    reason: Mapped[str | None] = mapped_column(
+        Text,
+        comment="Rejection reason (nullable for approvals)",
+    )
+
+    affected_clip_numbers: Mapped[list[int] | None] = mapped_column(
+        ARRAY(Integer),
+        comment="Failed clip indices for partial audio rejection (Story 5.5)",
+    )
+
+    # Audit metadata
+    action_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        index=True,
+    )
+
+    correlation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        comment="UUID for tracing review action across pipeline",
+    )
+
+    # Relationships
+    task: Mapped["Task"] = relationship("Task")
+    channel: Mapped["Channel"] = relationship("Channel")
+
+    # Composite indexes for compliance queries
+    __table_args__ = (
+        # Fast compliance queries by channel and date range (AC4)
+        Index("ix_audit_logs_channel_timestamp", "channel_id", "action_timestamp"),
+        # Fast queries by reviewer and date range
+        Index("ix_audit_logs_reviewer_timestamp", "reviewer_user_id", "action_timestamp"),
+        # Enforce valid action types (AC2)
+        CheckConstraint(
+            "action_type IN ('approve', 'reject', 'bulk_approve', 'bulk_reject')",
+            name="ck_audit_log_valid_action_type",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<ReviewActionAuditLog(id={self.id!s:.8}, "
+            f"task_id={self.task_id!s:.8}, action_type={self.action_type!r}, "
+            f"action_status={self.action_status!r}, reviewer_user_id={self.reviewer_user_id!r})>"
         )

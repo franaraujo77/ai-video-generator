@@ -26,8 +26,6 @@ Error Handling:
 """
 
 import re
-from typing import Optional
-from uuid import UUID
 
 import structlog
 from aiolimiter import AsyncLimiter
@@ -119,7 +117,7 @@ async def sync_youtube_url_to_notion(
     video_id: str,
     youtube_url: str,
     db: AsyncSession,
-    webhook_url: Optional[str] = None,
+    webhook_url: str | None = None,
 ) -> None:
     """Update Notion page with YouTube URL and Published status.
 
@@ -161,9 +159,7 @@ async def sync_youtube_url_to_notion(
                 correlation_id=str(task.id),
                 task_id=str(task.id),
             )
-            raise NotionSyncError(
-                f"Task {task.id} has no notion_page_id. Cannot sync YouTube URL."
-            )
+            raise NotionSyncError(f"Task {task.id} has no notion_page_id. Cannot sync YouTube URL.")
 
         # Get Notion API token (decrypted from database)
         credential_service = CredentialService()
@@ -177,9 +173,7 @@ async def sync_youtube_url_to_notion(
             )
             # Store fallback URL before raising
             await store_fallback_url(task, video_id, youtube_url, db, webhook_url)
-            raise NotionSyncError(
-                f"No Notion token found for channel {task.channel_id}"
-            )
+            raise NotionSyncError(f"No Notion token found for channel {task.channel_id}")
 
         # Build Notion client
         notion = AsyncClient(auth=notion_token)
@@ -291,7 +285,7 @@ async def sync_youtube_url_to_notion(
         # Store fallback URL for manual recovery
         await store_fallback_url(task, video_id, youtube_url, db, webhook_url)
 
-        raise NotionSyncError(f"Unexpected sync error: {str(e)}") from e
+        raise NotionSyncError(f"Unexpected sync error: {e!s}") from e
 
 
 async def store_fallback_url(
@@ -299,7 +293,7 @@ async def store_fallback_url(
     video_id: str,
     youtube_url: str,
     db: AsyncSession,
-    webhook_url: Optional[str] = None,
+    webhook_url: str | None = None,
 ) -> None:
     """Store YouTube URL in fallback table for manual recovery.
 

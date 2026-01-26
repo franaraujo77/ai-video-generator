@@ -15,7 +15,7 @@ from fastapi.responses import JSONResponse
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
-from app.routes import webhooks, admin
+from app.routes import admin, webhooks
 from app.services.notion_sync import sync_database_to_notion_loop
 
 log = structlog.get_logger()
