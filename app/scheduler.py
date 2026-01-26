@@ -69,7 +69,7 @@ async def _reset_quota_job(
     today = datetime.now(pacific_tz).date()
 
     # Create database session
-    async with AsyncSessionLocal() as db:
+    async with AsyncSessionLocal() as db:  # type: ignore[misc]
         try:
             reset_count = await reset_func(today, db)
             log.info(
