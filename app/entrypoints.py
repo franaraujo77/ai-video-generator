@@ -14,6 +14,11 @@ Rate Limit Awareness (Story 4.5):
     - Kling concurrency: Check worker_state counter before video tasks
     - If rate limit hit: Release task back to queue, skip processing
 
+YouTube Integration (Story 7.2):
+    - YouTubeService initialized in worker startup
+    - Workers use get_youtube_service() to access service instance
+    - YouTubeAuthError handled by skipping YouTube tasks for that channel
+
 Entrypoints:
     - process_video: Orchestrate entire video generation pipeline
 
@@ -28,10 +33,12 @@ Future Entrypoints (Story 4.8):
 References:
     - Architecture: Short Transaction Pattern (Architecture Decision 3)
     - Story 4.5: Rate Limit Aware Task Selection
+    - Story 7.2: OAuth Token Refresh Automation
     - PgQueuer Documentation: https://pgqueuer.readthedocs.io/
 """
 
 import os
+from typing import Optional
 from uuid import UUID
 
 from pgqueuer import PgQueuer
@@ -45,6 +52,28 @@ from app.utils.logging import get_logger
 from app.worker import worker_state
 
 log = get_logger(__name__)
+
+
+def get_youtube_service():
+    """Get YouTubeService instance initialized in worker startup.
+
+    Returns:
+        YouTubeService instance if initialized, None if not available.
+
+    Usage:
+        youtube_service = get_youtube_service()
+        if youtube_service:
+            youtube = await youtube_service.build_youtube_client(channel_id, db)
+
+    Note:
+        This function imports from app.worker which initializes the service
+        during worker startup. Returns None if initialization failed or
+        credentials not configured.
+
+    Story: 7.2 - OAuth Token Refresh Automation (Task 5)
+    """
+    from app.worker import youtube_service
+    return youtube_service
 
 
 def register_entrypoints(pgq: PgQueuer) -> None:
@@ -261,8 +290,36 @@ def register_entrypoints(pgq: PgQueuer) -> None:
         # For now, just mark as completed
         try:
             # Future: await orchestrate_pipeline(task_id)
+            # YouTube operations (Story 7.4) will use:
+            #   youtube_service = get_youtube_service()
+            #   if youtube_service:
+            #       youtube = await youtube_service.build_youtube_client(channel_id, db)
+            #       # Use youtube client for uploads, metadata updates, etc.
             pass
         except Exception as e:
+            # Story 7.2: Handle YouTubeAuthError (refresh token invalid)
+            from app.services.youtube_service import YouTubeAuthError
+
+            if isinstance(e, YouTubeAuthError):
+                # YouTube refresh token invalid - requires manual re-authorization
+                # Don't retry, mark as upload error, alert already sent by service
+                async with AsyncSessionLocal() as db:  # type: ignore[misc]
+                    task = await db.get(Task, task_id)
+                    if task:
+                        task.status = TaskStatus.UPLOAD_ERROR
+                        await db.commit()
+
+                        log.warning(
+                            "task_youtube_auth_failed",
+                            worker_id=worker_id,
+                            task_id=task_id,
+                            channel_id=task.channel_id,
+                            priority=task.priority,
+                            error=str(e),
+                        )
+                # Don't raise - continue with other tasks
+                return
+
             # Step 3a: Mark as failed or retry (short transaction)
             async with AsyncSessionLocal() as db:  # type: ignore[misc]
                 task = await db.get(Task, task_id)

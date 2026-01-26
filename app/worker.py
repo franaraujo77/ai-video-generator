@@ -33,12 +33,15 @@ from datetime import datetime
 
 import asyncpg
 
-from app.config import get_database_url, get_fernet_key
+from app.config import get_database_url, get_fernet_key, get_google_client_id, get_google_client_secret
 from app.database import async_engine
 from app.utils.logging import get_logger
 
 # Initialize structured logger
 log = get_logger(__name__)
+
+# Global YouTubeService instance (initialized in worker startup)
+youtube_service = None
 
 # Shutdown flag (set by SIGTERM handler)
 shutdown_requested = False
@@ -417,6 +420,7 @@ async def worker_main_loop() -> None:
     Behavior (Story 4.2):
         - Initialize PgQueuer with asyncpg connection pool
         - Import entrypoints to register task handlers
+        - Initialize YouTubeService with OAuth client credentials (Story 7.2)
         - Run PgQueuer worker loop (handles polling, LISTEN/NOTIFY, claiming)
         - Run retry task poller in background (Story 6.2)
         - Start quota reset scheduler (Story 7.0)
@@ -430,7 +434,7 @@ async def worker_main_loop() -> None:
     Raises:
         No exceptions raised (catches all internally)
     """
-    global asyncpg_pool
+    global asyncpg_pool, youtube_service
 
     worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
     log.info("worker_started_with_pgqueuer", worker_id=worker_id)
@@ -443,12 +447,37 @@ async def worker_main_loop() -> None:
         from app.entrypoints import register_entrypoints
         from app.queue import initialize_pgqueuer
         from app.scheduler import start_quota_reset_scheduler
+        from app.services.youtube_service import YouTubeService
 
         # Initialize PgQueuer
         pgq, pool = await initialize_pgqueuer()
 
         # Store pool reference for cleanup
         asyncpg_pool = pool
+
+        # Initialize YouTubeService (Story 7.2, Task 5)
+        try:
+            client_id = get_google_client_id()
+            client_secret = get_google_client_secret()
+            youtube_service = YouTubeService(
+                client_id=client_id,
+                client_secret=client_secret
+            )
+            log.info(
+                "youtube_service_initialized",
+                worker_id=worker_id,
+                client_id_suffix=client_id[-20:] if len(client_id) > 20 else "***"
+            )
+        except Exception as e:
+            # YouTube service initialization failure is non-fatal
+            # Workers can still process non-YouTube tasks
+            log.warning(
+                "youtube_service_initialization_failed",
+                worker_id=worker_id,
+                error=str(e),
+                error_type=type(e).__name__
+            )
+            youtube_service = None
 
         # Register entrypoints with PgQueuer
         register_entrypoints(pgq)
