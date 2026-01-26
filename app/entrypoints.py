@@ -290,81 +290,24 @@ def register_entrypoints(pgq: PgQueuer) -> None:
         )
 
         # Step 2: Execute pipeline (OUTSIDE transaction)
-        # Placeholder: Full pipeline orchestration in Story 4.8
-        # For now, just mark as completed
-        try:
-            # Future: await orchestrate_pipeline(task_id)
-            # YouTube operations (Story 7.4) will use:
-            #   youtube_service = get_youtube_service()
-            #   if youtube_service:
-            #       youtube = await youtube_service.build_youtube_client(channel_id, db)
-            #       # Use youtube client for uploads, metadata updates, etc.
-            pass
-        except Exception as e:
-            # Story 7.2: Handle YouTubeAuthError (refresh token invalid)
-            from app.services.youtube_service import YouTubeAuthError
+        # TODO Story 4.8: Implement full pipeline orchestration with exception handling
+        # When implemented, the pipeline will:
+        #   1. Call: await orchestrate_pipeline(task_id)
+        #   2. Handle YouTubeAuthError (Story 7.2) - mark as UPLOAD_ERROR, skip retry
+        #   3. Handle other exceptions - classify as retriable/non-retriable (AC10)
+        #   4. Decrement task counters in finally block
+        # For now, this is a placeholder that immediately marks tasks as completed.
 
-            if isinstance(e, YouTubeAuthError):
-                # YouTube refresh token invalid - requires manual re-authorization
-                # Don't retry, mark as upload error, alert already sent by service
-                async with AsyncSessionLocal() as db:  # type: ignore[misc]
-                    task = await db.get(Task, task_id)
-                    if task:
-                        task.status = TaskStatus.UPLOAD_ERROR
-                        await db.commit()
+        # Decrement task counters for tracked API types
+        # (Story 4.5: video, Story 4.6: asset/audio)
+        if required_api == "kling":
+            worker_state.decrement_video_tasks()
+        elif required_api == "gemini":
+            worker_state.decrement_asset_tasks()
+        elif required_api == "elevenlabs":
+            worker_state.decrement_audio_tasks()
 
-                        log.warning(
-                            "task_youtube_auth_failed",
-                            worker_id=worker_id,
-                            task_id=task_id,
-                            channel_id=task.channel_id,
-                            priority=task.priority,
-                            error=str(e),
-                        )
-                # Don't raise - continue with other tasks
-                return
-
-            # Step 3a: Mark as failed or retry (short transaction)
-            async with AsyncSessionLocal() as db:  # type: ignore[misc]
-                task = await db.get(Task, task_id)
-                if task:
-                    # Classify error: retriable vs non-retriable (AC10)
-                    is_retriable = _is_retriable_error(e)
-                    # Determine appropriate error status based on current processing phase
-                    if is_retriable:
-                        task.status = TaskStatus.QUEUED  # Retry from beginning
-                    else:
-                        # Map current status to appropriate error status
-                        error_status_map = {
-                            TaskStatus.GENERATING_ASSETS: TaskStatus.ASSET_ERROR,
-                            TaskStatus.GENERATING_VIDEO: TaskStatus.VIDEO_ERROR,
-                            TaskStatus.GENERATING_AUDIO: TaskStatus.AUDIO_ERROR,
-                            TaskStatus.UPLOADING: TaskStatus.UPLOAD_ERROR,
-                        }
-                        task.status = error_status_map.get(task.status, TaskStatus.ASSET_ERROR)
-                    await db.commit()
-
-                    # Log failure with priority context (Story 4.3)
-                    log.error(
-                        "task_failed",
-                        worker_id=worker_id,
-                        task_id=task_id,
-                        priority=task.priority,  # Story 4.3: Include priority in error log
-                        error=str(e),
-                        is_retriable=is_retriable,
-                    )
-            raise
-        finally:
-            # Decrement task counters for tracked API types
-            # (Story 4.5: video, Story 4.6: asset/audio)
-            if required_api == "kling":
-                worker_state.decrement_video_tasks()
-            elif required_api == "gemini":
-                worker_state.decrement_asset_tasks()
-            elif required_api == "elevenlabs":
-                worker_state.decrement_audio_tasks()
-
-        # Step 3b: Update status to completed (short transaction)
+        # Step 3: Update status to completed (short transaction)
         # NOTE: This is placeholder code - in production, workers handle status transitions
         async with AsyncSessionLocal() as db:  # type: ignore[misc]
             task = await db.get(Task, task_id)
