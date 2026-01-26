@@ -344,12 +344,12 @@ async def store_fallback_url(
                 alert_type="terminal_failure",
                 severity="CRITICAL",
                 title="🚨 YouTube URL Sync Failed",
-                description=f"Notion sync failed for task {task.id}. URL stored in fallback table for manual recovery.", # noqa: E501
+                description=f"Notion sync failed for task {task.id}. URL stored in fallback table for manual recovery.",  # noqa: E501
                 fields={
                     "Task ID": str(task.id),
                     "Video ID": video_id,
                     "Fallback ID": str(fallback.id),
-                    "Recovery Instructions": f"Use Story 6.7 manual retry trigger with task_id={task.id}", # noqa: E501
+                    "Recovery Instructions": f"Use Story 6.7 manual retry trigger with task_id={task.id}",  # noqa: E501
                 },
                 webhook_url=webhook_url,
                 correlation_id=task.id,

@@ -558,7 +558,7 @@ class TestMetadataErrors:
         async_session.add(task)
         await async_session.commit()
 
-        with pytest.raises(MetadataGenerationError, match="Channel .* not found") as exc_info: # noqa: RUF043
+        with pytest.raises(MetadataGenerationError, match="Channel .* not found") as exc_info:  # noqa: RUF043
             await generate_metadata(task, async_session)
 
         assert str(fake_channel_id) in str(exc_info.value)

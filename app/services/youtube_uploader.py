@@ -104,7 +104,7 @@ class YouTubeUploadRetryError(Exception):
     pass
 
 
-async def check_quota_available( # noqa: D417
+async def check_quota_available(  # noqa: D417
     channel_id: str, operation: str, db: AsyncSession, correlation_id: str | None = None
 ) -> bool:
     """Check if YouTube quota is available for operation.
@@ -328,7 +328,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
         credentials = Credentials(
             token=None,  # Will be refreshed
             refresh_token=refresh_token,
-            token_uri="https://oauth2.googleapis.com/token", # noqa: S106
+            token_uri="https://oauth2.googleapis.com/token",  # noqa: S106
             client_id=os.environ["GOOGLE_CLIENT_ID"],
             client_secret=os.environ["GOOGLE_CLIENT_SECRET"],
         )
@@ -420,7 +420,7 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                                 max_retries=MAX_UPLOAD_RETRIES,
                             )
                             raise YouTubeUploadRetryError(
-                                f"YouTube server error ({e.resp.status}) after {MAX_UPLOAD_RETRIES} retries: {e!s}" # noqa: E501
+                                f"YouTube server error ({e.resp.status}) after {MAX_UPLOAD_RETRIES} retries: {e!s}"  # noqa: E501
                             ) from e
                     elif e.resp.status == 429:
                         # Rate limit - retriable

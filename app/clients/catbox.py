@@ -88,7 +88,7 @@ class CatboxClient:
             raise ValueError(f"Image file too large ({file_size} bytes): {image_path}")
 
         # Read file synchronously (OK: catbox.moe API requires sync file handle)
-        with open(image_path, "rb") as f: # noqa: ASYNC230
+        with open(image_path, "rb") as f:  # noqa: ASYNC230
             files = {"fileToUpload": f}
             data = {"reqtype": "fileupload"}
 

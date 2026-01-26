@@ -421,7 +421,7 @@ async def enqueue_task_from_notion_page(
                 correlation_id=correlation_id,
                 notion_page_id=notion_page_id,
                 invalid_value=privacy_override,
-                message="Privacy property must be 'public', 'unlisted', or 'private'. Using channel default.", # noqa: E501
+                message="Privacy property must be 'public', 'unlisted', or 'private'. Using channel default.",  # noqa: E501
             )
             privacy_override = None
 

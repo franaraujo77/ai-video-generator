@@ -303,7 +303,7 @@ def _resolve_privacy_status(
                 "invalid_privacy_override_ignored",
                 correlation_id=str(task.id),
                 invalid_value=task.privacy_override,
-                message="Privacy override must be 'public', 'unlisted', or 'private'. Using channel default.", # noqa: E501
+                message="Privacy override must be 'public', 'unlisted', or 'private'. Using channel default.",  # noqa: E501
             )
 
     # AC6: Use channel default_privacy if set
@@ -487,7 +487,7 @@ def _generate_tags(task: Task, channel: Channel) -> list[str]:
 
     # Step 3: Normalize - lowercase, remove duplicates, filter too-long tags
     # YouTube best practice: individual tags should be <= 30 chars
-    MAX_TAG_LENGTH = 30 # noqa: N806
+    MAX_TAG_LENGTH = 30  # noqa: N806
     tags = list({tag.lower() for tag in tags if tag and len(tag) <= MAX_TAG_LENGTH})
 
     # Step 4: Trim to 30 tags max (YouTube limit)

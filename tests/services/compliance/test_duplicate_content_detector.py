@@ -21,7 +21,7 @@ def detector():
 def video_metadata():
     """Sample video metadata for testing."""
     return {
-        "thumbnail_path": "/tmp/current_video.png", # noqa: S108
+        "thumbnail_path": "/tmp/current_video.png",  # noqa: S108
         "story_script": "Pikachu explores the forest and hunts for food",
         "title": "Pikachu's Forest Adventure",
         "description": "A nature documentary about Pikachu behavior in the wild",
@@ -35,7 +35,7 @@ def all_channel_videos():
     return [
         {
             "id": "existing_video_1",
-            "thumbnail_path": "/tmp/existing_video_1.png", # noqa: S108
+            "thumbnail_path": "/tmp/existing_video_1.png",  # noqa: S108
             "story_script": "Charizard flies over mountains and breathes fire",
             "title": "Charizard's Mountain Flight",
             "description": "Documentary about Charizard migration patterns",

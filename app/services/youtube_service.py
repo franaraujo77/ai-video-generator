@@ -167,7 +167,7 @@ class YouTubeService:
             creds = Credentials(
                 token=None,  # Will be populated on first refresh
                 refresh_token=refresh_token,
-                token_uri="https://oauth2.googleapis.com/token", # noqa: S106
+                token_uri="https://oauth2.googleapis.com/token",  # noqa: S106
                 client_id=self.client_id,
                 client_secret=self.client_secret,
                 scopes=[

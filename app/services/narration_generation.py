@@ -703,8 +703,8 @@ class NarrationGenerationService:
         def _probe_duration() -> float:
             # Security: ffprobe command is hardcoded, audio_path comes from validated
             # get_audio_dir() which prevents path traversal (Story 3.2).
-            result = subprocess.run( # noqa: S603
-                [ # noqa: S607
+            result = subprocess.run(  # noqa: S603
+                [  # noqa: S607
                     "ffprobe",
                     "-v",
                     "error",

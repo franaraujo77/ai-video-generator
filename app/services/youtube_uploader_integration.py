@@ -221,7 +221,7 @@ async def publish_video_to_youtube(
         task.status = TaskStatus.COMPLIANCE_VIOLATION
         task.error_log = (
             f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] AI DISCLOSURE FAILED: {e!s}\n"
-            f"Video uploaded but AI disclosure could not be set. Upload blocked to prevent policy violation." # noqa: E501
+            f"Video uploaded but AI disclosure could not be set. Upload blocked to prevent policy violation."  # noqa: E501
         )
         await db.commit()
 

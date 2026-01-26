@@ -115,7 +115,7 @@ async def verify_admin_key(x_admin_key: str = Header(None)) -> None:
 async def manual_quota_reset(
     quota_request: QuotaResetRequest,
     request: Request,  # Required by slowapi for rate limiting
-    db: AsyncSession = Depends(get_session), # noqa: B008
+    db: AsyncSession = Depends(get_session),  # noqa: B008
     _admin: None = Depends(verify_admin_key),
 ) -> QuotaResetResponse:
     """Manually reset quota for a specific channel and service.
