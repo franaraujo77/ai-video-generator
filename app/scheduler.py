@@ -17,13 +17,14 @@ Usage:
 """
 
 import os
-from collections.abc import Callable
-from datetime import datetime
+from collections.abc import Awaitable, Callable
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-not-found]
+from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-not-found]
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
 from app.services.quota_reset_service import reset_gemini_quotas, reset_youtube_quotas
@@ -40,7 +41,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 async def _reset_quota_job(
     service_name: str,
-    reset_func: Callable[[object, object], object],
+    reset_func: Callable[[date, AsyncSession], Awaitable[int]],
     quota_table: str,
     usage_field: str,
     daily_limit: int,

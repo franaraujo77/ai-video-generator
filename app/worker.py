@@ -381,7 +381,7 @@ async def retry_task_poller(pgq: PgQueuer) -> None:
             # Re-enqueue claimed tasks into PgQueuer
             if retry_tasks:
                 for task in retry_tasks:
-                    await pgq.add("process_video", str(task.id).encode())
+                    await pgq.add("process_video", str(task.id).encode())  # type: ignore[attr-defined]
                     log.info(
                         "retry_task_enqueued",
                         task_id=str(task.id),

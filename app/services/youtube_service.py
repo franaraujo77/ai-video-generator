@@ -46,7 +46,7 @@ import structlog
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build  # type: ignore[import-untyped]
+from googleapiclient.discovery import build
 from requests.exceptions import ConnectionError, RequestException, Timeout
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
