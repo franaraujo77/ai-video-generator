@@ -39,13 +39,14 @@ References:
 """
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import structlog
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
+from googleapiclient.discovery import build  # type: ignore[import-untyped]
 from requests.exceptions import ConnectionError, RequestException, Timeout
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -212,7 +213,7 @@ class YouTubeService:
             or (  # Expires soon (proactive refresh window)
                 creds.expiry
                 and creds.expiry
-                < datetime.now(UTC).replace(tzinfo=None)
+                < datetime.now(timezone.utc).replace(tzinfo=None)
                 + timedelta(minutes=self.PROACTIVE_REFRESH_WINDOW_MINUTES)
             )
         )
@@ -297,7 +298,7 @@ class YouTubeService:
             # Re-raise for caller to handle
             raise
 
-    async def build_youtube_client(self, channel_id: str, db: AsyncSession):
+    async def build_youtube_client(self, channel_id: str, db: AsyncSession) -> Any:
         """Build YouTube Data API v3 client with valid credentials.
 
         This is a convenience method that gets credentials and builds the YouTube

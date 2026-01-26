@@ -38,7 +38,7 @@ References:
 """
 
 import os
-from typing import Optional
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pgqueuer import PgQueuer
@@ -49,12 +49,15 @@ from app.models import Task, TaskStatus
 from app.services.quota_manager import check_youtube_quota, get_required_api
 from app.services.retry_orchestrator import mark_task_recovered
 from app.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.services.youtube_service import YouTubeService
 from app.worker import worker_state
 
 log = get_logger(__name__)
 
 
-def get_youtube_service():
+def get_youtube_service() -> "YouTubeService | None":
     """Get YouTubeService instance initialized in worker startup.
 
     Returns:
@@ -73,6 +76,7 @@ def get_youtube_service():
     Story: 7.2 - OAuth Token Refresh Automation (Task 5)
     """
     from app.worker import youtube_service
+
     return youtube_service
 
 

@@ -25,6 +25,7 @@ References:
 """
 
 import asyncio
+import contextlib
 import os
 import signal
 import sys
@@ -32,8 +33,14 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import asyncpg
+from pgqueuer import PgQueuer
 
-from app.config import get_database_url, get_fernet_key, get_google_client_id, get_google_client_secret
+from app.config import (
+    get_database_url,
+    get_fernet_key,
+    get_google_client_id,
+    get_google_client_secret,
+)
 from app.database import async_engine
 from app.utils.logging import get_logger
 
@@ -336,7 +343,7 @@ def signal_handler(signum: int, frame: object) -> None:
     shutdown_requested = True
 
 
-async def retry_task_poller(pgq: "PgQueuer") -> None:
+async def retry_task_poller(pgq: PgQueuer) -> None:
     """Background task that periodically polls for tasks ready for retry.
 
     Story 6.2: claim_retry_tasks() integration with worker (epic6-ai-3)
@@ -459,14 +466,11 @@ async def worker_main_loop() -> None:
         try:
             client_id = get_google_client_id()
             client_secret = get_google_client_secret()
-            youtube_service = YouTubeService(
-                client_id=client_id,
-                client_secret=client_secret
-            )
+            youtube_service = YouTubeService(client_id=client_id, client_secret=client_secret)
             log.info(
                 "youtube_service_initialized",
                 worker_id=worker_id,
-                client_id_suffix=client_id[-20:] if len(client_id) > 20 else "***"
+                client_id_suffix=client_id[-20:] if len(client_id) > 20 else "***",
             )
         except Exception as e:
             # YouTube service initialization failure is non-fatal
@@ -475,7 +479,7 @@ async def worker_main_loop() -> None:
                 "youtube_service_initialization_failed",
                 worker_id=worker_id,
                 error=str(e),
-                error_type=type(e).__name__
+                error_type=type(e).__name__,
             )
             youtube_service = None
 
@@ -508,10 +512,8 @@ async def worker_main_loop() -> None:
         # Cancel background retry poller
         if retry_poller_task and not retry_poller_task.done():
             retry_poller_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await retry_poller_task
-            except asyncio.CancelledError:
-                pass
 
         log.info(
             "worker_shutdown",
