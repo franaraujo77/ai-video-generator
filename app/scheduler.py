@@ -22,8 +22,8 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-untyped]
-from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-untyped]
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from app.database import AsyncSessionLocal
 from app.services.quota_reset_service import reset_gemini_quotas, reset_youtube_quotas
@@ -40,7 +40,7 @@ _scheduler: AsyncIOScheduler | None = None
 
 async def _reset_quota_job(
     service_name: str,
-    reset_func: Callable,
+    reset_func: Callable[[object, object], object],
     quota_table: str,
     usage_field: str,
     daily_limit: int,
@@ -63,7 +63,6 @@ async def _reset_quota_job(
         - Logs CRITICAL error with manual fallback SQL commands
         - TODO: Send Discord alert on failure (Story 8.x)
     """
-
     # Get today's date in Pacific timezone
     pacific_tz = ZoneInfo(QUOTA_TIMEZONE)
     today = datetime.now(pacific_tz).date()

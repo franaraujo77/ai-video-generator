@@ -40,7 +40,7 @@ References:
 
 import asyncio
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, ClassVar
 
 import structlog
 from google.auth.exceptions import RefreshError
@@ -105,8 +105,8 @@ class YouTubeService:
     """
 
     # Class-level cache (shared across all instances)
-    _credentials_cache: dict[str, Credentials] = {}
-    _cache_lock = asyncio.Lock()
+    _credentials_cache: ClassVar[dict[str, Credentials]] = {}
+    _cache_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
     # Proactive refresh window: Refresh tokens 5 minutes before expiry
     # to prevent race conditions where token expires during API call
@@ -167,7 +167,7 @@ class YouTubeService:
             creds = Credentials(
                 token=None,  # Will be populated on first refresh
                 refresh_token=refresh_token,
-                token_uri="https://oauth2.googleapis.com/token",
+                token_uri="https://oauth2.googleapis.com/token",  # noqa: S106
                 client_id=self.client_id,
                 client_secret=self.client_secret,
                 scopes=[
@@ -264,7 +264,7 @@ class YouTubeService:
             raise YouTubeAuthError(
                 f"YouTube refresh token invalid for channel {channel_id}. "
                 f"Re-authorization required."
-            )
+            ) from e
 
         except (ConnectionError, Timeout, RequestException) as e:
             # Network error during refresh (transient failure, retryable)
