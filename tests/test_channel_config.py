@@ -79,6 +79,7 @@ class TestChannelConfigSchema:
         assert config.storage_strategy == "notion"
         assert config.max_concurrent == 2
         assert config.budget_daily_usd is None
+        assert config.default_privacy == "private"  # AC3: Safe default
 
     def test_missing_channel_id(self):
         """Test that missing channel_id raises ValidationError."""
@@ -214,6 +215,64 @@ class TestChannelConfigSchema:
         )
 
         assert config.storage_strategy == "r2"
+
+    def test_default_privacy_valid_public(self):
+        """Test that default_privacy='public' is accepted (AC1-2)."""
+        config = ChannelConfigSchema(
+            channel_id="poke1",
+            channel_name="Test Channel",
+            notion_database_id="db-123",
+            default_privacy="public",
+        )
+
+        assert config.default_privacy == "public"
+
+    def test_default_privacy_valid_unlisted(self):
+        """Test that default_privacy='unlisted' is accepted (AC1)."""
+        config = ChannelConfigSchema(
+            channel_id="poke1",
+            channel_name="Test Channel",
+            notion_database_id="db-123",
+            default_privacy="unlisted",
+        )
+
+        assert config.default_privacy == "unlisted"
+
+    def test_default_privacy_valid_private(self):
+        """Test that default_privacy='private' is accepted (AC1-3)."""
+        config = ChannelConfigSchema(
+            channel_id="poke1",
+            channel_name="Test Channel",
+            notion_database_id="db-123",
+            default_privacy="private",
+        )
+
+        assert config.default_privacy == "private"
+
+    def test_default_privacy_normalized_lowercase(self):
+        """Test that default_privacy is normalized to lowercase."""
+        config = ChannelConfigSchema(
+            channel_id="poke1",
+            channel_name="Test Channel",
+            notion_database_id="db-123",
+            default_privacy="PUBLIC",
+        )
+
+        assert config.default_privacy == "public"
+
+    def test_default_privacy_invalid_value(self):
+        """Test that invalid default_privacy values are rejected."""
+        with pytest.raises(ValidationError) as exc_info:
+            ChannelConfigSchema(
+                channel_id="poke1",
+                channel_name="Test Channel",
+                notion_database_id="db-123",
+                default_privacy="hidden",  # Invalid - only public/unlisted/private
+            )
+
+        errors = exc_info.value.errors()
+        assert any(e["loc"] == ("default_privacy",) for e in errors)
+        assert any("public" in str(e["msg"]).lower() for e in errors)
 
     def test_max_concurrent_below_min(self):
         """Test that max_concurrent < 1 is rejected."""
@@ -694,6 +753,44 @@ class TestChannelConfigLoaderSyncToDatabase:
 
         assert channel.storage_strategy == "r2"
         assert channel.r2_bucket_name == "test-bucket"
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_persists_default_privacy(
+        self,
+        async_session: AsyncSession,
+    ) -> None:
+        """Test that sync_to_database persists default_privacy to database (Story 7.8 AC2)."""
+        config = ChannelConfigSchema(
+            channel_id="privacy_test",
+            channel_name="Privacy Test",
+            notion_database_id="db123",
+            default_privacy="private",  # Explicitly set to private
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        assert channel.default_privacy == "private"
+
+    @pytest.mark.asyncio
+    async def test_sync_to_database_uses_private_default_if_omitted(
+        self,
+        async_session: AsyncSession,
+    ) -> None:
+        """Test that default_privacy defaults to 'private' if omitted (Story 7.8 AC3)."""
+        # Create config without explicit default_privacy (should default to "private")
+        config = ChannelConfigSchema(
+            channel_id="privacy_default_test",
+            channel_name="Privacy Default Test",
+            notion_database_id="db123",
+            # default_privacy not specified - schema defaults to "private"
+        )
+
+        loader = ChannelConfigLoader()
+        channel = await loader.sync_to_database(config, async_session)
+
+        # AC3: If default_privacy omitted, system MUST default to "private"
+        assert channel.default_privacy == "private"
 
     @pytest.mark.asyncio
     async def test_sync_to_database_encrypts_r2_credentials(

@@ -18,6 +18,15 @@ Storage Strategy Configuration (FR12):
 
     When storage_strategy="r2", the r2_config section must be provided with
     Cloudflare R2 credentials (account_id, access_key_id, secret_access_key, bucket_name).
+
+Privacy Configuration (FR67 - Story 7.8):
+    Channels can specify default privacy status for uploaded YouTube videos:
+    - "public": Video visible to everyone, appears in search results
+    - "unlisted": Video visible with link only, does not appear in search
+    - "private" (default): Video visible to owner and invited collaborators only
+
+    The default is "private" (safest option) if not explicitly set in YAML.
+    Per-video privacy can be overridden via Notion Privacy property.
 """
 
 import re
@@ -194,6 +203,7 @@ class ChannelConfigSchema(BaseModel):
         storage_strategy: Asset storage strategy (notion or r2).
         max_concurrent: Maximum parallel tasks per channel.
         budget_daily_usd: Daily spending limit in USD (optional).
+        default_privacy: Default YouTube privacy status (public, unlisted, private).
         branding: Branding configuration for video assembly (optional).
         r2_config: Cloudflare R2 storage configuration (required when storage_strategy="r2").
     """
@@ -219,6 +229,12 @@ class ChannelConfigSchema(BaseModel):
     storage_strategy: str = Field(default="notion")
     max_concurrent: int = Field(default=2, ge=1, le=10)
     budget_daily_usd: Decimal | None = Field(default=None, ge=0)
+
+    # Privacy configuration (FR67 - Story 7.8)
+    default_privacy: str = Field(
+        default="private",
+        description="Default YouTube privacy status for uploads (AC1-3: public, unlisted, private)",
+    )
 
     # Branding configuration (FR11)
     branding: BrandingConfig | None = Field(
@@ -312,6 +328,28 @@ class ChannelConfigSchema(BaseModel):
             raise ValueError(f"storage_strategy must be one of: {allowed}")
         return v.lower()
 
+    @field_validator("default_privacy")
+    @classmethod
+    def validate_default_privacy(cls, v: str) -> str:
+        """Default privacy must be public, unlisted, or private (Story 7.8 AC1-3).
+
+        Args:
+            v: The default_privacy value to validate.
+
+        Returns:
+            Normalized lowercase default_privacy.
+
+        Raises:
+            ValueError: If default_privacy is not one of the allowed YouTube privacy values.
+        """
+        allowed = {"public", "unlisted", "private"}
+        if v.lower() not in allowed:
+            raise ValueError(
+                f"default_privacy must be one of: {allowed} "
+                "(YouTube privacy status values)"
+            )
+        return v.lower()
+
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
@@ -327,6 +365,7 @@ class ChannelConfigSchema(BaseModel):
             f"is_active={self.is_active!r}, "
             f"voice_id={voice_info}, "
             f"storage_strategy={self.storage_strategy!r}, "
+            f"default_privacy={self.default_privacy!r}, "
             f"branding={branding_info}, "
             f"r2_config={r2_info})"
         )

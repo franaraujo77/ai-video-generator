@@ -166,6 +166,7 @@ async def enqueue_task(
     story_direction: str,
     priority: PriorityLevel,
     session: AsyncSession,
+    privacy_override: str | None = None,
 ) -> Task | None:
     """Enqueue task for processing with multi-layer duplicate detection.
 
@@ -174,6 +175,9 @@ async def enqueue_task(
     - PgQueuer integration for worker visibility
     - Manual retry support (terminal → new task)
     - IntegrityError race condition handling
+
+    Story 7.8 Enhancements:
+    - Privacy override support from Notion Privacy property (AC4)
 
     Duplicate Detection Strategy (3 Layers):
     1. Database unique constraint (notion_page_id) - last defense
@@ -194,6 +198,8 @@ async def enqueue_task(
         story_direction: Narrative direction
         priority: Priority enum (high/normal/low)
         session: Database session (must be active transaction)
+        privacy_override: Per-video privacy override from Notion Privacy property
+                         (Story 7.8 AC4: "public", "unlisted", or "private")
 
     Returns:
         Task if created/updated, None if duplicate rejected
@@ -240,6 +246,7 @@ async def enqueue_task(
         existing_terminal.topic = topic
         existing_terminal.story_direction = story_direction
         existing_terminal.priority = priority
+        existing_terminal.privacy_override = privacy_override  # Story 7.8 AC4
         existing_terminal.updated_at = datetime.now(timezone.utc)
 
         # Layer 4: Enqueue to PgQueuer
@@ -267,6 +274,7 @@ async def enqueue_task(
         story_direction=story_direction,
         status=TaskStatus.QUEUED,  # Use enum member, SQLAlchemy converts to lowercase value
         priority=priority,  # Use enum member directly
+        privacy_override=privacy_override,  # Story 7.8 AC4: Per-video privacy from Notion
     )
     session.add(task)
 
@@ -396,9 +404,26 @@ async def enqueue_task_from_notion_page(
     story_direction = extract_rich_text(properties.get("Story Direction", {}))
     channel_name = extract_select(properties.get("Channel"))
     notion_priority = extract_select(properties.get("Priority"))
+    privacy_override = extract_select(properties.get("Privacy"))  # Story 7.8 AC4
 
     # Map priority to enum
     priority = map_notion_priority_to_internal(notion_priority)
+
+    # Validate and normalize privacy_override (Story 7.8 AC4)
+    if privacy_override:
+        privacy_lower = privacy_override.lower()
+        if privacy_lower in {"public", "unlisted", "private"}:
+            privacy_override = privacy_lower
+        else:
+            # Invalid privacy value from Notion - log warning and ignore
+            log.warning(
+                "invalid_privacy_override_from_notion",
+                correlation_id=correlation_id,
+                notion_page_id=notion_page_id,
+                invalid_value=privacy_override,
+                message="Privacy property must be 'public', 'unlisted', or 'private'. Using channel default.",
+            )
+            privacy_override = None
 
     # Look up channel by channel_id string
     result = await session.execute(select(Channel).where(Channel.channel_id == channel_name))
@@ -421,6 +446,7 @@ async def enqueue_task_from_notion_page(
         topic=topic,
         story_direction=story_direction or "",
         priority=priority,
+        privacy_override=privacy_override,  # Story 7.8 AC4
         session=session,
     )
 

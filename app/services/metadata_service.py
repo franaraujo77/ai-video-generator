@@ -192,8 +192,9 @@ async def generate_metadata(task: Task, db: AsyncSession) -> MetadataDict:
         # Step 5: Generate tags from channel + topic (AC: channel + topic tags combined)
         tags = _generate_tags(task, channel)
 
-        # Step 6: Set privacy status from channel config
-        privacy_status = channel.default_privacy or "unlisted"
+        # Step 6: Resolve privacy status with priority hierarchy (Story 7.8 AC5-7)
+        # Priority: per-video override > channel default > global default ("private")
+        privacy_status = _resolve_privacy_status(task, channel)
 
         # Step 7: Build metadata dict
         metadata = MetadataDict(
@@ -247,6 +248,81 @@ async def generate_metadata(task: Task, db: AsyncSession) -> MetadataDict:
             error_type=type(e).__name__,
         )
         raise MetadataGenerationError(f"Unexpected error: {str(e)}") from e
+
+
+def _resolve_privacy_status(task: Task, channel: Channel) -> str:  # "public" | "unlisted" | "private"
+    """Resolve YouTube privacy status using priority hierarchy (Story 7.8 AC5-7).
+
+    Privacy resolution follows this priority:
+    1. Per-video override from Notion (task.privacy_override) - highest priority
+    2. Channel default privacy (channel.default_privacy)
+    3. Global default ("private") - lowest priority, safest option
+
+    Args:
+        task: Task with optional privacy_override from Notion.
+        channel: Channel with default_privacy configuration.
+
+    Returns:
+        Privacy status string: "public" | "unlisted" | "private"
+
+    Example:
+        >>> # Per-video override takes precedence
+        >>> task.privacy_override = "public"
+        >>> channel.default_privacy = "private"
+        >>> _resolve_privacy_status(task, channel)
+        "public"
+
+        >>> # Channel default used when no override
+        >>> task.privacy_override = None
+        >>> channel.default_privacy = "unlisted"
+        >>> _resolve_privacy_status(task, channel)
+        "unlisted"
+
+        >>> # Global default when both None
+        >>> task.privacy_override = None
+        >>> channel.default_privacy = None
+        >>> _resolve_privacy_status(task, channel)
+        "private"
+    """
+    # AC5: If task has per-video privacy override from Notion, use it (highest priority)
+    if task.privacy_override:
+        # Validate privacy override value (defensive: should be caught at Notion sync)
+        if task.privacy_override in {"public", "unlisted", "private"}:
+            log.info(
+                "privacy_override_applied",
+                correlation_id=str(task.id),
+                privacy_override=task.privacy_override,
+                channel_default=channel.default_privacy,
+                source="per_video_override",
+            )
+            return task.privacy_override
+        else:
+            # Invalid privacy override - log warning and fall through to channel default
+            log.warning(
+                "invalid_privacy_override_ignored",
+                correlation_id=str(task.id),
+                invalid_value=task.privacy_override,
+                message="Privacy override must be 'public', 'unlisted', or 'private'. Using channel default.",
+            )
+
+    # AC6: Use channel default_privacy if set
+    if channel.default_privacy:
+        log.info(
+            "privacy_from_channel_default",
+            correlation_id=str(task.id),
+            privacy=channel.default_privacy,
+            source="channel_default",
+        )
+        return channel.default_privacy
+
+    # AC7: Global default is "private" (safest option)
+    log.info(
+        "privacy_using_global_default",
+        correlation_id=str(task.id),
+        privacy="private",
+        source="global_default",
+    )
+    return "private"
 
 
 def _escape_format_braces(text: str) -> str:

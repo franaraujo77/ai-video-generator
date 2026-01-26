@@ -218,10 +218,10 @@ def create_channel_with_metadata(
     channel_id: str | None = None,
     default_tags: list[str] | None = None,
     description_template: str | None = None,
-    default_privacy: str = "unlisted",
+    default_privacy: str = "private",
     **kwargs,
 ) -> Channel:
-    """Create a Channel with YouTube metadata configuration (Story 7.3).
+    """Create a Channel with YouTube metadata configuration (Story 7.3, 7.8).
 
     Useful for testing metadata generation service without manual field setup.
 
@@ -229,7 +229,7 @@ def create_channel_with_metadata(
         channel_id: Business identifier.
         default_tags: Default tags for all channel videos (e.g., ['pokemon', 'nature']).
         description_template: Template with {placeholders} for description.
-        default_privacy: Default privacy setting ('private', 'unlisted', 'public').
+        default_privacy: Default privacy setting (Story 7.8: 'private' by default, can be 'unlisted', 'public').
         **kwargs: Additional channel attributes.
 
     Returns:

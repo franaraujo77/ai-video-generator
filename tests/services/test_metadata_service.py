@@ -39,6 +39,7 @@ from app.services.metadata_service import (
     _extract_summary,
     _slugify,
     _validate_metadata,
+    _resolve_privacy_status,
 )
 from app.models import Task, Channel, TaskStatus
 from tests.support.factories.task_factory import create_task
@@ -68,7 +69,7 @@ class TestMetadataTitle:
         metadata = await generate_metadata(task, async_session)
 
         assert metadata["title"] == "Pikachu: The Electric Mouse Pokémon"
-        assert metadata["privacy_status"] == "unlisted"  # default
+        assert metadata["privacy_status"] == "private"  # Story 7.8: Default is "private"
         assert len(metadata["tags"]) >= 0
 
     @pytest.mark.asyncio
@@ -420,10 +421,10 @@ class TestMetadataPrivacy:
         assert metadata["privacy_status"] == "private"
 
     @pytest.mark.asyncio
-    async def test_metadata_privacy_defaults_to_unlisted(self, async_session: AsyncSession):
-        """Privacy should default to 'unlisted' if channel.default_privacy is None."""
+    async def test_metadata_privacy_defaults_to_private(self, async_session: AsyncSession):
+        """Privacy should default to 'private' if channel.default_privacy is None (Story 7.8 AC7)."""
         channel = create_channel(channel_name="Test Channel")
-        channel.default_privacy = "unlisted"  # Explicit default
+        channel.default_privacy = None  # None means use global default
         async_session.add(channel)
         await async_session.commit()
 
@@ -439,6 +440,78 @@ class TestMetadataPrivacy:
 
         metadata = await generate_metadata(task, async_session)
 
+        # AC7: Global default is "private" (safest option)
+        assert metadata["privacy_status"] == "private"
+
+    @pytest.mark.asyncio
+    async def test_metadata_privacy_override_takes_precedence(self, async_session: AsyncSession):
+        """Per-video privacy override should take precedence over channel default (Story 7.8 AC5)."""
+        channel = create_channel_with_metadata(default_privacy="private")
+        async_session.add(channel)
+        await async_session.commit()
+
+        task = create_task(
+            title="Test",
+            topic="Test",
+            story_direction="Test",
+            channel_id=channel.id,
+            status=TaskStatus.APPROVED,
+        )
+        # AC5: Per-video override from Notion (highest priority)
+        task.privacy_override = "public"
+        async_session.add(task)
+        await async_session.commit()
+
+        metadata = await generate_metadata(task, async_session)
+
+        # Should use per-video override, not channel default
+        assert metadata["privacy_status"] == "public"
+
+    @pytest.mark.asyncio
+    async def test_metadata_privacy_invalid_override_uses_channel_default(self, async_session: AsyncSession):
+        """If privacy_override is invalid, should fall back to channel default (Story 7.8 AC6 robustness)."""
+        channel = create_channel_with_metadata(default_privacy="unlisted")
+        async_session.add(channel)
+        await async_session.commit()
+
+        task = create_task(
+            title="Test",
+            topic="Test",
+            story_direction="Test",
+            channel_id=channel.id,
+            status=TaskStatus.APPROVED,
+        )
+        # Invalid privacy value (should not happen if Notion validation works, but defensive)
+        task.privacy_override = "hidden"  # Invalid - not "public"/"unlisted"/"private"
+        async_session.add(task)
+        await async_session.commit()
+
+        metadata = await generate_metadata(task, async_session)
+
+        # Should fall back to channel default when override is invalid
+        assert metadata["privacy_status"] == "unlisted"
+
+    @pytest.mark.asyncio
+    async def test_metadata_privacy_uses_channel_default_when_no_override(self, async_session: AsyncSession):
+        """Should use channel default when no per-video override (Story 7.8 AC6)."""
+        channel = create_channel_with_metadata(default_privacy="unlisted")
+        async_session.add(channel)
+        await async_session.commit()
+
+        task = create_task(
+            title="Test",
+            topic="Test",
+            story_direction="Test",
+            channel_id=channel.id,
+            status=TaskStatus.APPROVED,
+        )
+        task.privacy_override = None  # No per-video override
+        async_session.add(task)
+        await async_session.commit()
+
+        metadata = await generate_metadata(task, async_session)
+
+        # AC6: Should use channel default when no override
         assert metadata["privacy_status"] == "unlisted"
 
 
@@ -590,13 +663,16 @@ class TestIntegrationEndToEnd:
             # Verify category
             assert metadata["category_id"] == "24"
 
-            # Verify success logging
-            mock_log.info.assert_called_once()
-            log_call = mock_log.info.call_args
-            assert log_call[0][0] == "metadata_generated"
-            assert log_call[1]["correlation_id"] == str(task.id)
-            assert log_call[1]["channel_id"] == str(channel.id)
-            assert log_call[1]["title_length"] == len(metadata["title"])
-            assert log_call[1]["description_length"] == len(metadata["description"])
-            assert log_call[1]["tag_count"] == len(metadata["tags"])
-            assert log_call[1]["privacy_status"] == "unlisted"
+            # Verify success logging (Story 7.8: Now logs privacy resolution + metadata_generated)
+            # Check that log.info was called at least twice (privacy resolution + metadata_generated)
+            assert mock_log.info.call_count >= 2
+
+            # Check the final log call is metadata_generated
+            final_log_call = mock_log.info.call_args
+            assert final_log_call[0][0] == "metadata_generated"
+            assert final_log_call[1]["correlation_id"] == str(task.id)
+            assert final_log_call[1]["channel_id"] == str(channel.id)
+            assert final_log_call[1]["title_length"] == len(metadata["title"])
+            assert final_log_call[1]["description_length"] == len(metadata["description"])
+            assert final_log_call[1]["tag_count"] == len(metadata["tags"])
+            assert final_log_call[1]["privacy_status"] == "unlisted"

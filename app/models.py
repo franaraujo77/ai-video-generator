@@ -388,11 +388,12 @@ class Channel(Base):
         comment="Description template with {placeholders} for title, topic, channel_name, etc.",
     )
     # Default privacy setting for uploads ("private", "unlisted", "public")
+    # AC3: Default is "private" (safest option) if not explicitly set
     default_privacy: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
-        default="unlisted",
-        server_default="unlisted",
+        default="private",
+        server_default="private",
         comment="Default privacy for uploads: 'private', 'unlisted', or 'public' (Story 7.8)",
     )
 
@@ -729,6 +730,15 @@ class Task(Base):
         String(255),
         nullable=True,
         comment="Full YouTube URL (e.g., 'https://youtube.com/watch?v=dQw4w9WgXcQ')",
+    )
+
+    # Per-video privacy override (Story 7.8 AC4)
+    # Overrides channel default_privacy if set in Notion Privacy property
+    # Priority: per-video > channel default > global default ("private")
+    privacy_override: Mapped[str | None] = mapped_column(
+        String(20),
+        nullable=True,
+        comment="Per-video privacy override from Notion: 'public', 'unlisted', or 'private'",
     )
 
     # Cost tracking (Epic 8 - Story 3.3 requirement)

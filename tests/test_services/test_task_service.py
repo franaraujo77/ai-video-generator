@@ -858,3 +858,126 @@ async def test_get_tasks_needing_review_fifo_within_priority(async_session, test
     assert tasks[0] == task3  # High priority, created first
     assert tasks[1] == task2  # High priority, created second
     assert tasks[2] == task1  # Normal priority
+
+
+# Story 7.8 Tests: Notion Privacy Property Integration
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_from_notion_page_extracts_privacy_public(async_session, test_channel):
+    """Test that privacy_override='public' is extracted from Notion (Story 7.8 AC4)."""
+    page = create_mock_notion_page(
+        notion_page_id="page_privacy_public",
+        channel="test_channel",
+    )
+    # Add Privacy property to Notion page
+    page["properties"]["Privacy"] = {"select": {"name": "public"}}
+
+    task = await enqueue_task_from_notion_page(page, async_session)
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override == "public"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_from_notion_page_extracts_privacy_unlisted(async_session, test_channel):
+    """Test that privacy_override='unlisted' is extracted from Notion (Story 7.8 AC4)."""
+    page = create_mock_notion_page(
+        notion_page_id="page_privacy_unlisted",
+        channel="test_channel",
+    )
+    # Add Privacy property to Notion page
+    page["properties"]["Privacy"] = {"select": {"name": "unlisted"}}
+
+    task = await enqueue_task_from_notion_page(page, async_session)
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override == "unlisted"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_from_notion_page_extracts_privacy_private(async_session, test_channel):
+    """Test that privacy_override='private' is extracted from Notion (Story 7.8 AC4)."""
+    page = create_mock_notion_page(
+        notion_page_id="page_privacy_private",
+        channel="test_channel",
+    )
+    # Add Privacy property to Notion page
+    page["properties"]["Privacy"] = {"select": {"name": "private"}}
+
+    task = await enqueue_task_from_notion_page(page, async_session)
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override == "private"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_from_notion_page_privacy_case_insensitive(async_session, test_channel):
+    """Test that Privacy property is case-insensitive (Story 7.8 AC4 robustness)."""
+    page = create_mock_notion_page(
+        notion_page_id="page_privacy_uppercase",
+        channel="test_channel",
+    )
+    # Notion might return uppercase values
+    page["properties"]["Privacy"] = {"select": {"name": "PUBLIC"}}
+
+    task = await enqueue_task_from_notion_page(page, async_session)
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override == "public"  # Normalized to lowercase
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_from_notion_page_privacy_invalid_logs_warning(async_session, test_channel):
+    """Test that invalid Privacy value logs warning and sets privacy_override=None (Story 7.8 AC4)."""
+    page = create_mock_notion_page(
+        notion_page_id="page_privacy_invalid",
+        channel="test_channel",
+    )
+    # Invalid privacy value
+    page["properties"]["Privacy"] = {"select": {"name": "hidden"}}
+
+    task = await enqueue_task_from_notion_page(page, async_session)
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override is None  # Invalid value ignored
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_from_notion_page_privacy_omitted(async_session, test_channel):
+    """Test that omitted Privacy property sets privacy_override=None (Story 7.8 AC4)."""
+    page = create_mock_notion_page(
+        notion_page_id="page_privacy_omitted",
+        channel="test_channel",
+    )
+    # No Privacy property in Notion page
+
+    task = await enqueue_task_from_notion_page(page, async_session)
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override is None  # Will use channel default
+
+
+@pytest.mark.asyncio
+async def test_enqueue_task_with_privacy_override_parameter(async_session, test_channel):
+    """Test that enqueue_task() accepts privacy_override parameter (Story 7.8 AC4)."""
+    task = await enqueue_task(
+        notion_page_id="page_with_privacy",
+        channel_id=test_channel.id,
+        title="Test Video",
+        topic="Test Topic",
+        story_direction="Test story",
+        priority=PriorityLevel.NORMAL,
+        privacy_override="unlisted",
+        session=async_session,
+    )
+    await async_session.commit()
+
+    assert task is not None
+    assert task.privacy_override == "unlisted"

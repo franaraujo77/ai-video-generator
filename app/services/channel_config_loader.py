@@ -75,6 +75,17 @@ class ChannelConfigLoader:
                 return None
 
             config = ChannelConfigSchema.model_validate(raw_config)
+
+            # Story 7.8 AC3: Warn if default_privacy not explicitly set
+            if "default_privacy" not in raw_config:
+                log.warning(
+                    "default_privacy_not_set",
+                    channel_id=config.channel_id,
+                    file=str(file_path),
+                    message="default_privacy not set in YAML. Defaulting to 'private'. "
+                           "Consider setting explicit privacy for production channels.",
+                )
+
             log.info("config_loaded", channel_id=config.channel_id, file=str(file_path))
             return config
 
@@ -215,16 +226,17 @@ class ChannelConfigLoader:
         return warnings
 
     async def sync_to_database(self, config: ChannelConfigSchema, db: AsyncSession) -> Channel:
-        """Persist voice, branding, storage, max_concurrent, and R2 config to database.
+        """Persist voice, branding, storage, max_concurrent, default_privacy, and R2 config to database.
 
         Creates or updates a Channel record with voice_id, branding paths,
-        storage_strategy, max_concurrent, and R2 credentials from the parsed
-        YAML configuration. This enables the orchestration layer to read
-        configuration from the database at runtime.
+        storage_strategy, max_concurrent, default_privacy, and R2 credentials
+        from the parsed YAML configuration. This enables the orchestration layer
+        to read configuration from the database at runtime.
 
         Logs warning if voice_id is missing (Story 1.4 AC #2).
         Logs warning if storage_strategy="r2" but R2 credentials are incomplete.
         Logs max_concurrent value during sync (Story 1.6 - FR13, FR16).
+        Syncs default_privacy for YouTube uploads (Story 7.8 - FR67).
 
         Args:
             config: Validated ChannelConfigSchema from YAML.
@@ -305,6 +317,14 @@ class ChannelConfigLoader:
             "channel_max_concurrent_synced",
             channel_id=config.channel_id,
             max_concurrent=config.max_concurrent,
+        )
+
+        # Sync default_privacy (Story 7.8 - FR67, AC2)
+        channel.default_privacy = config.default_privacy
+        log.info(
+            "channel_default_privacy_synced",
+            channel_id=config.channel_id,
+            default_privacy=config.default_privacy,
         )
 
         # Sync R2 credentials (Story 1.5 - FR12)
