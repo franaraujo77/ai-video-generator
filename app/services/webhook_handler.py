@@ -223,7 +223,7 @@ async def is_duplicate_webhook(
     return False
 
 
-async def _handle_approval_status_change(
+async def _handle_approval_status_change( # noqa: D417
     page_id: str,
     notion_status: str,
     correlation_id: str,

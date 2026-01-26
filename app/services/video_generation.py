@@ -289,24 +289,24 @@ class VideoGenerationService:
         # Generic motion prompts following Priority Hierarchy
         # TODO: Parse story_direction to customize these prompts per narrative
         motion_prompts = [
-            f"{character} stands in clearing. Body breathes slowly. Eyes blink. Gentle wind rustles surroundings.",  # noqa: E501
-            f"{character} walks forward. Legs move steadily. Body sways with each step. Leaves scatter.",  # noqa: E501
-            f"{character} turns head left. Eyes track movement. Body remains still. Dappled sunlight shifts.",  # noqa: E501
-            f"{character} sits down slowly. Front legs bend first. Body lowers gradually. Dust settles.",  # noqa: E501
-            f"{character} looks upward. Head tilts back. Eyes focus on canopy. Shadows play across face.",  # noqa: E501
-            f"{character} moves through undergrowth. Vegetation parts. Body pushes forward. Natural sounds echo.",  # noqa: E501
-            f"{character} pauses at stream. Reflection ripples. Body leans forward. Water flows gently.",  # noqa: E501
-            f"{character} observes surroundings. Head rotates slowly. Eyes scan environment. Tension builds.",  # noqa: E501
+            f"{character} stands in clearing. Body breathes slowly. Eyes blink. Gentle wind rustles surroundings.", # noqa: E501
+            f"{character} walks forward. Legs move steadily. Body sways with each step. Leaves scatter.", # noqa: E501
+            f"{character} turns head left. Eyes track movement. Body remains still. Dappled sunlight shifts.", # noqa: E501
+            f"{character} sits down slowly. Front legs bend first. Body lowers gradually. Dust settles.", # noqa: E501
+            f"{character} looks upward. Head tilts back. Eyes focus on canopy. Shadows play across face.", # noqa: E501
+            f"{character} moves through undergrowth. Vegetation parts. Body pushes forward. Natural sounds echo.", # noqa: E501
+            f"{character} pauses at stream. Reflection ripples. Body leans forward. Water flows gently.", # noqa: E501
+            f"{character} observes surroundings. Head rotates slowly. Eyes scan environment. Tension builds.", # noqa: E501
             f"{character} reacts to sound. Ears perk up. Body tenses. Alert posture maintained.",
-            f"{character} relaxes stance. Muscles ease. Breathing slows. Peaceful atmosphere returns.",  # noqa: E501
-            f"{character} interacts with object. Paw extends. Contact made carefully. Curiosity shown.",  # noqa: E501
-            f"{character} navigates terrain. Feet find footing. Balance maintained. Path winds ahead.",  # noqa: E501
+            f"{character} relaxes stance. Muscles ease. Breathing slows. Peaceful atmosphere returns.", # noqa: E501
+            f"{character} interacts with object. Paw extends. Contact made carefully. Curiosity shown.", # noqa: E501
+            f"{character} navigates terrain. Feet find footing. Balance maintained. Path winds ahead.", # noqa: E501
             f"{character} settles into rest. Body curls up. Eyes close slowly. Breathing deepens.",
             f"{character} wakes from rest. Eyes open. Body stretches. Alertness returns gradually.",
-            f"{character} surveys territory. Head swivels. Vision sweeps area. Protective instinct visible.",  # noqa: E501
-            f"{character} demonstrates behavior. Action repeats. Pattern emerges. Purpose becomes clear.",  # noqa: E501
-            f"{character} responds to environment. Conditions change. Adaptation shown. Survival instinct evident.",  # noqa: E501
-            f"{character} concludes activity. Movement slows. Final position held. Moment concludes peacefully.",  # noqa: E501
+            f"{character} surveys territory. Head swivels. Vision sweeps area. Protective instinct visible.", # noqa: E501
+            f"{character} demonstrates behavior. Action repeats. Pattern emerges. Purpose becomes clear.", # noqa: E501
+            f"{character} responds to environment. Conditions change. Adaptation shown. Survival instinct evident.", # noqa: E501
+            f"{character} concludes activity. Movement slows. Final position held. Moment concludes peacefully.", # noqa: E501
         ]
 
         # Return prompt for this clip (cycle if needed)

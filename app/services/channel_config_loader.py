@@ -225,8 +225,12 @@ class ChannelConfigLoader:
 
         return warnings
 
-    async def sync_to_database(self, config: ChannelConfigSchema, db: AsyncSession) -> Channel:
-        """Persist voice, branding, storage, max_concurrent, default_privacy, and R2 config to database.
+    async def sync_to_database(
+        self, config: ChannelConfigSchema, db: AsyncSession
+    ) -> Channel:
+        """Persist channel configuration to database.
+
+        Includes voice, branding, storage, max_concurrent, default_privacy, and R2 config.
 
         Creates or updates a Channel record with voice_id, branding paths,
         storage_strategy, max_concurrent, default_privacy, and R2 credentials

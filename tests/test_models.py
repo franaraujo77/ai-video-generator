@@ -260,7 +260,7 @@ async def test_channel_query_active_channels_only(async_session):
 
     # Query only active channels
     result = await async_session.execute(
-        select(Channel).where(Channel.is_active == True)  # noqa: E712
+        select(Channel).where(Channel.is_active == True) # noqa: E712
     )
     active_channels = result.scalars().all()
 

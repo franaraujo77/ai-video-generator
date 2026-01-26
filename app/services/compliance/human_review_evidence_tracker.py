@@ -117,7 +117,9 @@ class HumanReviewEvidenceTracker:
             "audio_sync": "Verified narration timing matches video clips and SFX appropriateness",
             "educational_value": "Confirmed unique educational insights present in narrative",
             "brand_safety": "Checked against YouTube advertiser-friendly content guidelines",
-            "metadata_quality": "Customized title, description, tags for uniqueness and discoverability",
+            "metadata_quality": (
+                "Customized title, description, tags for uniqueness and discoverability"
+            ),
             "ai_disclosure": "Verified AI disclosure present in description and metadata",
             "compliance_check": "Confirmed content meets YouTube Partner Program requirements",
             "reviewer_name": production_data.get("qa_reviewer", "System"),

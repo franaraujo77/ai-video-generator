@@ -303,7 +303,7 @@ def _resolve_privacy_status(
                 "invalid_privacy_override_ignored",
                 correlation_id=str(task.id),
                 invalid_value=task.privacy_override,
-                message="Privacy override must be 'public', 'unlisted', or 'private'. Using channel default.",
+                message="Privacy override must be 'public', 'unlisted', or 'private'. Using channel default.", # noqa: E501
             )
 
     # AC6: Use channel default_privacy if set
@@ -375,7 +375,7 @@ def _sanitize_html_chars(text: str) -> str:
 
 
 def _generate_description(task: Task, channel: Channel) -> str:
-    """Generate description from template with placeholder substitution.
+    r"""Generate description from template with placeholder substitution.
 
     Uses channel.description_template if available, otherwise DEFAULT_DESCRIPTION_TEMPLATE.
 
@@ -487,7 +487,7 @@ def _generate_tags(task: Task, channel: Channel) -> list[str]:
 
     # Step 3: Normalize - lowercase, remove duplicates, filter too-long tags
     # YouTube best practice: individual tags should be <= 30 chars
-    MAX_TAG_LENGTH = 30
+    MAX_TAG_LENGTH = 30 # noqa: N806
     tags = list({tag.lower() for tag in tags if tag and len(tag) <= MAX_TAG_LENGTH})
 
     # Step 4: Trim to 30 tags max (YouTube limit)
@@ -507,7 +507,7 @@ def _generate_tags(task: Task, channel: Channel) -> list[str]:
 
 
 def _extract_summary(text: str, max_chars: int) -> str:
-    """Extract summary from text (first paragraph or max_chars).
+    r"""Extract summary from text (first paragraph or max_chars).
 
     Args:
         text: Full text to summarize.

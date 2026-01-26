@@ -1090,8 +1090,8 @@ class PipelineOrchestrator:
         import subprocess
 
         def _probe_duration() -> float:
-            result = subprocess.run(  # noqa: S603
-                [  # noqa: S607
+            result = subprocess.run( # noqa: S603
+                [ # noqa: S607
                     "ffprobe",
                     "-v",
                     "error",

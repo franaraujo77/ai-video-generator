@@ -49,7 +49,7 @@ async def reset_youtube_quotas(reset_date: date, db: AsyncSession) -> int:
         >>> reset_count = await reset_youtube_quotas(today, db)
     """
     # Get all active channels
-    result = await db.execute(select(Channel).where(Channel.is_active == True))
+    result = await db.execute(select(Channel).where(Channel.is_active))
     channels = result.scalars().all()
 
     reset_count = 0
@@ -108,7 +108,7 @@ async def reset_gemini_quotas(reset_date: date, db: AsyncSession) -> int:
         >>> reset_count = await reset_gemini_quotas(today, db)
     """
     # Get all active channels
-    result = await db.execute(select(Channel).where(Channel.is_active == True))
+    result = await db.execute(select(Channel).where(Channel.is_active))
     channels = result.scalars().all()
 
     reset_count = 0

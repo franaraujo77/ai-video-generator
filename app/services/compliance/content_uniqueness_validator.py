@@ -45,8 +45,10 @@ class ContentUniquenessValidator:
         """Validate video against duplicate content requirements.
 
         Args:
-            video_metadata: Current video metadata with thumbnail_path, story_script, title, description, tags
-            recent_videos: List of recent channel uploads (last 20-30 videos) for comparison
+            video_metadata: Current video metadata with thumbnail_path, story_script,
+                title, description, tags
+            recent_videos: List of recent channel uploads (last 20-30 videos)
+                for comparison
 
         Returns:
             Dict with validation results:
@@ -174,7 +176,8 @@ class ContentUniquenessValidator:
                         skipping=True,
                     )
                     continue
-            except Exception:
+            except Exception as e:
+                log.debug("thumbnail_size_check_failed", path=recent_thumbnail, error=str(e))
                 continue  # Skip if we can't check size
 
             try:

@@ -142,7 +142,7 @@ if __name__ == "__main__":
     # Binding to 0.0.0.0 is intentional for Docker/Railway compatibility
     uvicorn.run(
         "app.main:app",
-        host="0.0.0.0",  # noqa: S104
+        host="0.0.0.0", # noqa: S104
         port=8000,
         reload=True,
     )

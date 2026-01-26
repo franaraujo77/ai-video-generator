@@ -386,7 +386,7 @@ async def handle_youtube_upload_error(
                 alert_type="quota_exhausted",
                 severity="WARNING",
                 title="⚠️ YouTube Quota Exceeded",
-                description=f"Task **{task.id}** hit YouTube quota limit. Uploads paused until quota resets at midnight PST.",
+                description=f"Task **{task.id}** hit YouTube quota limit. Uploads paused until quota resets at midnight PST.", # noqa: E501
                 fields={
                     "Task ID": str(task.id),
                     "Channel ID": str(task.channel_id),
@@ -428,7 +428,7 @@ async def handle_youtube_upload_error(
                 alert_type="terminal_failure",
                 severity="CRITICAL",
                 title="🚨 YouTube Upload Permanent Error",
-                description=f"Task **{task.id}** failed with permanent error. Manual intervention required.",
+                description=f"Task **{task.id}** failed with permanent error. Manual intervention required.", # noqa: E501
                 fields={
                     "Task ID": str(task.id),
                     "Error Code": str(youtube_error.status_code),
@@ -473,7 +473,7 @@ async def handle_youtube_upload_error(
                     alert_type="terminal_failure",
                     severity="CRITICAL",
                     title="🚨 YouTube Upload Retry Exhausted",
-                    description=f"Task **{task.id}** failed after **{MAX_RETRIES}** retries. Manual intervention required.",
+                    description=f"Task **{task.id}** failed after **{MAX_RETRIES}** retries. Manual intervention required.", # noqa: E501
                     fields={
                         "Task ID": str(task.id),
                         "Error Code": str(youtube_error.status_code),

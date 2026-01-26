@@ -59,7 +59,8 @@ class PreUploadComplianceValidator:
 
         Args:
             task: Task object for the video
-            video_metadata: Video metadata with thumbnail_path, story_script, title, description, tags
+            video_metadata: Video metadata with thumbnail_path, story_script,
+                title, description, tags
             db: Database session
 
         Returns:

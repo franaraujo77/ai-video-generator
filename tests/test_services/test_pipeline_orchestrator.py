@@ -351,7 +351,7 @@ class TestExecuteStep:
                 return_value={"generated": 16, "skipped": 2}
             )
             # Mock audio directory to return a path that won't be created
-            mock_audio_dir.return_value = Path("/tmp/test_audio")  # noqa: S108
+            mock_audio_dir.return_value = Path("/tmp/test_audio") # noqa: S108
 
             completion = await orchestrator.execute_step(
                 PipelineStep.NARRATION_GENERATION,
@@ -410,7 +410,7 @@ class TestExecuteStep:
             mock_service.create_sfx_manifest = AsyncMock(return_value=Mock())
             mock_service.generate_sfx = AsyncMock(return_value={"generated": 16, "skipped": 2})
             # Mock SFX directory to return a path that won't be created
-            mock_sfx_dir.return_value = Path("/tmp/test_sfx")  # noqa: S108
+            mock_sfx_dir.return_value = Path("/tmp/test_sfx") # noqa: S108
 
             completion = await orchestrator.execute_step(
                 PipelineStep.SFX_GENERATION,

@@ -33,7 +33,8 @@ class DuplicateContentDetector:
         """Detect if video is duplicate of existing content.
 
         Args:
-            video_metadata: Current video metadata with thumbnail_path, story_script, title, description
+            video_metadata: Current video metadata with thumbnail_path,
+                story_script, title, description
             all_channel_videos: ALL videos on channel for duplicate checking
 
         Returns:

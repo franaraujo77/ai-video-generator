@@ -80,7 +80,8 @@ async def publish_video_to_youtube(
         YouTube video ID (e.g., "dQw4w9WgXcQ")
 
     Raises:
-        ComplianceViolationError: Compliance checks failed (uniqueness, duplicate, frequency, evidence)
+        ComplianceViolationError: Compliance checks failed (uniqueness, duplicate,
+            frequency, evidence)
         YouTubeUploadError: Permanent upload failure (invalid metadata, credentials, quota)
         YouTubeUploadRetryError: Transient upload failure (network error, rate limit)
         NotionSyncRetryError: Transient Notion failure (rate limit, conflict, service down)
@@ -220,7 +221,7 @@ async def publish_video_to_youtube(
         task.status = TaskStatus.COMPLIANCE_VIOLATION
         task.error_log = (
             f"{task.error_log or ''}\n\n[{utcnow().isoformat()}] AI DISCLOSURE FAILED: {e!s}\n"
-            f"Video uploaded but AI disclosure could not be set. Upload blocked to prevent policy violation."
+            f"Video uploaded but AI disclosure could not be set. Upload blocked to prevent policy violation." # noqa: E501
         )
         await db.commit()
 
@@ -238,7 +239,7 @@ async def publish_video_to_youtube(
                 color="error",
             )
 
-        raise ValueError(f"AI disclosure failed for video {video_id}: {e!s}")
+        raise ValueError(f"AI disclosure failed for video {video_id}: {e!s}") from e
 
     # Step 2: Construct YouTube URL (Story 7.5)
     youtube_url = await construct_youtube_url(video_id)

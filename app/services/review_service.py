@@ -111,7 +111,7 @@ class ReviewService:
                 self._notion_client = NotionClient(auth_token=notion_token)
         return self._notion_client
 
-    async def approve_videos(
+    async def approve_videos( # noqa: D417
         self,
         db: AsyncSession,
         task_id: UUID,
@@ -225,7 +225,7 @@ class ReviewService:
             )
             raise
 
-    async def reject_videos(
+    async def reject_videos( # noqa: D417
         self,
         db: AsyncSession,
         task_id: UUID,
@@ -358,7 +358,7 @@ class ReviewService:
             )
             raise
 
-    async def approve_audio(
+    async def approve_audio( # noqa: D417
         self,
         db: AsyncSession,
         task_id: UUID,
@@ -474,7 +474,7 @@ class ReviewService:
             )
             raise
 
-    async def reject_audio(
+    async def reject_audio( # noqa: D417
         self,
         db: AsyncSession,
         task_id: UUID,
@@ -631,7 +631,7 @@ class ReviewService:
             )
             raise
 
-    async def bulk_approve_tasks(
+    async def bulk_approve_tasks( # noqa: D417
         self,
         db: AsyncSession,
         task_ids: list[UUID],
@@ -820,7 +820,7 @@ class ReviewService:
 
         return result_obj
 
-    async def bulk_reject_tasks(
+    async def bulk_reject_tasks( # noqa: D417
         self,
         db: AsyncSession,
         task_ids: list[UUID],

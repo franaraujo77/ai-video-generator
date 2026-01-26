@@ -168,7 +168,7 @@ class OrganicUploadScheduler:
         Returns:
             Adjusted datetime with random variance added
         """
-        variance_minutes = random.uniform(0, variance_hours * 60)
+        variance_minutes = random.uniform(0, variance_hours * 60) # noqa: S311
         adjusted_time = base_time + timedelta(minutes=variance_minutes)
 
         log.debug(
@@ -224,8 +224,8 @@ class OrganicUploadScheduler:
         )
 
         # Adjust base_time to fall within least-used window
-        target_hour = random.randint(start_hour, end_hour - 1)
-        target_minute = random.randint(0, 59)
+        target_hour = random.randint(start_hour, end_hour - 1) # noqa: S311
+        target_minute = random.randint(0, 59) # noqa: S311
 
         adjusted_time = base_time.replace(
             hour=target_hour, minute=target_minute, second=0, microsecond=0
