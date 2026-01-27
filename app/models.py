@@ -20,6 +20,7 @@ Example:
 import enum
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any, ClassVar
 
 from sqlalchemy import (
@@ -33,9 +34,11 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     PrimaryKeyConstraint,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
@@ -867,6 +870,14 @@ class Task(Base):
 
     # Relationship to audit logs (one-to-many)
     audit_logs: Mapped[list["ReviewActionAuditLog"]] = relationship("ReviewActionAuditLog")
+
+    # Relationship to cost records (one-to-many) - Story 8.2
+    costs: Mapped[list["VideoCost"]] = relationship(
+        "VideoCost",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="VideoCost.timestamp",
+    )
 
     # Indexes for efficient queue queries
     # Note: Migration is source of truth for indexes. Model defines indexes
@@ -1703,8 +1714,8 @@ class ReviewActionAuditLog(Base):
     )
 
     # Relationships
-    task: Mapped["Task"] = relationship("Task")
-    channel: Mapped["Channel"] = relationship("Channel")
+    task: Mapped["Task"] = relationship("Task", overlaps="audit_logs")
+    channel: Mapped["Channel"] = relationship("Channel", overlaps="audit_logs")
 
     # Composite indexes for compliance queries
     __table_args__ = (
@@ -1725,4 +1736,74 @@ class ReviewActionAuditLog(Base):
             f"<ReviewActionAuditLog(id={self.id!s:.8}, "
             f"task_id={self.task_id!s:.8}, action_type={self.action_type!r}, "
             f"action_status={self.action_status!r}, reviewer_user_id={self.reviewer_user_id!r})>"
+        )
+
+
+class VideoCost(Base):
+    """Per-component cost tracking for video generation (Story 8.2).
+
+    Tracks costs at granular level (per API component) for financial analysis.
+    Complements task.total_cost_usd which provides quick access to total cost.
+
+    Cost breakdown per video:
+    - gemini_assets: ~$1.50 (22 images @ $0.068/image)
+    - kling_video: ~$7.56 (18 clips @ $0.42/clip)
+    - elevenlabs_narration: ~$0.72 (18 clips @ $0.04/clip)
+    - elevenlabs_sfx: ~$0.72 (18 clips @ $0.04/clip)
+    Total per video: ~$10.50
+
+    Relationships:
+    - task: One-to-many (task has many cost records, one per component)
+    - channel: Via task.channel_id for aggregation
+
+    Indexes:
+    - Primary key: id (auto-increment)
+    - Foreign key: task_id (for task cost breakdown)
+    - Composite: (task_id, timestamp) for efficient queries
+    - Single: timestamp (for trend analysis)
+    """
+
+    __tablename__ = "video_costs"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # Foreign key to task
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Component identifier (gemini_assets, kling_video, elevenlabs_narration, elevenlabs_sfx)
+    component: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # Cost in USD (Decimal for financial precision, stored as NUMERIC(10, 4))
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+
+    # Units consumed (API-specific: tokens, clips, characters, etc.)
+    units_used: Mapped[int] = mapped_column(nullable=False)
+
+    # Timestamp (UTC) - server-side default
+    timestamp: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=func.now(),
+        comment="UTC timestamp when cost was recorded",
+    )
+
+    # Correlation ID for distributed tracing (from Story 8.1)
+    correlation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+
+    # Relationship to Task
+    task: Mapped["Task"] = relationship("Task", back_populates="costs")
+
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index("ix_video_costs_task_id_timestamp", "task_id", "timestamp"),
+        Index("ix_video_costs_timestamp", "timestamp"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<VideoCost(id={self.id}, task_id={self.task_id}, "
+            f"component={self.component!r}, cost_usd={self.cost_usd})>"
         )

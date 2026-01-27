@@ -135,7 +135,7 @@ development_status:
   # Epic 8: Monitoring, Observability & Cost Tracking
   epic-8: in-progress
   8-1-structured-logging-with-correlation-ids: done  # Code review complete 2026-01-27, all tasks implemented with 36 passing tests, correlation IDs propagate through entire pipeline
-  8-2-per-video-cost-tracking: backlog
+  8-2-per-video-cost-tracking: done  # Code review complete 2026-01-27, 10 issues fixed, 24 tests passing, API endpoints + validation implemented, all ACs met
   8-3-asset-url-population-in-notion: backlog
   8-4-cloudflare-r2-storage-integration: backlog
   8-5-temporary-file-cleanup: backlog

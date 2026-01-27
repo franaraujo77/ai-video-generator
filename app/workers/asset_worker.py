@@ -15,7 +15,8 @@ Transaction Pattern (CRITICAL - Architecture Decision 3):
     2. Close database connection
     3. Generate assets (long-running, outside transaction)
     4. Reopen database connection
-    5. Update task (short transaction, set status="assets_ready" or "asset_error")
+    5. Track API cost (short transaction, Story 8.2)
+    6. Update task (short transaction, set status="assets_ready" or "asset_error")
 
 Error Handling:
     - CLIScriptError → Mark task "asset_error", log details, allow retry
@@ -43,11 +44,13 @@ Usage:
 
 import asyncio
 import contextlib
+from decimal import Decimal
 from uuid import UUID
 
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
+from app.services.cost_tracker import track_api_cost
 from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
 
@@ -149,7 +152,24 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             total_cost_usd=result["total_cost_usd"],
         )
 
-        # Step 3: Update task (short transaction)
+        # Step 3: Track API cost (short transaction) - Story 8.2
+        async with async_session_factory() as db, db.begin():
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_cost_tracking", task_id=str(task_id))
+                return
+
+            await track_api_cost(
+                db=db,
+                task_id=task.id,
+                component="gemini_assets",
+                cost_usd=Decimal(str(result["total_cost_usd"])),
+                api_calls=result["generated"],
+                units_consumed=result["generated"],
+            )
+            # Note: track_api_cost() commits internally, no extra commit needed
+
+        # Step 4: Update task (short transaction)
         async with async_session_factory() as db, db.begin():
             task = await db.get(Task, task_id)
             if not task:
@@ -162,7 +182,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
 
             log.info("task_updated", task_id=str(task_id), status="assets_ready")
 
-        # Step 4: Update Notion (async, non-blocking)
+        # Step 5: Update Notion (async, non-blocking)
         # Note: Notion sync service not yet implemented in Epic 2
         # This is a placeholder for future integration
         #

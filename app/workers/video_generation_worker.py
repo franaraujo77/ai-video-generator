@@ -248,7 +248,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             await track_api_cost(
                 db=db,
                 task_id=task.id,
-                component="kling_video_clips",
+                component="kling_video",
                 cost_usd=result["total_cost_usd"],
                 api_calls=result["generated"],
                 units_consumed=result["generated"],
