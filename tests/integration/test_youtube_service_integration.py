@@ -12,7 +12,7 @@ Architecture: Integration testing pattern with async test database
 """
 
 import pytest
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock
 
 from google.auth.exceptions import RefreshError
@@ -80,7 +80,9 @@ async def test_full_refresh_flow_with_database(youtube_service, async_session, t
                 def mock_refresh_callback(self_creds, request):
                     # Simulate successful token refresh (modify credentials object)
                     self_creds.token = "fresh-access-token"
-                    self_creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                    self_creds.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                        hours=1
+                    )
 
                 mock_refresh.side_effect = mock_refresh_callback
 

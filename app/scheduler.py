@@ -22,8 +22,12 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler  # type: ignore[import-not-found]
-from apscheduler.triggers.cron import CronTrigger  # type: ignore[import-not-found]
+from apscheduler.schedulers.asyncio import (  # type: ignore[import-untyped, import-not-found, unused-ignore]
+    AsyncIOScheduler,
+)
+from apscheduler.triggers.cron import (  # type: ignore[import-untyped, import-not-found, unused-ignore]
+    CronTrigger,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal

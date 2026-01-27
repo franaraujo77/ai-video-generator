@@ -8,6 +8,8 @@ Sets mandatory AI disclosure labels via YouTube Data API v3:
 Failure to disclose AI content results in demonetization.
 """
 
+from typing import Any
+
 import structlog
 
 log = structlog.get_logger(__name__)
@@ -22,7 +24,7 @@ class AIDisclosureManager:
     - AI-animated scenes (Kling videos)
     """
 
-    def set_ai_disclosure(self, video_id: str, youtube_service) -> None:
+    def set_ai_disclosure(self, video_id: str, youtube_service: Any) -> None:
         """Set AI disclosure via YouTube Data API v3.
 
         MUST be called after video upload, before video goes public.
@@ -98,7 +100,7 @@ class AIDisclosureManager:
 
         return updated_description
 
-    def validate_disclosure_set(self, video_id: str, youtube_service) -> bool:
+    def validate_disclosure_set(self, video_id: str, youtube_service: Any) -> bool:
         """Verify AI disclosure was successfully set on YouTube.
 
         Args:

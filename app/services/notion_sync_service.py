@@ -29,8 +29,8 @@ import re
 
 import structlog
 from aiolimiter import AsyncLimiter
-from notion_client import AsyncClient
-from notion_client.errors import APIResponseError
+from notion_client import AsyncClient  # type: ignore[import-not-found, unused-ignore]
+from notion_client.errors import APIResponseError  # type: ignore[import-not-found, unused-ignore]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import FallbackYouTubeURL, Task
@@ -164,7 +164,7 @@ async def sync_youtube_url_to_notion(
 
         # Get Notion API token (decrypted from database)
         credential_service = CredentialService()
-        notion_token = await credential_service.get_notion_token(task.channel_id, db)
+        notion_token = await credential_service.get_notion_token(str(task.channel_id), db)
 
         if not notion_token:
             log.error(

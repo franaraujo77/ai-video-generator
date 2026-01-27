@@ -164,7 +164,7 @@ class YouTubeService:
                 raise YouTubeAuthError(f"No YouTube credentials found for channel {channel_id}")
 
             # Create Credentials object
-            creds = Credentials(
+            creds = Credentials(  # type: ignore[no-untyped-call, unused-ignore]
                 token=None,  # Will be populated on first refresh
                 refresh_token=refresh_token,
                 token_uri="https://oauth2.googleapis.com/token",  # noqa: S106

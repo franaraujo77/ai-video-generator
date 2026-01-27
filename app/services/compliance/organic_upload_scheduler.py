@@ -11,6 +11,7 @@ Prevents YouTube's spam detection from flagging automated upload patterns.
 
 import random
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import structlog
 
@@ -52,9 +53,9 @@ class OrganicUploadScheduler:
 
     def schedule_upload(
         self,
-        video_metadata: dict,
-        channel_config: dict,
-        recent_uploads: list[dict],
+        video_metadata: dict[str, Any],
+        channel_config: dict[str, Any],
+        recent_uploads: list[dict[str, Any]],
     ) -> datetime:
         """Schedule upload with organic timing patterns.
 
@@ -180,7 +181,9 @@ class OrganicUploadScheduler:
 
         return adjusted_time
 
-    def vary_time_of_day(self, base_time: datetime, recent_uploads: list[dict]) -> datetime:
+    def vary_time_of_day(
+        self, base_time: datetime, recent_uploads: list[dict[str, Any]]
+    ) -> datetime:
         """Rotate upload times to avoid predictable patterns.
 
         Distributes uploads across time windows:
@@ -214,7 +217,7 @@ class OrganicUploadScheduler:
         }
 
         # Find least-used window
-        least_used_window = min(window_usage, key=window_usage.get)
+        least_used_window = min(window_usage, key=lambda x: window_usage[x])
         start_hour, end_hour = TIME_WINDOWS[least_used_window]
 
         log.debug(
@@ -238,7 +241,7 @@ class OrganicUploadScheduler:
 
         return adjusted_time
 
-    def classify_channel(self, channel_config: dict) -> str:
+    def classify_channel(self, channel_config: dict[str, Any]) -> str:
         """Classify channel as new or established.
 
         Args:

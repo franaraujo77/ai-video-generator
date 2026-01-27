@@ -17,7 +17,7 @@ Architecture: Service layer pattern, in-memory cache, async/await
 """
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -108,7 +108,7 @@ def valid_credentials(mock_refresh_token, youtube_service):
         token_uri="https://oauth2.googleapis.com/token",
         client_id=youtube_service.client_id,
         client_secret=youtube_service.client_secret,
-        expiry=datetime.now(UTC).replace(tzinfo=None)
+        expiry=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(hours=1),  # Expires in 1 hour (fresh)
         scopes=[
             "https://www.googleapis.com/auth/youtube.upload",
@@ -130,7 +130,8 @@ def expired_credentials(mock_refresh_token, youtube_service):
         token_uri="https://oauth2.googleapis.com/token",
         client_id=youtube_service.client_id,
         client_secret=youtube_service.client_secret,
-        expiry=datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=10),  # Expired 10 min ago
+        expiry=datetime.now(timezone.utc).replace(tzinfo=None)
+        - timedelta(minutes=10),  # Expired 10 min ago
         scopes=[
             "https://www.googleapis.com/auth/youtube.upload",
             "https://www.googleapis.com/auth/youtube.force-ssl",
@@ -151,7 +152,7 @@ def expiring_soon_credentials(mock_refresh_token, youtube_service):
         token_uri="https://oauth2.googleapis.com/token",
         client_id=youtube_service.client_id,
         client_secret=youtube_service.client_secret,
-        expiry=datetime.now(UTC).replace(tzinfo=None)
+        expiry=datetime.now(timezone.utc).replace(tzinfo=None)
         + timedelta(minutes=4),  # Expires in 4 min (< 5 min threshold)
         scopes=[
             "https://www.googleapis.com/auth/youtube.upload",
@@ -187,7 +188,9 @@ async def test_get_credentials_cache_miss_fetches_from_db(
             def mock_refresh_callback(self_creds, request):
                 # Modify the Credentials instance that called refresh()
                 self_creds.token = "new-access-token"
-                self_creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                self_creds.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                    hours=1
+                )
 
             # Patch the refresh method on Credentials class
             with patch.object(
@@ -224,9 +227,9 @@ async def test_expired_token_triggers_refresh(youtube_service, async_session, ex
 
             def refresh_token(request):
                 expired_credentials.token = "refreshed-access-token"
-                expired_credentials.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(
-                    hours=1
-                )
+                expired_credentials.expiry = datetime.now(timezone.utc).replace(
+                    tzinfo=None
+                ) + timedelta(hours=1)
 
             mock_refresh.side_effect = refresh_token
 
@@ -252,7 +255,7 @@ async def test_proactive_refresh_when_expiring_soon(
 
             def refresh_token(request):
                 expiring_soon_credentials.token = "proactively-refreshed-token"
-                expiring_soon_credentials.expiry = datetime.now(UTC).replace(
+                expiring_soon_credentials.expiry = datetime.now(timezone.utc).replace(
                     tzinfo=None
                 ) + timedelta(hours=1)
 
@@ -312,7 +315,9 @@ async def test_multi_channel_isolation(
                     # Set token on all credentials in cache
                     for creds in youtube_service._credentials_cache.values():
                         creds.token = f"token-{creds.refresh_token[-4:]}"
-                        creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                        creds.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                            hours=1
+                        )
 
                 mock_refresh.side_effect = refresh_token
 
@@ -348,7 +353,9 @@ async def test_concurrent_access_thread_safe(
                     # Find credentials and set token
                     for creds in youtube_service._credentials_cache.values():
                         creds.token = f"token-{refresh_count}"
-                        creds.expiry = datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1)
+                        creds.expiry = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                            hours=1
+                        )
 
                 mock_refresh.side_effect = refresh_token
 

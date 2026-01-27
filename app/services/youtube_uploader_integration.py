@@ -21,7 +21,9 @@ Error Handling (Story 7.6):
 """
 
 import structlog
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import (  # type: ignore[import-not-found, unused-ignore]
+    GoogleAPIError,
+)
 from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -120,12 +122,13 @@ async def publish_video_to_youtube(
 
     try:
         # Build video metadata dict for compliance checks
+        task_metadata_dict = task.metadata if isinstance(task.metadata, dict) else {}
         video_metadata = {
             "title": metadata.get("title"),
             "description": metadata.get("description"),
             "tags": metadata.get("tags", []),
-            "thumbnail_path": task.metadata.get("thumbnail_path") if task.metadata else None,
-            "composite_path": task.metadata.get("composite_path") if task.metadata else None,
+            "thumbnail_path": task_metadata_dict.get("thumbnail_path"),
+            "composite_path": task_metadata_dict.get("composite_path"),
             "story_script": task.story_direction,
         }
 
@@ -163,6 +166,8 @@ async def publish_video_to_youtube(
         # Fix Issue #5: Send Discord alert for compliance violations
         if webhook_url:
             await send_discord_alert(
+                alert_type="terminal_failure",
+                severity="CRITICAL",
                 webhook_url=webhook_url,
                 title="🚨 YouTube Compliance Violation",
                 description=f"Task {task.id} failed compliance checks and cannot be uploaded",
@@ -173,7 +178,6 @@ async def publish_video_to_youtube(
                     "Details": str(e)[:500],  # Truncate long error messages
                     "Action": "Manual review required - fix issues and requeue task",
                 },
-                color="error",
             )
 
         raise
@@ -193,9 +197,15 @@ async def publish_video_to_youtube(
 
     try:
         # Get YouTube service from credentials
-        from app.services.youtube_service import get_youtube_service
+        from app.config import get_google_client_id, get_google_client_secret
+        from app.services.youtube_service import YouTubeService
 
-        youtube_service = await get_youtube_service(task.channel_id, db)
+        youtube_service_client = YouTubeService(
+            client_id=get_google_client_id(), client_secret=get_google_client_secret()
+        )
+        youtube_service = await youtube_service_client.build_youtube_client(
+            str(task.channel_id), db
+        )
 
         # Set hasAlteredContent=true via YouTube Data API
         ai_disclosure_manager.set_ai_disclosure(video_id, youtube_service)
@@ -227,6 +237,8 @@ async def publish_video_to_youtube(
 
         if webhook_url:
             await send_discord_alert(
+                alert_type="terminal_failure",
+                severity="CRITICAL",
                 webhook_url=webhook_url,
                 title="🚨 AI Disclosure Failed",
                 description=f"Video {video_id} uploaded but AI disclosure could not be set",
@@ -236,7 +248,6 @@ async def publish_video_to_youtube(
                     "Error": str(e)[:500],
                     "Action": "Manual intervention required - set AI disclosure via YouTube Studio",
                 },
-                color="error",
             )
 
         raise ValueError(f"AI disclosure failed for video {video_id}: {e!s}") from e

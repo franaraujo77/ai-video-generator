@@ -322,10 +322,10 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
 
         # Step 4: Get OAuth credentials
         credential_service = CredentialService()
-        refresh_token = await credential_service.get_youtube_token(task.channel_id, db)
+        refresh_token = await credential_service.get_youtube_token(str(task.channel_id), db)
 
         # Build OAuth credentials object
-        credentials = Credentials(
+        credentials = Credentials(  # type: ignore[no-untyped-call, unused-ignore]
             token=None,  # Will be refreshed
             refresh_token=refresh_token,
             token_uri="https://oauth2.googleapis.com/token",  # noqa: S106
@@ -503,7 +503,9 @@ async def upload_video(task: Task, metadata: MetadataDict, db: AsyncSession) -> 
                 break
 
         # Step 9: Extract video ID from response
-        video_id = response["id"]
+        if response is None:
+            raise YouTubeUploadError("Upload failed: No response from YouTube API")
+        video_id: str = response["id"]
 
         log.info(
             "upload_completed",

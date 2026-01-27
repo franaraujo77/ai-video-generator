@@ -10,8 +10,9 @@ Videos with >90% similarity across all dimensions are blocked as duplicates.
 
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Any
 
-import imagehash
+import imagehash  # type: ignore[import-not-found, unused-ignore]
 import structlog
 from PIL import Image
 
@@ -29,7 +30,9 @@ class DuplicateContentDetector:
     duplicates or near-duplicates of existing channel content.
     """
 
-    def detect_duplicate(self, video_metadata: dict, all_channel_videos: list[dict]) -> dict:
+    def detect_duplicate(
+        self, video_metadata: dict[str, Any], all_channel_videos: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Detect if video is duplicate of existing content.
 
         Args:
@@ -145,7 +148,9 @@ class DuplicateContentDetector:
             "duplicate_type": None,
         }
 
-    def compare_stories(self, video_metadata: dict, existing_video: dict) -> float:
+    def compare_stories(
+        self, video_metadata: dict[str, Any], existing_video: dict[str, Any]
+    ) -> float:
         """Compare story structure between two videos.
 
         Args:
@@ -168,7 +173,9 @@ class DuplicateContentDetector:
         matcher = SequenceMatcher(None, current_str, existing_str)
         return matcher.ratio()
 
-    def compare_metadata(self, video_metadata: dict, existing_video: dict) -> float:
+    def compare_metadata(
+        self, video_metadata: dict[str, Any], existing_video: dict[str, Any]
+    ) -> float:
         """Compare metadata (title, description, tags) between two videos.
 
         Args:

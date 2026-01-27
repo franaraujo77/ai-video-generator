@@ -10,6 +10,7 @@ YouTube's March 2025 review process requires evidence of human oversight for AI-
 
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 import structlog
 
@@ -25,7 +26,9 @@ class HumanReviewEvidenceTracker:
     3. Review process completed before upload
     """
 
-    def build_evidence_package(self, task: object, production_data: dict) -> dict:
+    def build_evidence_package(
+        self, task: object, production_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Create evidence package demonstrating human involvement.
 
         Args:
@@ -101,7 +104,9 @@ class HumanReviewEvidenceTracker:
 
         return evidence
 
-    def generate_qa_checklist(self, task: object, production_data: dict) -> dict:
+    def generate_qa_checklist(
+        self, task: object, production_data: dict[str, Any]
+    ) -> dict[str, Any]:
         """Generate standardized QA checklist proving human oversight.
 
         Args:

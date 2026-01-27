@@ -25,9 +25,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import pytz
+import pytz  # type: ignore[import-untyped]
 import structlog
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import (  # type: ignore[import-not-found, unused-ignore]
+    GoogleAPIError,
+)
 from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -395,7 +397,7 @@ async def handle_youtube_upload_error(
                     "Action": "Uploads paused until midnight PST",
                 },
                 webhook_url=webhook_url,
-                correlation_id=str(task.id),
+                correlation_id=task.id,
             )
 
         log.warning(
@@ -437,7 +439,7 @@ async def handle_youtube_upload_error(
                     "Action": "Manual intervention required - fix metadata or request",
                 },
                 webhook_url=webhook_url,
-                correlation_id=str(task.id),
+                correlation_id=task.id,
             )
 
         log.error(
@@ -482,7 +484,7 @@ async def handle_youtube_upload_error(
                         "Action": "Manual intervention required - check YouTube API status",
                     },
                     webhook_url=webhook_url,
-                    correlation_id=str(task.id),
+                    correlation_id=task.id,
                 )
 
             log.error(

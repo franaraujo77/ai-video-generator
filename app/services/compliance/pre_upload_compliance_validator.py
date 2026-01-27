@@ -12,6 +12,7 @@ Raises ComplianceViolationError if any check fails, blocking upload.
 
 import json
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -44,7 +45,7 @@ class PreUploadComplianceValidator:
     - AI disclosure (AC4)
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize compliance validators."""
         self.uniqueness_validator = ContentUniquenessValidator()
         self.duplicate_detector = DuplicateContentDetector()
@@ -53,8 +54,8 @@ class PreUploadComplianceValidator:
         self.evidence_tracker = HumanReviewEvidenceTracker()
 
     async def validate_before_upload(
-        self, task: Task, video_metadata: dict, db: AsyncSession
-    ) -> dict:
+        self, task: Task, video_metadata: dict[str, Any], db: AsyncSession
+    ) -> dict[str, Any]:
         """Run all compliance checks before uploading.
 
         Args:
@@ -225,11 +226,12 @@ class PreUploadComplianceValidator:
                 evidence_source="auto_generated_basic",
             )
 
-        evidence = (
-            json.loads(task.compliance_evidence)
-            if isinstance(task.compliance_evidence, str)
-            else task.compliance_evidence
-        )
+        if isinstance(task.compliance_evidence, str):
+            evidence = json.loads(task.compliance_evidence)
+        elif isinstance(task.compliance_evidence, dict):
+            evidence = task.compliance_evidence
+        else:
+            evidence = {}
 
         log.info(
             "human_review_verified",
@@ -306,9 +308,9 @@ class PreUploadComplianceValidator:
             days_lookback=days,
         )
 
-        return tasks
+        return list(tasks)
 
-    def _task_to_video_dict(self, task: Task) -> dict:
+    def _task_to_video_dict(self, task: Task) -> dict[str, Any]:
         """Convert Task object to video metadata dict for compliance checks.
 
         Args:
@@ -318,7 +320,7 @@ class PreUploadComplianceValidator:
             Dict with thumbnail_path, story_script, title, description, tags
         """
         # Extract metadata from task (stored in task.metadata JSON field)
-        metadata = task.metadata or {}
+        metadata: dict[str, Any] = task.metadata if isinstance(task.metadata, dict) else {}
 
         # Fix Issue #7: Map task.story_direction to story_script for compliance validators
         # The Task model uses story_direction field (from Epic 3-5), but compliance
@@ -336,7 +338,7 @@ class PreUploadComplianceValidator:
             "uploaded_at": task.updated_at,
         }
 
-    def _task_to_upload_dict(self, task: Task) -> dict:
+    def _task_to_upload_dict(self, task: Task) -> dict[str, Any]:
         """Convert Task object to upload log dict for frequency throttling.
 
         Args:
