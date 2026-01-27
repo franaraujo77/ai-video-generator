@@ -39,6 +39,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
@@ -411,6 +412,13 @@ class Channel(Base):
 
     # Relationship to audit logs (one-to-many)
     audit_logs: Mapped[list["ReviewActionAuditLog"]] = relationship("ReviewActionAuditLog")
+
+    # Relationship to asset metadata (one-to-many) - Story 8.3
+    assets: Mapped[list["AssetMetadata"]] = relationship(
+        "AssetMetadata",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         """Return string representation for debugging.
@@ -877,6 +885,14 @@ class Task(Base):
         back_populates="task",
         cascade="all, delete-orphan",
         order_by="VideoCost.timestamp",
+    )
+
+    # Relationship to asset metadata (one-to-many) - Story 8.3
+    assets: Mapped[list["AssetMetadata"]] = relationship(
+        "AssetMetadata",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="AssetMetadata.created_at",
     )
 
     # Indexes for efficient queue queries
@@ -1806,4 +1822,130 @@ class VideoCost(Base):
         return (
             f"<VideoCost(id={self.id}, task_id={self.task_id}, "
             f"component={self.component!r}, cost_usd={self.cost_usd})>"
+        )
+
+
+class AssetMetadata(Base):
+    """Track generated assets with URLs and storage details (Story 8.3).
+
+    Tracks all generated assets (images, videos, audio) with public URLs
+    for access from Notion. Supports both Notion-hosted and R2 storage.
+
+    Asset types:
+    - "character": Character images (transparent PNG)
+    - "environment": Environment backgrounds
+    - "props": Prop/object images
+    - "composite": 16:9 composite images for video generation
+    - "video_clip": Generated video clips (MP4)
+    - "narration": Narration audio files (MP3)
+    - "sfx": Sound effects audio files (MP3/WAV)
+
+    Storage strategies:
+    - "notion": Assets uploaded to Notion as file attachments (24h URL expiration)
+    - "r2": Assets uploaded to Cloudflare R2 bucket (permanent URLs)
+
+    Notion sync:
+    - notion_synced_at: Timestamp of last successful Notion update
+    - NULL indicates asset not yet synced to Notion
+    - Use for retry queue: WHERE notion_synced_at IS NULL
+
+    Relationships:
+    - task: One-to-many (task has many assets)
+    - channel: Many-to-one (assets belong to channel for R2 bucket resolution)
+
+    Indexes:
+    - Primary key: id (UUID)
+    - Foreign key: task_id (for task asset lookup)
+    - Composite: (channel_id, asset_type) for channel-level asset queries
+    - Partial: (task_id) WHERE notion_synced_at IS NULL (unsync'd asset queue)
+    """
+
+    __tablename__ = "asset_metadata"
+
+    # Primary key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # Foreign keys
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Asset identification
+    asset_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    asset_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    # Storage details
+    storage_strategy: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+    local_file_path: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+    )
+    asset_url: Mapped[str] = mapped_column(
+        String(1024),
+        nullable=False,
+    )
+
+    # Notion integration
+    notion_asset_property_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    notion_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    task: Mapped["Task"] = relationship("Task", back_populates="assets")
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="assets")
+
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index("ix_asset_metadata_task_id", "task_id"),
+        Index("ix_asset_metadata_channel_type", "channel_id", "asset_type"),
+        Index(
+            "ix_asset_metadata_unsynced",
+            "task_id",
+            postgresql_where=text("notion_synced_at IS NULL"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<AssetMetadata(id={self.id!s:.8}, task_id={self.task_id!s:.8}, "
+            f"asset_type={self.asset_type!r}, asset_name={self.asset_name!r})>"
         )

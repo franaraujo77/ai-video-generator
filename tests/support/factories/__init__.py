@@ -1,5 +1,6 @@
 # Data factories for test data generation
 
+from tests.support.factories.asset_metadata_factory import create_asset_metadata
 from tests.support.factories.channel_factory import (
     create_active_channel,
     create_channel,
@@ -20,6 +21,8 @@ from tests.support.factories.image_factory import (
 from tests.support.factories.task_factory import create_task
 
 __all__ = [
+    # Asset metadata factories
+    "create_asset_metadata",
     # Channel factories
     "create_channel",
     "create_channel_with_credentials",
