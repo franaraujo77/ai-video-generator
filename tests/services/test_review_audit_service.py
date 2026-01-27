@@ -433,7 +433,9 @@ class TestGetReviewerAuditLogs:
         await async_session.commit()
 
         # Query logs for reviewer-1 only (using UUID)
-        logs = await audit_service.get_reviewer_audit_logs(async_session, "f6a7b8c9-d0e1-4234-f567-678901234fab")
+        logs = await audit_service.get_reviewer_audit_logs(
+            async_session, "f6a7b8c9-d0e1-4234-f567-678901234fab"
+        )
 
         # Verify only reviewer-1 logs returned
         assert len(logs) == 1

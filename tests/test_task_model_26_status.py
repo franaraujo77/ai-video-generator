@@ -369,10 +369,12 @@ class TestTaskStatus26Values:
             TaskStatus.VIDEO_ERROR,
             TaskStatus.AUDIO_ERROR,
             TaskStatus.UPLOAD_ERROR,
+            TaskStatus.UPLOAD_ERROR_RETRYING,  # Epic 7 (Story 7.6)
+            TaskStatus.COMPLIANCE_VIOLATION,  # Epic 7 (Story 7.7)
         ]
 
         assert statuses == expected_order, (
-            "TaskStatus enum order does not match pipeline flow. "
+            "TaskStatus enum order does not match pipeline flow (now 29 statuses with Epic 7 additions). "
             "Enum declaration order must match story requirements."
         )
 

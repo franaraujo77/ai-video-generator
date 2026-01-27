@@ -104,11 +104,11 @@ class TestSchedulerJobConfiguration:
         assert scheduler_module._scheduler is not None
         youtube_job = scheduler_module._scheduler.get_job("reset_youtube_quotas")
 
-        # Get the trigger configuration
-        trigger = youtube_job.trigger
-        # Trigger should fire at hour=0, minute=0
-        assert trigger.fields[4].expressions[0].last == 0  # hour
-        assert trigger.fields[5].expressions[0].last == 0  # minute
+        # Verify next run time is at midnight (hour=0, minute=0)
+        next_run = youtube_job.next_run_time
+        assert next_run is not None
+        assert next_run.hour == 0
+        assert next_run.minute == 0
 
     async def test_jobs_have_misfire_grace_time(self):
         """Test that jobs have 60 second misfire grace time configured."""

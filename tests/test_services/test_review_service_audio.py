@@ -87,7 +87,8 @@ class TestAudioApproval:
         assert result["previous_status"] == "audio_ready"
         assert result["new_status"] == "audio_approved"
         assert task_audio_ready.status == TaskStatus.AUDIO_APPROVED
-        mock_db_session.flush.assert_called_once()
+        # Epic 7: flush called twice (task update + audit log)
+        assert mock_db_session.flush.call_count == 2
 
     @pytest.mark.asyncio
     async def test_approve_audio_notion_sync_called(
@@ -200,7 +201,8 @@ class TestAudioRejection:
         assert result["failed_clip_numbers"] == []
         assert task_audio_ready.status == TaskStatus.AUDIO_ERROR
         assert rejection_reason in task_audio_ready.error_log
-        mock_db_session.flush.assert_called_once()
+        # Epic 7: flush called twice (task update + audit log)
+        assert mock_db_session.flush.call_count == 2
 
     @pytest.mark.asyncio
     async def test_reject_audio_with_failed_clip_numbers(

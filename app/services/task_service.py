@@ -51,6 +51,7 @@ ACTIVE_TASK_STATUSES = {
     TaskStatus.FINAL_REVIEW,
     TaskStatus.APPROVED,
     TaskStatus.UPLOADING,
+    TaskStatus.UPLOAD_ERROR_RETRYING,  # Epic 7 (Story 7.6): Automatic retry in progress
 }
 
 # Terminal states: Allow re-queue (manual retry)
@@ -62,6 +63,7 @@ TERMINAL_TASK_STATUSES = {
     TaskStatus.VIDEO_ERROR,
     TaskStatus.AUDIO_ERROR,
     TaskStatus.UPLOAD_ERROR,
+    TaskStatus.COMPLIANCE_VIOLATION,  # Epic 7 (Story 7.7): Compliance check failed
 }
 
 

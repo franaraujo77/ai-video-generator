@@ -208,7 +208,17 @@ def shutdown_quota_reset_scheduler() -> None:
         log.warning("quota_reset_scheduler_not_running")
         return
 
-    _scheduler.shutdown(wait=True)
+    try:
+        _scheduler.shutdown(wait=True)
+    except RuntimeError as e:
+        # Handle "Event loop is closed" error during test teardown
+        if "Event loop is closed" in str(e):
+            log.debug("scheduler_shutdown_event_loop_closed", error=str(e))
+        else:
+            raise
+    finally:
+        _scheduler = None
+
     log.info("quota_reset_scheduler_shutdown")
 
 
