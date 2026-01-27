@@ -14,6 +14,11 @@ Rate Limit Awareness (Story 4.5):
     - Kling concurrency: Check worker_state counter before video tasks
     - If rate limit hit: Release task back to queue, skip processing
 
+YouTube Integration (Story 7.2):
+    - YouTubeService initialized in worker startup
+    - Workers use get_youtube_service() to access service instance
+    - YouTubeAuthError handled by skipping YouTube tasks for that channel
+
 Entrypoints:
     - process_video: Orchestrate entire video generation pipeline
 
@@ -28,10 +33,12 @@ Future Entrypoints (Story 4.8):
 References:
     - Architecture: Short Transaction Pattern (Architecture Decision 3)
     - Story 4.5: Rate Limit Aware Task Selection
+    - Story 7.2: OAuth Token Refresh Automation
     - PgQueuer Documentation: https://pgqueuer.readthedocs.io/
 """
 
 import os
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from pgqueuer import PgQueuer
@@ -42,9 +49,35 @@ from app.models import Task, TaskStatus
 from app.services.quota_manager import check_youtube_quota, get_required_api
 from app.services.retry_orchestrator import mark_task_recovered
 from app.utils.logging import get_logger
+
+if TYPE_CHECKING:
+    from app.services.youtube_service import YouTubeService
 from app.worker import worker_state
 
 log = get_logger(__name__)
+
+
+def get_youtube_service() -> "YouTubeService | None":
+    """Get YouTubeService instance initialized in worker startup.
+
+    Returns:
+        YouTubeService instance if initialized, None if not available.
+
+    Usage:
+        youtube_service = get_youtube_service()
+        if youtube_service:
+            youtube = await youtube_service.build_youtube_client(channel_id, db)
+
+    Note:
+        This function imports from app.worker which initializes the service
+        during worker startup. Returns None if initialization failed or
+        credentials not configured.
+
+    Story: 7.2 - OAuth Token Refresh Automation (Task 5)
+    """
+    from app.worker import youtube_service
+
+    return youtube_service
 
 
 def register_entrypoints(pgq: PgQueuer) -> None:
@@ -257,53 +290,24 @@ def register_entrypoints(pgq: PgQueuer) -> None:
         )
 
         # Step 2: Execute pipeline (OUTSIDE transaction)
-        # Placeholder: Full pipeline orchestration in Story 4.8
-        # For now, just mark as completed
-        try:
-            # Future: await orchestrate_pipeline(task_id)
-            pass
-        except Exception as e:
-            # Step 3a: Mark as failed or retry (short transaction)
-            async with AsyncSessionLocal() as db:  # type: ignore[misc]
-                task = await db.get(Task, task_id)
-                if task:
-                    # Classify error: retriable vs non-retriable (AC10)
-                    is_retriable = _is_retriable_error(e)
-                    # Determine appropriate error status based on current processing phase
-                    if is_retriable:
-                        task.status = TaskStatus.QUEUED  # Retry from beginning
-                    else:
-                        # Map current status to appropriate error status
-                        error_status_map = {
-                            TaskStatus.GENERATING_ASSETS: TaskStatus.ASSET_ERROR,
-                            TaskStatus.GENERATING_VIDEO: TaskStatus.VIDEO_ERROR,
-                            TaskStatus.GENERATING_AUDIO: TaskStatus.AUDIO_ERROR,
-                            TaskStatus.UPLOADING: TaskStatus.UPLOAD_ERROR,
-                        }
-                        task.status = error_status_map.get(task.status, TaskStatus.ASSET_ERROR)
-                    await db.commit()
+        # TODO Story 4.8: Implement full pipeline orchestration with exception handling
+        # When implemented, the pipeline will:
+        #   1. Call: await orchestrate_pipeline(task_id)
+        #   2. Handle YouTubeAuthError (Story 7.2) - mark as UPLOAD_ERROR, skip retry
+        #   3. Handle other exceptions - classify as retriable/non-retriable (AC10)
+        #   4. Decrement task counters in finally block
+        # For now, this is a placeholder that immediately marks tasks as completed.
 
-                    # Log failure with priority context (Story 4.3)
-                    log.error(
-                        "task_failed",
-                        worker_id=worker_id,
-                        task_id=task_id,
-                        priority=task.priority,  # Story 4.3: Include priority in error log
-                        error=str(e),
-                        is_retriable=is_retriable,
-                    )
-            raise
-        finally:
-            # Decrement task counters for tracked API types
-            # (Story 4.5: video, Story 4.6: asset/audio)
-            if required_api == "kling":
-                worker_state.decrement_video_tasks()
-            elif required_api == "gemini":
-                worker_state.decrement_asset_tasks()
-            elif required_api == "elevenlabs":
-                worker_state.decrement_audio_tasks()
+        # Decrement task counters for tracked API types
+        # (Story 4.5: video, Story 4.6: asset/audio)
+        if required_api == "kling":
+            worker_state.decrement_video_tasks()
+        elif required_api == "gemini":
+            worker_state.decrement_asset_tasks()
+        elif required_api == "elevenlabs":
+            worker_state.decrement_audio_tasks()
 
-        # Step 3b: Update status to completed (short transaction)
+        # Step 3: Update status to completed (short transaction)
         # NOTE: This is placeholder code - in production, workers handle status transitions
         async with AsyncSessionLocal() as db:  # type: ignore[misc]
             task = await db.get(Task, task_id)

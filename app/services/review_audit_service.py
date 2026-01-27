@@ -422,23 +422,23 @@ class ReviewAuditService:
 
         # Format for compliance export
         export_data = []
-        for log in logs:
+        for audit_log in logs:
             export_data.append(
                 {
-                    "audit_log_id": str(log.id),
-                    "task_id": str(log.task_id),
-                    "channel_id": str(log.channel_id),
-                    "action_type": log.action_type,
-                    "action_status": log.action_status,
+                    "audit_log_id": str(audit_log.id),
+                    "task_id": str(audit_log.task_id),
+                    "channel_id": str(audit_log.channel_id),
+                    "action_type": audit_log.action_type,
+                    "action_status": audit_log.action_status,
                     "reviewer": {
-                        "user_id": log.reviewer_user_id,
-                        "name": log.reviewer_name,
-                        "email": log.reviewer_email,
+                        "user_id": audit_log.reviewer_user_id,
+                        "name": audit_log.reviewer_name,
+                        "email": audit_log.reviewer_email,
                     },
-                    "action_timestamp": log.action_timestamp.isoformat(),
-                    "reason": log.reason,
-                    "affected_clip_numbers": log.affected_clip_numbers,
-                    "correlation_id": log.correlation_id,
+                    "action_timestamp": audit_log.action_timestamp.isoformat(),
+                    "reason": audit_log.reason,
+                    "affected_clip_numbers": audit_log.affected_clip_numbers,
+                    "correlation_id": audit_log.correlation_id,
                 }
             )
 

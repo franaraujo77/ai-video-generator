@@ -21,7 +21,7 @@ class ComplianceViolationError(Exception):
         self,
         message: str,
         violation_type: str | None = None,
-        validation_results: dict | None = None,
+        validation_results: dict[str, bool] | None = None,
     ):
         """Initialize compliance violation error.
 

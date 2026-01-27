@@ -91,7 +91,12 @@
       "mcp__plugin_context7_context7__query-docs",
       "WebFetch(domain:developers.notion.com)",
       "WebFetch(domain:developers.google.com)",
-      "WebFetch(domain:support.google.com)"
+      "WebFetch(domain:support.google.com)",
+      "mcp__github__get_pull_request_status",
+      "mcp__github__list_issues",
+      "Bash(for file in app/services/task_service.py app/services/youtube_error_handler.py app/services/youtube_uploader.py app/services/youtube_uploader_integration.py)",
+      "Bash(do)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []

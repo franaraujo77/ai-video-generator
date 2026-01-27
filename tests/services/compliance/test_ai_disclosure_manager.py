@@ -106,7 +106,7 @@ class TestEdgeCases:
         """Test validation when video not found in API response."""
         mock_youtube_service.videos().list().execute.return_value = {"items": []}
 
-        with pytest.raises(ValueError, match="Video .* not found"):
+        with pytest.raises(ValueError, match="Video .* not found"):  # noqa: RUF043
             disclosure_manager.validate_disclosure_set("nonexistent_video", mock_youtube_service)
 
     def test_validate_disclosure_malformed_response(self, disclosure_manager, mock_youtube_service):

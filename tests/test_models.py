@@ -356,11 +356,11 @@ async def test_channel_bulk_create(async_session):
 
 @pytest.mark.asyncio
 async def test_taskstatus_enum_has_26_values():
-    """Test that TaskStatus enum contains exactly 27 status values (26 original + CANCELLED).
+    """Test that TaskStatus enum contains exactly 29 status values (27 + Epic 7 additions).
 
-    NOTE: Test name kept as 26 for backward compatibility but validates 27 statuses.
+    NOTE: Test name kept as 26 for backward compatibility but validates 29 statuses.
     """
-    # AC1: Verify all 27 statuses exist (updated in code review)
+    # AC1: Verify all 29 statuses exist (updated in Epic 7)
     expected_statuses = {
         # Initial states (4 - added CANCELLED)
         "draft",
@@ -391,19 +391,21 @@ async def test_taskstatus_enum_has_26_values():
         # Assembly phase (2)
         "assembling",
         "assembly_ready",
-        # Final phase (5)
+        # Final phase (7 - added 2 in Epic 7)
         "final_review",
         "approved",
         "uploading",
         "published",
         "upload_error",
+        "upload_error_retrying",  # Story 7.6 - retry mechanism
+        "compliance_violation",  # Story 7.7 - compliance enforcement
     }
 
     # Get all enum values
     actual_statuses = {status.value for status in TaskStatus}
 
-    # Verify count and content (updated to 27 after code review)
-    assert len(actual_statuses) == 27, f"Expected 27 statuses, found {len(actual_statuses)}"
+    # Verify count and content (updated to 29 in Epic 7)
+    assert len(actual_statuses) == 29, f"Expected 29 statuses, found {len(actual_statuses)}"
     assert actual_statuses == expected_statuses
 
 
@@ -831,9 +833,9 @@ async def test_cancellation_from_final_review(async_session):
 
 @pytest.mark.asyncio
 async def test_taskstatus_enum_has_27_values():
-    """Test that TaskStatus enum has exactly 27 values (including CANCELLED)."""
-    # AC1: 27 statuses defined (26 original + CANCELLED)
-    assert len(TaskStatus) == 27, f"Expected 27 statuses, got {len(TaskStatus)}"
+    """Test that TaskStatus enum has exactly 29 values (27 + Epic 7 additions)."""
+    # AC1: 29 statuses defined (27 + upload_error_retrying + compliance_violation)
+    assert len(TaskStatus) == 29, f"Expected 29 statuses, got {len(TaskStatus)}"
 
 
 @pytest.mark.asyncio

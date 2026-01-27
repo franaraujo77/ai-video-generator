@@ -10,8 +10,9 @@ All dimensions must exceed 70% uniqueness threshold.
 
 from difflib import SequenceMatcher
 from pathlib import Path
+from typing import Any
 
-import imagehash
+import imagehash  # type: ignore[import-not-found, unused-ignore]
 import structlog
 from PIL import Image
 
@@ -41,12 +42,16 @@ class ContentUniquenessValidator:
     demonstrate uniqueness to avoid "inauthentic content" demonetization.
     """
 
-    def validate_video_uniqueness(self, video_metadata: dict, recent_videos: list[dict]) -> dict:
+    def validate_video_uniqueness(
+        self, video_metadata: dict[str, Any], recent_videos: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Validate video against duplicate content requirements.
 
         Args:
-            video_metadata: Current video metadata with thumbnail_path, story_script, title, description, tags
-            recent_videos: List of recent channel uploads (last 20-30 videos) for comparison
+            video_metadata: Current video metadata with thumbnail_path, story_script,
+                title, description, tags
+            recent_videos: List of recent channel uploads (last 20-30 videos)
+                for comparison
 
         Returns:
             Dict with validation results:
@@ -107,7 +112,9 @@ class ContentUniquenessValidator:
 
         return {"passes": passes_all, "scores": scores, "overall_score": overall_score}
 
-    def check_visual_variation(self, video_metadata: dict, recent_videos: list[dict]) -> float:
+    def check_visual_variation(
+        self, video_metadata: dict[str, Any], recent_videos: list[dict[str, Any]]
+    ) -> float:
         """Compare visual elements against recent uploads using perceptual hashing.
 
         Analyzes:
@@ -174,7 +181,8 @@ class ContentUniquenessValidator:
                         skipping=True,
                     )
                     continue
-            except Exception:
+            except Exception as e:
+                log.debug("thumbnail_size_check_failed", path=recent_thumbnail, error=str(e))
                 continue  # Skip if we can't check size
 
             try:
@@ -197,11 +205,13 @@ class ContentUniquenessValidator:
             return 1.0  # No valid comparisons - assume unique
 
         # Average dissimilarity (1 - similarity)
-        uniqueness_score = 1 - (sum(similarity_scores) / len(similarity_scores))
+        uniqueness_score: float = 1 - (sum(similarity_scores) / len(similarity_scores))
 
         return uniqueness_score
 
-    def check_story_uniqueness(self, video_metadata: dict, recent_videos: list[dict]) -> float:
+    def check_story_uniqueness(
+        self, video_metadata: dict[str, Any], recent_videos: list[dict[str, Any]]
+    ) -> float:
         """Validate narrative originality using story structure fingerprinting.
 
         Analyzes:
@@ -243,7 +253,7 @@ class ContentUniquenessValidator:
 
         return uniqueness_score
 
-    def extract_story_structure(self, story_script: str | dict) -> list[str]:
+    def extract_story_structure(self, story_script: str | dict[str, Any]) -> list[str]:
         """Extract story fingerprint from narrative content.
 
         Returns:
@@ -316,7 +326,9 @@ class ContentUniquenessValidator:
 
         return similarity
 
-    def check_metadata_variation(self, video_metadata: dict, recent_videos: list[dict]) -> float:
+    def check_metadata_variation(
+        self, video_metadata: dict[str, Any], recent_videos: list[dict[str, Any]]
+    ) -> float:
         """Ensure metadata diversity across title, description, and tags.
 
         Args:

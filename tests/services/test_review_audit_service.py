@@ -80,7 +80,7 @@ class TestLogReviewAction:
             channel_id=sample_task.channel_id,
             action_type="approve",
             action_status="video_approved",
-            reviewer_user_id="notion-user-123",
+            reviewer_user_id="a1b2c3d4-e5f6-4789-a012-123456789abc",
             reviewer_name="John Doe",
             reviewer_email="john@example.com",
             correlation_id="test-correlation-123",
@@ -93,7 +93,7 @@ class TestLogReviewAction:
         assert audit_entry.channel_id == sample_task.channel_id
         assert audit_entry.action_type == "approve"
         assert audit_entry.action_status == "video_approved"
-        assert audit_entry.reviewer_user_id == "notion-user-123"
+        assert audit_entry.reviewer_user_id == "a1b2c3d4-e5f6-4789-a012-123456789abc"
         assert audit_entry.reviewer_name == "John Doe"
         assert audit_entry.reviewer_email == "john@example.com"
         assert audit_entry.reason is None  # Approvals don't have reasons
@@ -115,7 +115,7 @@ class TestLogReviewAction:
             channel_id=sample_task.channel_id,
             action_type="reject",
             action_status="video_error",
-            reviewer_user_id="notion-user-456",
+            reviewer_user_id="b2c3d4e5-f6a7-4890-b123-234567890bcd",
             reviewer_name="Jane Smith",
             reviewer_email="jane@example.com",
             reason="Low video quality in clips 5, 12",
@@ -143,7 +143,7 @@ class TestLogReviewAction:
             channel_id=sample_task.channel_id,
             action_type="reject",
             action_status="audio_error",
-            reviewer_user_id="notion-user-789",
+            reviewer_user_id="c3d4e5f6-a7b8-4901-c234-345678901cde",
             reviewer_name="Bob Johnson",
             reason="Audio quality issues",
             affected_clip_numbers=[3, 7, 12],
@@ -168,7 +168,7 @@ class TestLogReviewAction:
             channel_id=sample_task.channel_id,
             action_type="bulk_approve",
             action_status="video_approved",
-            reviewer_user_id="notion-user-bulk",
+            reviewer_user_id="d4e5f6a7-b8c9-4012-d345-456789012def",
             reviewer_name="Bulk Reviewer",
         )
         await async_session.commit()
@@ -205,7 +205,7 @@ class TestLogReviewAction:
             channel_id=sample_task.channel_id,
             action_type="approve",
             action_status="video_approved",
-            reviewer_user_id="test-user",
+            reviewer_user_id="e5f6a7b8-c9d0-4123-e456-567890123efa",
         )
         await async_session.commit()
 
@@ -393,8 +393,10 @@ class TestGetChannelAuditLogs:
 
         # Verify only entries within 2-year window returned
         assert len(logs) == 2
-        assert logs[0].action_timestamp >= date_from  # Most recent (DESC order)
-        assert logs[1].action_timestamp >= date_from
+        # SQLite stores datetimes as naive, so compare without timezone
+        date_from_naive = date_from.replace(tzinfo=None)
+        assert logs[0].action_timestamp >= date_from_naive  # Most recent (DESC order)
+        assert logs[1].action_timestamp >= date_from_naive
 
 
 class TestGetReviewerAuditLogs:
@@ -414,7 +416,7 @@ class TestGetReviewerAuditLogs:
             channel_id=sample_task.channel_id,
             action_type="approve",
             action_status="video_approved",
-            reviewer_user_id="reviewer-1",
+            reviewer_user_id="f6a7b8c9-d0e1-4234-f567-678901234fab",
             reviewer_name="Reviewer One",
         )
 
@@ -425,17 +427,19 @@ class TestGetReviewerAuditLogs:
             channel_id=sample_task.channel_id,
             action_type="reject",
             action_status="audio_error",
-            reviewer_user_id="reviewer-2",
+            reviewer_user_id="a7b8c9d0-e1f2-4345-a678-789012345abc",
             reviewer_name="Reviewer Two",
         )
         await async_session.commit()
 
-        # Query logs for reviewer-1 only
-        logs = await audit_service.get_reviewer_audit_logs(async_session, "reviewer-1")
+        # Query logs for reviewer-1 only (using UUID)
+        logs = await audit_service.get_reviewer_audit_logs(
+            async_session, "f6a7b8c9-d0e1-4234-f567-678901234fab"
+        )
 
         # Verify only reviewer-1 logs returned
         assert len(logs) == 1
-        assert logs[0].reviewer_user_id == "reviewer-1"
+        assert logs[0].reviewer_user_id == "f6a7b8c9-d0e1-4234-f567-678901234fab"
         assert logs[0].action_type == "approve"
 
 
@@ -456,7 +460,7 @@ class TestExportAuditLogsForCompliance:
             channel_id=sample_task.channel_id,
             action_type="approve",
             action_status="video_approved",
-            reviewer_user_id="reviewer-compliance",
+            reviewer_user_id="b8c9d0e1-f2a3-4456-b789-890123456bcd",
             reviewer_name="Compliance Reviewer",
             reviewer_email="compliance@example.com",
         )
@@ -479,7 +483,7 @@ class TestExportAuditLogsForCompliance:
         assert "action_type" in entry
         assert entry["action_type"] == "approve"
         assert "reviewer" in entry
-        assert entry["reviewer"]["user_id"] == "reviewer-compliance"
+        assert entry["reviewer"]["user_id"] == "b8c9d0e1-f2a3-4456-b789-890123456bcd"
         assert entry["reviewer"]["name"] == "Compliance Reviewer"
         assert entry["reviewer"]["email"] == "compliance@example.com"
         assert "action_timestamp" in entry
@@ -532,7 +536,7 @@ class TestImmutability:
             channel_id=sample_task.channel_id,
             action_type="approve",
             action_status="video_approved",
-            reviewer_user_id="test-user-123",
+            reviewer_user_id="c9d0e1f2-a3b4-4567-c890-901234567cde",
             reviewer_name="Test User",
         )
         await async_session.commit()
@@ -585,7 +589,7 @@ class TestImmutability:
             channel_id=sample_task.channel_id,
             action_type="approve",
             action_status="video_approved",
-            reviewer_user_id="test-user-456",
+            reviewer_user_id="d0e1f2a3-b4c5-4678-d901-012345678def",
         )
         await async_session.commit()
         entry_id = audit_entry.id

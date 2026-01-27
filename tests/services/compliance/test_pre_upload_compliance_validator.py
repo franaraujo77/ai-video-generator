@@ -26,7 +26,7 @@ def mock_task():
     task.channel_id = uuid4()
     task.story_direction = "Pikachu explores forest and hunts for food"
     task.metadata = {
-        "thumbnail_path": "/tmp/test.png",
+        "thumbnail_path": "/tmp/test.png",  # noqa: S108
         "title": "Pikachu Forest Adventure",
         "description": "Nature documentary",
         "tags": ["pokemon", "nature"],
@@ -52,7 +52,7 @@ def video_metadata():
         "title": "Pikachu's Forest Adventure",
         "description": "Pokemon nature documentary",
         "tags": ["pokemon", "nature", "forest"],
-        "thumbnail_path": "/tmp/test.png",
+        "thumbnail_path": "/tmp/test.png",  # noqa: S108
         "story_script": "Pikachu explores forest",
     }
 
@@ -211,8 +211,8 @@ class TestTaskConversion:
         task.id = uuid4()
         task.story_direction = "Pikachu hunts insects"
         task.metadata = {
-            "thumbnail_path": "/tmp/thumb.png",
-            "composite_path": "/tmp/comp.png",
+            "thumbnail_path": "/tmp/thumb.png",  # noqa: S108
+            "composite_path": "/tmp/comp.png",  # noqa: S108
             "title": "Pikachu Documentary",
             "description": "Nature film",
             "tags": ["pokemon"],
@@ -224,7 +224,7 @@ class TestTaskConversion:
         # Verify field mapping (especially story_direction -> story_script fix)
         assert result["story_script"] == "Pikachu hunts insects"
         assert result["title"] == "Pikachu Documentary"
-        assert result["thumbnail_path"] == "/tmp/thumb.png"
+        assert result["thumbnail_path"] == "/tmp/thumb.png"  # noqa: S108
         assert "uploaded_at" in result
 
     def test_task_to_upload_dict(self, validator):
@@ -251,7 +251,7 @@ class TestEdgeCases:
         # Mock no recent uploads
         mock_db.execute.return_value.scalars.return_value.all.return_value = []
 
-        with pytest.raises(ValueError, match="Channel .* not found"):
+        with pytest.raises(ValueError, match="Channel .* not found"):  # noqa: RUF043
             await validator.validate_before_upload(mock_task, video_metadata, mock_db)
 
     @pytest.mark.asyncio

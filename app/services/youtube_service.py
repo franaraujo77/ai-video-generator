@@ -39,7 +39,8 @@ References:
 """
 
 import asyncio
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+from typing import Any, ClassVar
 
 import structlog
 from google.auth.exceptions import RefreshError
@@ -104,8 +105,8 @@ class YouTubeService:
     """
 
     # Class-level cache (shared across all instances)
-    _credentials_cache: dict[str, Credentials] = {}
-    _cache_lock = asyncio.Lock()
+    _credentials_cache: ClassVar[dict[str, Credentials]] = {}
+    _cache_lock: ClassVar[asyncio.Lock] = asyncio.Lock()
 
     # Proactive refresh window: Refresh tokens 5 minutes before expiry
     # to prevent race conditions where token expires during API call
@@ -163,10 +164,10 @@ class YouTubeService:
                 raise YouTubeAuthError(f"No YouTube credentials found for channel {channel_id}")
 
             # Create Credentials object
-            creds = Credentials(
+            creds = Credentials(  # type: ignore[no-untyped-call, unused-ignore]
                 token=None,  # Will be populated on first refresh
                 refresh_token=refresh_token,
-                token_uri="https://oauth2.googleapis.com/token",
+                token_uri="https://oauth2.googleapis.com/token",  # noqa: S106
                 client_id=self.client_id,
                 client_secret=self.client_secret,
                 scopes=[
@@ -212,7 +213,7 @@ class YouTubeService:
             or (  # Expires soon (proactive refresh window)
                 creds.expiry
                 and creds.expiry
-                < datetime.now(UTC).replace(tzinfo=None)
+                < datetime.now(timezone.utc).replace(tzinfo=None)
                 + timedelta(minutes=self.PROACTIVE_REFRESH_WINDOW_MINUTES)
             )
         )
@@ -263,7 +264,7 @@ class YouTubeService:
             raise YouTubeAuthError(
                 f"YouTube refresh token invalid for channel {channel_id}. "
                 f"Re-authorization required."
-            )
+            ) from e
 
         except (ConnectionError, Timeout, RequestException) as e:
             # Network error during refresh (transient failure, retryable)
@@ -297,7 +298,7 @@ class YouTubeService:
             # Re-raise for caller to handle
             raise
 
-    async def build_youtube_client(self, channel_id: str, db: AsyncSession):
+    async def build_youtube_client(self, channel_id: str, db: AsyncSession) -> Any:
         """Build YouTube Data API v3 client with valid credentials.
 
         This is a convenience method that gets credentials and builds the YouTube

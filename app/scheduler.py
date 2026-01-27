@@ -17,12 +17,18 @@ Usage:
 """
 
 import os
-from datetime import datetime
+from collections.abc import Awaitable, Callable
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.asyncio import (  # type: ignore[import-untyped, import-not-found, unused-ignore]
+    AsyncIOScheduler,
+)
+from apscheduler.triggers.cron import (  # type: ignore[import-untyped, import-not-found, unused-ignore]
+    CronTrigger,
+)
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
 from app.services.quota_reset_service import reset_gemini_quotas, reset_youtube_quotas
@@ -39,12 +45,12 @@ _scheduler: AsyncIOScheduler | None = None
 
 async def _reset_quota_job(
     service_name: str,
-    reset_func,
+    reset_func: Callable[[date, AsyncSession], Awaitable[int]],
     quota_table: str,
     usage_field: str,
     daily_limit: int,
     exhausted_flag: str,
-):
+) -> None:
     """Generic scheduled job to reset API quotas at midnight Pacific Time.
 
     This is a DRY refactor to eliminate code duplication between YouTube and Gemini jobs.
@@ -59,17 +65,15 @@ async def _reset_quota_job(
 
     Error Handling:
         - Catches all exceptions
-        - Sends CRITICAL Discord alert on failure
-        - Includes manual fallback SQL commands in alert
+        - Logs CRITICAL error with manual fallback SQL commands
+        - TODO: Send Discord alert on failure (Story 8.x)
     """
-    from app.services.alert_service import send_alert
-
     # Get today's date in Pacific timezone
     pacific_tz = ZoneInfo(QUOTA_TIMEZONE)
     today = datetime.now(pacific_tz).date()
 
     # Create database session
-    async with AsyncSessionLocal() as db:
+    async with AsyncSessionLocal() as db:  # type: ignore[misc]
         try:
             reset_count = await reset_func(today, db)
             log.info(
@@ -87,39 +91,28 @@ async def _reset_quota_job(
                 exc_info=True,
             )
 
-            # Send CRITICAL Discord alert with fallback instructions
-            alert_message = (
-                f"🚨 **CRITICAL: {service_name.title()} Quota Reset Job Failed**\n\n"
-                f"**Service:** {service_name}\n"
-                f"**Date:** {today}\n"
-                f"**Timezone:** {QUOTA_TIMEZONE}\n"
-                f"**Error:** {e!s}\n\n"
-                f"**Manual Fallback Instructions:**\n"
-                f"Run this SQL to manually reset {service_name.title()} quotas:\n"
-                f"```sql\n"
-                f"-- Reset {service_name.title()} quotas for all active channels\n"
-                f"INSERT INTO {quota_table} (channel_id, date, {usage_field}, daily_limit)\n"
-                f"SELECT id, '{today}', 0, {daily_limit}\n"
-                f"FROM channels WHERE is_active = true\n"
-                f"ON CONFLICT (channel_id, date) DO NOTHING;\n\n"
-                f"UPDATE channels SET {exhausted_flag} = false WHERE is_active = true;\n"
-                f"```\n"
+            # Log CRITICAL error with manual fallback instructions
+            # TODO: Send Discord alert (Story 8.x)
+            log.critical(
+                f"{service_name}_quota_reset_requires_manual_intervention",
+                service=service_name,
+                date=str(today),
+                timezone=QUOTA_TIMEZONE,
+                manual_sql=(
+                    f"-- Reset {service_name.title()} quotas for all active channels\n"
+                    f"INSERT INTO {quota_table} (channel_id, date, {usage_field}, daily_limit)\n"
+                    f"SELECT id, '{today}', 0, {daily_limit}\n"
+                    f"FROM channels WHERE is_active = true\n"
+                    f"ON CONFLICT (channel_id, date) DO NOTHING;\n"
+                    f"UPDATE channels SET {exhausted_flag} = false WHERE is_active = true;"
+                ),
             )
 
-            try:
-                await send_alert(alert_message, severity="CRITICAL")
-            except Exception as alert_error:
-                log.error(
-                    "failed_to_send_quota_reset_alert",
-                    alert_error=str(alert_error),
-                    original_error=str(e),
-                )
-
             # Don't re-raise to prevent scheduler crash
-            # Alert sent, manual intervention required
+            # Manual intervention required
 
 
-async def _reset_youtube_quotas_job():
+async def _reset_youtube_quotas_job() -> None:
     """Scheduled job to reset YouTube quotas at midnight Pacific Time."""
     await _reset_quota_job(
         service_name="youtube",
@@ -131,7 +124,7 @@ async def _reset_youtube_quotas_job():
     )
 
 
-async def _reset_gemini_quotas_job():
+async def _reset_gemini_quotas_job() -> None:
     """Scheduled job to reset Gemini quotas at midnight Pacific Time."""
     await _reset_quota_job(
         service_name="gemini",
@@ -143,7 +136,7 @@ async def _reset_gemini_quotas_job():
     )
 
 
-async def start_quota_reset_scheduler():
+async def start_quota_reset_scheduler() -> None:
     """Start APScheduler with daily quota reset jobs.
 
     Registers two jobs:
@@ -199,7 +192,7 @@ async def start_quota_reset_scheduler():
     )
 
 
-def shutdown_quota_reset_scheduler():
+def shutdown_quota_reset_scheduler() -> None:
     """Gracefully shut down the quota reset scheduler.
 
     Stops the scheduler and waits for running jobs to complete.
@@ -215,7 +208,17 @@ def shutdown_quota_reset_scheduler():
         log.warning("quota_reset_scheduler_not_running")
         return
 
-    _scheduler.shutdown(wait=True)
+    try:
+        _scheduler.shutdown(wait=True)
+    except RuntimeError as e:
+        # Handle "Event loop is closed" error during test teardown
+        if "Event loop is closed" in str(e):
+            log.debug("scheduler_shutdown_event_loop_closed", error=str(e))
+        else:
+            raise
+    finally:
+        _scheduler = None
+
     log.info("quota_reset_scheduler_shutdown")
 
 

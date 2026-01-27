@@ -29,8 +29,8 @@ import re
 
 import structlog
 from aiolimiter import AsyncLimiter
-from notion_client import AsyncClient
-from notion_client.errors import APIResponseError
+from notion_client import AsyncClient  # type: ignore[import-not-found, unused-ignore]
+from notion_client.errors import APIResponseError  # type: ignore[import-not-found, unused-ignore]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import FallbackYouTubeURL, Task
@@ -136,7 +136,8 @@ async def sync_youtube_url_to_notion(
         NotionSyncRetryError: Transient failure (rate limit, conflict, service unavailable)
 
     Error Handling:
-        - Permanent errors (4xx auth/validation): Store fallback URL, send alert, raise NotionSyncError
+        - Permanent errors (4xx auth/validation): Store fallback URL, send alert,
+          raise NotionSyncError
         - Transient errors (429/409/503): Log warning, raise NotionSyncRetryError for retry
         - Unknown errors: Store fallback URL, send alert, raise NotionSyncError
 
@@ -163,7 +164,7 @@ async def sync_youtube_url_to_notion(
 
         # Get Notion API token (decrypted from database)
         credential_service = CredentialService()
-        notion_token = await credential_service.get_notion_token(task.channel_id, db)
+        notion_token = await credential_service.get_notion_token(str(task.channel_id), db)
 
         if not notion_token:
             log.error(
@@ -197,7 +198,7 @@ async def sync_youtube_url_to_notion(
         # Update Notion page with rate limiting (3 req/sec)
         # CRITICAL: AsyncLimiter context manager enforces rate limit
         async with rate_limiter:
-            response = await notion.pages.update(
+            await notion.pages.update(
                 page_id=task.notion_page_id,
                 properties=properties,
             )
@@ -343,12 +344,12 @@ async def store_fallback_url(
                 alert_type="terminal_failure",
                 severity="CRITICAL",
                 title="🚨 YouTube URL Sync Failed",
-                description=f"Notion sync failed for task {task.id}. URL stored in fallback table for manual recovery.",
+                description=f"Notion sync failed for task {task.id}. URL stored in fallback table for manual recovery.",  # noqa: E501
                 fields={
                     "Task ID": str(task.id),
                     "Video ID": video_id,
                     "Fallback ID": str(fallback.id),
-                    "Recovery Instructions": f"Use Story 6.7 manual retry trigger with task_id={task.id}",
+                    "Recovery Instructions": f"Use Story 6.7 manual retry trigger with task_id={task.id}",  # noqa: E501
                 },
                 webhook_url=webhook_url,
                 correlation_id=task.id,

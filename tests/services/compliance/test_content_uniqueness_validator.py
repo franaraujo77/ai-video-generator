@@ -21,7 +21,7 @@ def validator():
 def video_metadata():
     """Sample video metadata for testing."""
     return {
-        "thumbnail_path": "/tmp/test_thumbnail.png",
+        "thumbnail_path": "/tmp/test_thumbnail.png",  # noqa: S108
         "story_script": {
             "clips": [
                 {"description": "Pikachu feeds on berries in forest"},
@@ -41,7 +41,7 @@ def recent_videos():
     return [
         {
             "id": "video1",
-            "thumbnail_path": "/tmp/video1_thumbnail.png",
+            "thumbnail_path": "/tmp/video1_thumbnail.png",  # noqa: S108
             "story_script": {
                 "clips": [
                     {"description": "Charizard flies over mountains"},

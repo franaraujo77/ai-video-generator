@@ -89,7 +89,7 @@ class ChannelCapacityService:
                 ),
             )
             .outerjoin(Task, Channel.id == Task.channel_id)
-            .where(Channel.is_active == True)  # noqa: E712 - SQLAlchemy needs ==
+            .where(Channel.is_active == True)  # noqa: E712
             .group_by(Channel.channel_id, Channel.channel_name, Channel.max_concurrent)
         )
 

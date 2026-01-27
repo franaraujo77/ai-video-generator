@@ -25,9 +25,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import pytz
+import pytz  # type: ignore[import-untyped]
 import structlog
-from google.api_core.exceptions import GoogleAPIError
+from google.api_core.exceptions import (  # type: ignore[import-not-found, unused-ignore]
+    GoogleAPIError,
+)
 from googleapiclient.errors import HttpError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -386,7 +388,7 @@ async def handle_youtube_upload_error(
                 alert_type="quota_exhausted",
                 severity="WARNING",
                 title="⚠️ YouTube Quota Exceeded",
-                description=f"Task **{task.id}** hit YouTube quota limit. Uploads paused until quota resets at midnight PST.",
+                description=f"Task **{task.id}** hit YouTube quota limit. Uploads paused until quota resets at midnight PST.",  # noqa: E501
                 fields={
                     "Task ID": str(task.id),
                     "Channel ID": str(task.channel_id),
@@ -395,7 +397,7 @@ async def handle_youtube_upload_error(
                     "Action": "Uploads paused until midnight PST",
                 },
                 webhook_url=webhook_url,
-                correlation_id=str(task.id),
+                correlation_id=task.id,
             )
 
         log.warning(
@@ -428,7 +430,7 @@ async def handle_youtube_upload_error(
                 alert_type="terminal_failure",
                 severity="CRITICAL",
                 title="🚨 YouTube Upload Permanent Error",
-                description=f"Task **{task.id}** failed with permanent error. Manual intervention required.",
+                description=f"Task **{task.id}** failed with permanent error. Manual intervention required.",  # noqa: E501
                 fields={
                     "Task ID": str(task.id),
                     "Error Code": str(youtube_error.status_code),
@@ -437,7 +439,7 @@ async def handle_youtube_upload_error(
                     "Action": "Manual intervention required - fix metadata or request",
                 },
                 webhook_url=webhook_url,
-                correlation_id=str(task.id),
+                correlation_id=task.id,
             )
 
         log.error(
@@ -473,7 +475,7 @@ async def handle_youtube_upload_error(
                     alert_type="terminal_failure",
                     severity="CRITICAL",
                     title="🚨 YouTube Upload Retry Exhausted",
-                    description=f"Task **{task.id}** failed after **{MAX_RETRIES}** retries. Manual intervention required.",
+                    description=f"Task **{task.id}** failed after **{MAX_RETRIES}** retries. Manual intervention required.",  # noqa: E501
                     fields={
                         "Task ID": str(task.id),
                         "Error Code": str(youtube_error.status_code),
@@ -482,7 +484,7 @@ async def handle_youtube_upload_error(
                         "Action": "Manual intervention required - check YouTube API status",
                     },
                     webhook_url=webhook_url,
-                    correlation_id=str(task.id),
+                    correlation_id=task.id,
                 )
 
             log.error(
