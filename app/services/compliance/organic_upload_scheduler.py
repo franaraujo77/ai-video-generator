@@ -148,8 +148,21 @@ class OrganicUploadScheduler:
         # Add stagger variance (human-like randomness)
         next_slot = self.add_stagger_variance(next_slot, limits["stagger_variance_hours"])
 
-        # Rotate time of day to avoid predictable patterns
-        next_slot = self.vary_time_of_day(next_slot, recent_uploads)
+        # Calculate minimum time constraint for vary_time_of_day
+        # Must not schedule before minimum spacing from last upload
+        minimum_time = next_slot  # Use the calculated slot as minimum
+        if recent_uploads:
+            last_upload_time = recent_uploads[0].get("uploaded_at", datetime.min)
+            if isinstance(last_upload_time, str):
+                last_upload_time = datetime.fromisoformat(last_upload_time.replace("Z", "+00:00"))
+            if last_upload_time.tzinfo is None:
+                last_upload_time = last_upload_time.replace(tzinfo=timezone.utc)
+            minimum_time = max(
+                minimum_time, last_upload_time + timedelta(hours=limits["min_hours_between"])
+            )
+
+        # Rotate time of day to avoid predictable patterns (respecting minimum constraint)
+        next_slot = self.vary_time_of_day(next_slot, recent_uploads, minimum_time=minimum_time)
 
         log.info(
             "upload_scheduled",
@@ -182,7 +195,10 @@ class OrganicUploadScheduler:
         return adjusted_time
 
     def vary_time_of_day(
-        self, base_time: datetime, recent_uploads: list[dict[str, Any]]
+        self,
+        base_time: datetime,
+        recent_uploads: list[dict[str, Any]],
+        minimum_time: datetime | None = None,
     ) -> datetime:
         """Rotate upload times to avoid predictable patterns.
 
@@ -195,9 +211,10 @@ class OrganicUploadScheduler:
         Args:
             base_time: Proposed upload time
             recent_uploads: Recent uploads for pattern analysis
+            minimum_time: Optional minimum time constraint (e.g., from spacing requirement)
 
         Returns:
-            Adjusted datetime in least-used time window
+            Adjusted datetime in least-used time window (respecting minimum_time constraint)
         """
         # Extract hour-of-day from recent uploads
         recent_hours = []
@@ -237,6 +254,12 @@ class OrganicUploadScheduler:
         # If adjusted time is in the past, move to next day
         now = datetime.now(timezone.utc)
         if adjusted_time < now:
+            adjusted_time += timedelta(days=1)
+
+        # Respect minimum time constraint (e.g., from spacing requirement)
+        if minimum_time and adjusted_time < minimum_time:
+            # Time window selection moved time earlier than allowed
+            # Move to next day and keep the same time window
             adjusted_time += timedelta(days=1)
 
         return adjusted_time

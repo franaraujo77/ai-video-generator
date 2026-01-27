@@ -141,14 +141,20 @@ class TestMinimumSpacingEnforcement:
 
     def test_minimum_spacing_enforced_new_channel(self, scheduler, new_channel_config):
         """Test 6-hour minimum spacing for new channel."""
-        # Last upload was 3 hours ago (below 6-hour minimum)
-        recent_uploads = [{"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=3)}]
+        # Use fixed reference time to avoid timing variance
+        now = datetime.now(timezone.utc)
+        last_upload_time = now - timedelta(hours=3)  # 3 hours ago
+        recent_uploads = [{"uploaded_at": last_upload_time}]
 
         scheduled_time = scheduler.schedule_upload({}, new_channel_config, recent_uploads)
 
         # Should schedule at least 6 hours from last upload
-        hours_from_now = (scheduled_time - datetime.now(timezone.utc)).total_seconds() / 3600
-        assert hours_from_now >= 2.5  # Still need ~3 more hours (allow variance)
+        # Time window selection may adjust the time within the day
+        hours_from_last = (scheduled_time - last_upload_time).total_seconds() / 3600
+        # Check constraint: minimum 6 hours from last upload (allow small variance)
+        assert hours_from_last >= 5.8, (
+            f"Expected >= 5.8 hours from last upload, got {hours_from_last:.2f}"
+        )
 
     def test_minimum_spacing_met_new_channel(self, scheduler, new_channel_config):
         """Test upload allowed when spacing requirement met."""
@@ -165,14 +171,19 @@ class TestMinimumSpacingEnforcement:
         self, scheduler, established_channel_config
     ):
         """Test 4-hour minimum spacing for established channel."""
-        # Last upload was 2 hours ago (below 4-hour minimum)
-        recent_uploads = [{"uploaded_at": datetime.now(timezone.utc) - timedelta(hours=2)}]
+        # Use fixed reference time to avoid timing variance
+        now = datetime.now(timezone.utc)
+        last_upload_time = now - timedelta(hours=2)  # 2 hours ago
+        recent_uploads = [{"uploaded_at": last_upload_time}]
 
         scheduled_time = scheduler.schedule_upload({}, established_channel_config, recent_uploads)
 
         # Should schedule at least 4 hours from last upload
-        hours_from_now = (scheduled_time - datetime.now(timezone.utc)).total_seconds() / 3600
-        assert hours_from_now >= 1.5  # Still need ~2 more hours (allow variance)
+        hours_from_last = (scheduled_time - last_upload_time).total_seconds() / 3600
+        # Check constraint: minimum 4 hours from last upload (allow small variance)
+        assert hours_from_last >= 3.8, (
+            f"Expected >= 3.8 hours from last upload, got {hours_from_last:.2f}"
+        )
 
 
 class TestStaggerVariance:
@@ -248,8 +259,9 @@ class TestTimeOfDayRotation:
 
         adjusted_time = scheduler.vary_time_of_day(base_time, recent_uploads)
 
-        # Should move to next day since we're already past evening windows
-        if adjusted_time.hour < base_time.hour:
+        # If adjusted time is earlier hour AND base_time is in the past, should be next day
+        # If base_time is in the future, adjusted_time can be earlier hour on same day
+        if adjusted_time.hour < base_time.hour and base_time < datetime.now(timezone.utc):
             assert adjusted_time.date() > base_time.date()
 
 
