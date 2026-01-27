@@ -31,6 +31,7 @@ Usage:
 from pathlib import Path
 
 import aioboto3
+import httpx
 import structlog
 from botocore.exceptions import ClientError
 from tenacity import (
@@ -188,6 +189,31 @@ class R2StorageClient:
 
             # Generate public URL
             public_url = f"https://{self.bucket_name}.r2.dev/{r2_key}"
+
+            # Validate URL is accessible with HEAD request
+            async with httpx.AsyncClient() as client:
+                try:
+                    response = await client.head(public_url, timeout=10.0)
+                    if response.status_code != 200:
+                        log.warning(
+                            "r2_url_validation_failed",
+                            r2_key=r2_key,
+                            public_url=public_url,
+                            status_code=response.status_code,
+                            correlation_id=correlation_id,
+                        )
+                        raise R2StorageError(
+                            f"R2 URL validation failed: HTTP {response.status_code}"
+                        )
+                except httpx.RequestError as e:
+                    log.error(
+                        "r2_url_validation_error",
+                        r2_key=r2_key,
+                        public_url=public_url,
+                        error=str(e),
+                        correlation_id=correlation_id,
+                    )
+                    raise R2StorageError(f"R2 URL validation error: {e}") from e
 
             log.info(
                 "r2_upload_success",

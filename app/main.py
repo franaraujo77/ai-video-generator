@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
 from app.middleware.correlation import CorrelationMiddleware
-from app.routes import admin, asset_urls, cost_reports, webhooks
+from app.routes import admin, asset_urls, cost_reports, r2_config, webhooks
 from app.services.notion_sync import sync_database_to_notion_loop
 from app.utils.logging import configure_structlog
 
@@ -101,6 +101,9 @@ app.include_router(cost_reports.router)
 
 # Register asset URL routes (Story 8.3)
 app.include_router(asset_urls.router)
+
+# Register R2 configuration routes (Story 8.4)
+app.include_router(r2_config.router)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)

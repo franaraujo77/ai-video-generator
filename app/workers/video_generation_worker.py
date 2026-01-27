@@ -55,7 +55,9 @@ import httpx
 
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
+from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
+from app.services.credential_service import CredentialService
 from app.services.video_generation import VideoGenerationService
 from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
@@ -237,6 +239,96 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             failed=result["failed"],
             total_cost_usd=str(result["total_cost_usd"]),
         )
+
+        # Step 2.5: Upload videos to R2 and record URLs (Story 8.4)
+        async with async_session_factory() as db:
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_r2_upload", task_id=str(task_id))
+                return
+
+            await db.refresh(task, ["channel"])
+            channel = task.channel
+            storage_strategy = channel.storage_strategy
+
+            if storage_strategy == "r2":
+                log.info(
+                    "r2_video_upload_start",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    clip_count=len(manifest.clips),
+                )
+
+                # Get R2 client
+                credential_service = CredentialService()
+                try:
+                    r2_client = await credential_service.get_r2_client(
+                        channel.channel_id, db
+                    )
+                except ValueError as e:
+                    log.error(
+                        "r2_client_initialization_failed",
+                        task_id=str(task_id),
+                        error=str(e),
+                    )
+                    storage_strategy = "notion"
+
+                if storage_strategy == "r2":
+                    uploaded_count = 0
+                    for clip in manifest.clips:
+                        if not clip.output_path.exists():
+                            log.warning(
+                                "video_file_missing",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                output_path=str(clip.output_path),
+                            )
+                            continue
+
+                        asset_name = clip.output_path.name
+                        r2_key = f"{channel.channel_id}/{project_id}/videos/{asset_name}"
+
+                        try:
+                            asset_url = await r2_client.upload_asset(
+                                local_file_path=clip.output_path,
+                                r2_key=r2_key,
+                                content_type="video/mp4",
+                            )
+
+                            async with async_session_factory() as db2, db2.begin():
+                                await record_asset_url(
+                                    db=db2,
+                                    task_id=task.id,
+                                    channel_id=channel.id,
+                                    asset_type="video_clip",
+                                    asset_name=asset_name,
+                                    storage_strategy="r2",
+                                    asset_url=asset_url,
+                                    local_file_path=str(clip.output_path),
+                                )
+
+                            uploaded_count += 1
+                            log.info(
+                                "video_uploaded_to_r2",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                asset_url=asset_url,
+                            )
+
+                        except Exception as e:
+                            log.error(
+                                "r2_video_upload_failed",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                error=str(e),
+                            )
+
+                    log.info(
+                        "r2_video_upload_complete",
+                        task_id=str(task_id),
+                        uploaded=uploaded_count,
+                        total=len(manifest.clips),
+                    )
 
         # Step 3: Track costs (short transaction)
         async with async_session_factory() as db, db.begin():

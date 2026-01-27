@@ -50,7 +50,9 @@ from uuid import UUID
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
+from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
+from app.services.credential_service import CredentialService
 from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
 
@@ -151,6 +153,107 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             failed=result["failed"],
             total_cost_usd=result["total_cost_usd"],
         )
+
+        # Step 2.5: Upload assets to R2 and record URLs (Story 8.4)
+        async with async_session_factory() as db:
+            # Get channel to check storage_strategy
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_r2_upload", task_id=str(task_id))
+                return
+
+            await db.refresh(task, ["channel"])
+            channel = task.channel
+            storage_strategy = channel.storage_strategy
+
+            if storage_strategy == "r2":
+                log.info(
+                    "r2_upload_start",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    asset_count=len(manifest.assets),
+                )
+
+                # Get R2 client with decrypted credentials
+                credential_service = CredentialService()
+                try:
+                    r2_client = await credential_service.get_r2_client(
+                        channel.channel_id, db
+                    )
+                except ValueError as e:
+                    log.error(
+                        "r2_client_initialization_failed",
+                        task_id=str(task_id),
+                        error=str(e),
+                    )
+                    # Continue without R2 upload - will fall back to Notion
+                    storage_strategy = "notion"
+
+                if storage_strategy == "r2":
+                    # Upload each asset to R2
+                    uploaded_count = 0
+                    for asset_prompt in manifest.assets:
+                        asset_path = asset_prompt.output_path
+                        if not asset_path.exists():
+                            log.warning(
+                                "asset_file_missing",
+                                task_id=str(task_id),
+                                asset_path=str(asset_path),
+                            )
+                            continue
+
+                        # Determine asset type from directory structure
+                        # Path format: .../assets/{asset_type}/{filename}
+                        asset_type = asset_path.parent.name  # "characters", "environments", etc.
+                        asset_name = asset_path.name
+
+                        # Construct R2 key
+                        r2_key = f"{channel.channel_id}/{project_id}/assets/{asset_type}/{asset_name}"
+
+                        try:
+                            # Upload to R2
+                            asset_url = await r2_client.upload_asset(
+                                local_file_path=asset_path,
+                                r2_key=r2_key,
+                                content_type="image/png",
+                            )
+
+                            # Record asset URL in database (Story 8.3)
+                            async with async_session_factory() as db2, db2.begin():
+                                await record_asset_url(
+                                    db=db2,
+                                    task_id=task.id,
+                                    channel_id=channel.id,
+                                    asset_type=asset_type,
+                                    asset_name=asset_name,
+                                    storage_strategy="r2",
+                                    asset_url=asset_url,
+                                    local_file_path=str(asset_path),
+                                )
+
+                            uploaded_count += 1
+                            log.info(
+                                "asset_uploaded_to_r2",
+                                task_id=str(task_id),
+                                asset_name=asset_name,
+                                asset_url=asset_url,
+                            )
+
+                        except Exception as e:
+                            log.error(
+                                "r2_asset_upload_failed",
+                                task_id=str(task_id),
+                                asset_name=asset_name,
+                                error=str(e),
+                            )
+                            # Continue with next asset - don't fail entire task
+
+                    log.info(
+                        "r2_upload_complete",
+                        task_id=str(task_id),
+                        uploaded=uploaded_count,
+                        total=len(manifest.assets),
+                    )
 
         # Step 3: Track API cost (short transaction) - Story 8.2
         async with async_session_factory() as db, db.begin():

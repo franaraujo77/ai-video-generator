@@ -548,7 +548,7 @@ class CredentialService:
             )
             raise
 
-    async def get_r2_client(self, channel_id: str, db: AsyncSession):
+    async def get_r2_client(self, channel_id: str, db: AsyncSession) -> "R2StorageClient":
         """Get R2 storage client with decrypted credentials (Story 8.4).
 
         Args:

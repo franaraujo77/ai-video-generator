@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_session
 from app.models import AssetMetadata, Channel, Task
 from app.services.asset_url_storage import get_task_assets, get_unsynced_assets
 from app.services.credential_service import CredentialService
@@ -51,7 +51,7 @@ class TaskAssetsResponse(BaseModel):
 async def get_task_asset_urls(
     task_id: UUID,
     asset_type: str | None = Query(None, description="Filter by asset type (character, video_clip, etc.)"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> TaskAssetsResponse:
     """Get all asset URLs for a task, optionally filtered by asset type.
 
@@ -81,7 +81,7 @@ async def get_task_asset_urls(
 @router.get("/tasks/{task_id}/assets/unsynced", response_model=TaskAssetsResponse)
 async def get_task_unsynced_assets(
     task_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> TaskAssetsResponse:
     """Get all assets for task that haven't been synced to Notion.
 
@@ -106,7 +106,7 @@ async def get_task_unsynced_assets(
 @router.post("/tasks/{task_id}/sync-assets")
 async def trigger_asset_sync(
     task_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> dict:
     """Trigger manual Notion asset sync for task.
 

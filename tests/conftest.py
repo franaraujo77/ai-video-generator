@@ -136,3 +136,45 @@ from tests.fixtures.database import (  # noqa: E402
     sample_task_data,
     sample_channel_data,
 )
+
+
+# FastAPI test client fixture for API endpoint testing
+@pytest_asyncio.fixture
+async def async_client(async_engine):
+    """Create async HTTP client for API testing.
+
+    Provides httpx.AsyncClient configured with the FastAPI app
+    and test database engine for integration testing.
+
+    Args:
+        async_engine: Test database engine fixture.
+
+    Yields:
+        AsyncClient: HTTP client for making API requests.
+    """
+    from httpx import AsyncClient as HTTPXAsyncClient, ASGITransport
+    from app.main import app
+    from app.database import async_session_factory as production_factory
+
+    # Create test session factory
+    test_factory = async_sessionmaker(
+        bind=async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    # Override get_session dependency
+    async def override_get_session():
+        async with test_factory() as session:
+            yield session
+
+    from app.database import get_session
+    app.dependency_overrides[get_session] = override_get_session
+
+    # Create client with ASGI transport
+    transport = ASGITransport(app=app)
+    async with HTTPXAsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+    # Cleanup
+    app.dependency_overrides.clear()

@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.database import get_session
 from app.services.cost_tracker import (
     get_average_cost_per_video,
     get_channel_cost_summary,
@@ -69,7 +69,7 @@ class CostTrendsResponse(BaseModel):
 )
 async def get_task_costs(
     task_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> TaskCostBreakdown:
     """Get cost breakdown for a specific task.
 
@@ -110,7 +110,7 @@ async def get_channel_costs(
     channel_id: UUID,
     start_date: datetime | None = Query(None, description="Start date for filtering (UTC)"),
     end_date: datetime | None = Query(None, description="End date for filtering (UTC)"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> ChannelCostSummary:
     """Get aggregated cost summary for a channel.
 
@@ -150,7 +150,7 @@ async def get_channel_costs(
 async def get_cost_trends(
     channel_id: UUID = Query(..., description="Channel UUID"),
     days: int = Query(30, ge=1, le=365, description="Number of days to analyze (1-365)"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> CostTrendsResponse:
     """Get cost trends for last N days.
 
@@ -182,7 +182,7 @@ async def get_cost_trends(
 )
 async def validate_costs(
     task_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     """Validate cost data for a task.
 

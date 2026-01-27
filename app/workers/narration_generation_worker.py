@@ -45,7 +45,9 @@ from sqlalchemy import select
 
 from app.database import async_session_factory
 from app.models import Channel, Task, TaskStatus
+from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
+from app.services.credential_service import CredentialService
 from app.services.narration_generation import NarrationGenerationService
 from app.utils.cli_wrapper import CLIScriptError
 from app.utils.logging import get_logger
@@ -176,6 +178,95 @@ async def process_narration_generation_task(task_id: str | UUID) -> None:
             failed=generation_result["failed"],
             total_cost=str(generation_result["total_cost_usd"]),
         )
+
+        # Step 2.5: Upload narration to R2 and record URLs (Story 8.4)
+        async with async_session_factory() as db:
+            result_task = await db.execute(select(Task).where(Task.id == task_id))
+            task = result_task.scalar_one_or_none()
+            if not task:
+                log.error("task_not_found_for_r2_upload", task_id=str(task_id))
+                return
+
+            await db.refresh(task, ["channel"])
+            channel = task.channel
+            storage_strategy = channel.storage_strategy
+
+            if storage_strategy == "r2":
+                log.info(
+                    "r2_narration_upload_start",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    clip_count=len(manifest.clips),
+                )
+
+                credential_service = CredentialService()
+                try:
+                    r2_client = await credential_service.get_r2_client(
+                        channel.channel_id, db
+                    )
+                except ValueError as e:
+                    log.error(
+                        "r2_client_initialization_failed",
+                        task_id=str(task_id),
+                        error=str(e),
+                    )
+                    storage_strategy = "notion"
+
+                if storage_strategy == "r2":
+                    uploaded_count = 0
+                    for clip in manifest.clips:
+                        if not clip.output_path.exists():
+                            log.warning(
+                                "narration_file_missing",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                            )
+                            continue
+
+                        asset_name = clip.output_path.name
+                        r2_key = f"{channel.channel_id}/{project_id}/audio/narration/{asset_name}"
+
+                        try:
+                            asset_url = await r2_client.upload_asset(
+                                local_file_path=clip.output_path,
+                                r2_key=r2_key,
+                                content_type="audio/mpeg",
+                            )
+
+                            async with async_session_factory() as db2, db2.begin():
+                                await record_asset_url(
+                                    db=db2,
+                                    task_id=task.id,
+                                    channel_id=channel.id,
+                                    asset_type="narration",
+                                    asset_name=asset_name,
+                                    storage_strategy="r2",
+                                    asset_url=asset_url,
+                                    local_file_path=str(clip.output_path),
+                                )
+
+                            uploaded_count += 1
+                            log.info(
+                                "narration_uploaded_to_r2",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                asset_url=asset_url,
+                            )
+
+                        except Exception as e:
+                            log.error(
+                                "r2_narration_upload_failed",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                error=str(e),
+                            )
+
+                    log.info(
+                        "r2_narration_upload_complete",
+                        task_id=str(task_id),
+                        uploaded=uploaded_count,
+                        total=len(manifest.clips),
+                    )
 
         # Step 3: Track costs (short transaction)
         async with async_session_factory() as db, db.begin():
