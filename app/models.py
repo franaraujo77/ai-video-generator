@@ -23,7 +23,7 @@ from datetime import date, datetime, timezone
 from typing import Any, ClassVar
 
 from sqlalchemy import (
-    ARRAY,
+    JSON,
     Boolean,
     CheckConstraint,
     Date,
@@ -37,7 +37,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import JSON, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
 
 from app.exceptions import InvalidStateTransitionError
@@ -1685,7 +1685,7 @@ class ReviewActionAuditLog(Base):
     )
 
     affected_clip_numbers: Mapped[list[int] | None] = mapped_column(
-        ARRAY(Integer),
+        JSON,
         comment="Failed clip indices for partial audio rejection (Story 5.5)",
     )
 
