@@ -16,8 +16,10 @@ Architecture Reference:
 
 import asyncio
 import subprocess
+import time
 from pathlib import Path
 
+from app.utils.context import get_correlation_id, get_worker_id
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -114,7 +116,18 @@ async def run_cli_script(
             # Truncate long arguments (prompts, file paths) to prevent log bloat
             sanitized_args.append(arg[:100] + "..." if len(arg) > 100 else arg)
 
-    log.info("cli_script_start", script=script, args=sanitized_args, timeout=timeout)
+    # Story 8.1: Get correlation_id and worker_id from context for traceability
+    correlation_id = get_correlation_id()
+    worker_id = get_worker_id()
+
+    log.info(
+        "cli_script_start",
+        script=script,
+        args=sanitized_args,
+        timeout=timeout,
+        correlation_id=correlation_id,
+        worker_id=worker_id,
+    )
 
     # Prepare environment variables for subprocess
     # If env provided, extend parent environment (don't replace entirely)
@@ -124,6 +137,8 @@ async def run_cli_script(
     process_env = os.environ.copy()
     if env:
         process_env.update(env)
+
+    start_time = time.time()
 
     try:
         # Use asyncio.to_thread to avoid blocking event loop
@@ -137,6 +152,8 @@ async def run_cli_script(
             env=process_env,  # Pass isolated environment (prevents global pollution)
         )
 
+        duration = time.time() - start_time
+
         if result.returncode != 0:
             # Truncate stderr to prevent log bloat
             stderr_truncated = (
@@ -146,7 +163,10 @@ async def run_cli_script(
                 "cli_script_error",
                 script=script,
                 exit_code=result.returncode,
+                duration=duration,
                 stderr=stderr_truncated,
+                correlation_id=correlation_id,
+                worker_id=worker_id,
             )
             raise CLIScriptError(script, result.returncode, result.stderr)
 
@@ -154,9 +174,44 @@ async def run_cli_script(
         stdout_truncated = (
             result.stdout[:500] + "..." if len(result.stdout) > 500 else result.stdout
         )
-        log.info("cli_script_success", script=script, stdout=stdout_truncated)
+        log.info(
+            "cli_script_success",
+            script=script,
+            duration=duration,
+            stdout=stdout_truncated,
+            correlation_id=correlation_id,
+            worker_id=worker_id,
+        )
+
+        # Log full stdout/stderr with correlation_id for complete traceability (Story 8.1, AC: 8)
+        # This provides full output for debugging while keeping success log concise
+        if result.stdout:
+            log.debug(
+                "cli_script_stdout",
+                script=script,
+                stdout=result.stdout,
+                correlation_id=correlation_id,
+                worker_id=worker_id,
+            )
+        if result.stderr:
+            log.debug(
+                "cli_script_stderr",
+                script=script,
+                stderr=result.stderr,
+                correlation_id=correlation_id,
+                worker_id=worker_id,
+            )
+
         return result
 
     except subprocess.TimeoutExpired as e:
-        log.error("cli_script_timeout", script=script, timeout=timeout)
+        duration = time.time() - start_time
+        log.error(
+            "cli_script_timeout",
+            script=script,
+            timeout=timeout,
+            duration=duration,
+            correlation_id=correlation_id,
+            worker_id=worker_id,
+        )
         raise asyncio.TimeoutError(f"{script} exceeded timeout of {timeout}s") from e

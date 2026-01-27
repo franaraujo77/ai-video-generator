@@ -42,7 +42,11 @@ from app.config import (
     get_google_client_secret,
 )
 from app.database import async_engine
-from app.utils.logging import get_logger
+from app.utils.logging import configure_structlog, get_logger
+
+# Configure structlog with correlation ID processors (Story 8.1)
+# Must be called before any structlog loggers are created
+configure_structlog()
 
 # Initialize structured logger
 log = get_logger(__name__)

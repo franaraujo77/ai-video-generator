@@ -48,6 +48,7 @@ from app.database import AsyncSessionLocal
 from app.models import Task, TaskStatus
 from app.services.quota_manager import check_youtube_quota, get_required_api
 from app.services.retry_orchestrator import mark_task_recovered
+from app.utils.context import clear_correlation_context, set_channel_id, set_correlation_id
 from app.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -128,14 +129,21 @@ def register_entrypoints(pgq: PgQueuer) -> None:
         # Initialize required_api for finally block (Story 4.5)
         required_api = None
 
-        # Step 1: Claim and log with priority context (short transaction)
+        try:
+            # Step 1: Claim and log with priority context (short transaction)
         async with AsyncSessionLocal() as db:  # type: ignore[misc]
             task = await db.get(Task, task_id)
             if not task:
                 log.error("task_not_found", task_id=task_id)
                 raise ValueError(f"Task not found: {task_id}")
 
+            # Story 8.1: Bind correlation_id and channel_id to async context
+            # This makes them available to all logs throughout task processing
+            set_correlation_id(str(task.id))
+            set_channel_id(task.channel_id)
+
             # Log claim with priority context (Story 4.3)
+            # Note: correlation_id, channel_id, worker_id auto-injected by structlog processors
             log.info(
                 "task_claimed",
                 worker_id=worker_id,
@@ -331,6 +339,11 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 auto_recovered=task.auto_recovered,  # Story 6.10: Log recovery status
                 retry_count=task.retry_count,
             )
+
+        finally:
+            # Story 8.1: Clear correlation context after task completion
+            # Prevents correlation_id leakage between tasks (good hygiene)
+            clear_correlation_context()
 
 
 def _is_retriable_error(error: Exception) -> bool:

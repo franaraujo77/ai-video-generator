@@ -26,27 +26,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.error_payload import FailureLocation
 from app.services.checkpoint_service import get_step_checkpoint
 from app.services.error_classifier import ErrorCategory, ErrorContext, classify_error
+from app.utils.logging import configure_structlog
 
-# Configure structlog if not already configured (safe for multiple imports)
-# In production, this should be configured once at app startup, but this ensures
-# tests and standalone usage work correctly
-if not structlog.is_configured():
-    structlog.configure(
-        processors=[
-            structlog.stdlib.filter_by_level,
-            structlog.stdlib.add_logger_name,
-            structlog.stdlib.add_log_level,
-            structlog.stdlib.PositionalArgumentsFormatter(),
-            structlog.processors.TimeStamper(fmt="iso"),  # ISO 8601 timestamps
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,  # Full stack traces for ERROR level
-            structlog.processors.UnicodeDecoder(),
-            structlog.processors.JSONRenderer(),  # Railway-compatible JSON
-        ],
-        wrapper_class=structlog.stdlib.BoundLogger,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=True,
-    )
+# Configure structlog with correlation ID processors
+# Safe to call multiple times - only configures if not already configured
+configure_structlog()
 
 log = structlog.get_logger()
 
@@ -55,10 +39,10 @@ async def log_structured_error(
     exception: Exception,
     task_id: UUID,
     channel_id: str,
-    correlation_id: UUID,
     step_name: str,
     retry_attempt: int,
     db: AsyncSession,
+    correlation_id: UUID | str | None = None,
     context: ErrorContext | None = None,
 ) -> None:
     """Log error with comprehensive structure for Railway aggregation.
@@ -67,10 +51,10 @@ async def log_structured_error(
         exception: The exception that occurred
         task_id: UUID of the task that failed
         channel_id: Channel ID for filtering
-        correlation_id: Correlation ID for distributed tracing (pass task.id)
         step_name: Pipeline step that failed (e.g., "video_generation")
         retry_attempt: Current retry attempt (1-3)
         db: Database session for checkpoint query
+        correlation_id: Optional correlation ID (uses context if not provided)
         context: Optional ErrorContext for location-specific details
 
     Logged Fields:
@@ -94,6 +78,16 @@ async def log_structured_error(
         correlation_id uses task.id for distributed tracing across retries and steps.
         Task model uses task.id as the correlation identifier (no separate field).
     """
+    # Story 8.1: Use correlation_id from context if not explicitly provided (AC9)
+    from app.utils.context import get_correlation_id as get_context_correlation_id
+
+    if correlation_id is None:
+        context_id = get_context_correlation_id()
+        correlation_id = context_id if context_id else str(task_id)
+
+    # Convert to string for logging (handles UUID or string input)
+    correlation_id_str = str(correlation_id)
+
     # Step 1: Classify error (from Story 6.1)
     error_analysis = classify_error(exception, context)
     is_transient = error_analysis.category == ErrorCategory.TRANSIENT
@@ -131,7 +125,7 @@ async def log_structured_error(
         "pipeline_step_failed",
         task_id=str(task_id),
         channel_id=channel_id,
-        correlation_id=str(correlation_id),
+        correlation_id=correlation_id_str,
         step_name=step_name,
         error_type=exception.__class__.__name__,
         error_message=str(exception),

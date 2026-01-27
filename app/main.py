@@ -15,8 +15,13 @@ from fastapi.responses import JSONResponse
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
+from app.middleware.correlation import CorrelationMiddleware
 from app.routes import admin, webhooks
 from app.services.notion_sync import sync_database_to_notion_loop
+from app.utils.logging import configure_structlog
+
+# Configure structlog with correlation ID processors (Story 8.1)
+configure_structlog()
 
 log = structlog.get_logger()
 
@@ -81,6 +86,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Register correlation middleware (Story 8.1 - MUST be before route registration)
+app.add_middleware(CorrelationMiddleware)
 
 # Register webhook routes (Story 2.5)
 app.include_router(webhooks.router)
