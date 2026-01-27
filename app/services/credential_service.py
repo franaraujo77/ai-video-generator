@@ -421,3 +421,176 @@ class CredentialService:
                 credential_type="elevenlabs_key",
             )
             raise
+
+    async def store_r2_credentials(
+        self,
+        channel_id: str,
+        access_key_id: str,
+        secret_access_key: str,
+        bucket_name: str,
+        db: AsyncSession,
+    ) -> None:
+        """Store encrypted R2 credentials for channel (Story 8.4).
+
+        Args:
+            channel_id: Business identifier (e.g., "poke1").
+            access_key_id: Plaintext R2 access key ID.
+            secret_access_key: Plaintext R2 secret access key.
+            bucket_name: R2 bucket name (not sensitive, stored plaintext).
+            db: Async database session.
+
+        Raises:
+            ValueError: If channel not found.
+
+        Example:
+            >>> await service.store_r2_credentials(
+            ...     "poke1",
+            ...     "access_key_id",
+            ...     "secret_access_key",
+            ...     "ai-video-assets",
+            ...     db
+            ... )
+        """
+        channel = await self._get_channel(channel_id, db)
+        if channel is None:
+            log.warning(
+                "credential_store_failed",
+                channel_id=channel_id,
+                credential_type="r2_credentials",
+                reason="channel_not_found",
+            )
+            raise ValueError(f"Channel not found: {channel_id}")
+
+        encryption_service = get_encryption_service()
+
+        # Encrypt credentials
+        channel.r2_access_key_id_encrypted = encryption_service.encrypt(access_key_id)
+        channel.r2_secret_access_key_encrypted = encryption_service.encrypt(secret_access_key)
+        channel.r2_bucket_name = bucket_name
+
+        await db.commit()
+
+        log.info(
+            "credential_stored",
+            channel_id=channel_id,
+            credential_type="r2_credentials",
+            bucket_name=bucket_name,
+            success=True,
+        )
+
+    async def get_r2_credentials(
+        self, channel_id: str, db: AsyncSession
+    ) -> tuple[str | None, str | None, str | None]:
+        """Retrieve and decrypt R2 credentials for channel (Story 8.4).
+
+        Args:
+            channel_id: Business identifier (e.g., "poke1").
+            db: Async database session.
+
+        Returns:
+            Tuple of (access_key_id, secret_access_key, bucket_name).
+            Returns (None, None, None) if channel not found or no R2 credentials.
+
+        Raises:
+            DecryptionError: If decryption fails (invalid key or corrupted data).
+
+        Example:
+            >>> access_key, secret_key, bucket = await service.get_r2_credentials("poke1", db)
+            >>> if access_key:
+            ...     # Use credentials for R2 client
+        """
+        channel = await self._get_channel(channel_id, db)
+        if channel is None:
+            log.warning(
+                "credential_get_failed",
+                channel_id=channel_id,
+                credential_type="r2_credentials",
+                reason="channel_not_found",
+            )
+            return (None, None, None)
+
+        if (
+            channel.r2_access_key_id_encrypted is None
+            or channel.r2_secret_access_key_encrypted is None
+        ):
+            log.info(
+                "credential_get",
+                channel_id=channel_id,
+                credential_type="r2_credentials",
+                success=True,
+                has_credential=False,
+            )
+            return (None, None, None)
+
+        encryption_service = get_encryption_service()
+        try:
+            access_key_id = encryption_service.decrypt(
+                channel.r2_access_key_id_encrypted, channel_id=channel_id
+            )
+            secret_access_key = encryption_service.decrypt(
+                channel.r2_secret_access_key_encrypted, channel_id=channel_id
+            )
+
+            log.info(
+                "credential_get",
+                channel_id=channel_id,
+                credential_type="r2_credentials",
+                success=True,
+                has_credential=True,
+            )
+            return (access_key_id, secret_access_key, channel.r2_bucket_name)
+
+        except DecryptionError:
+            log.error(
+                "credential_decrypt_failed",
+                channel_id=channel_id,
+                credential_type="r2_credentials",
+            )
+            raise
+
+    async def get_r2_client(self, channel_id: str, db: AsyncSession):
+        """Get R2 storage client with decrypted credentials (Story 8.4).
+
+        Args:
+            channel_id: Business identifier (e.g., "poke1").
+            db: Async database session.
+
+        Returns:
+            R2StorageClient instance with decrypted credentials.
+
+        Raises:
+            ValueError: If channel not found or R2 not configured.
+
+        Example:
+            >>> client = await service.get_r2_client("poke1", db)
+            >>> url = await client.upload_asset(...)
+        """
+        from app.services.r2_storage import R2StorageClient
+
+        channel = await self._get_channel(channel_id, db)
+        if channel is None:
+            raise ValueError(f"Channel not found: {channel_id}")
+
+        if (
+            channel.r2_bucket_name is None
+            or channel.r2_access_key_id_encrypted is None
+            or channel.r2_secret_access_key_encrypted is None
+        ):
+            raise ValueError(f"Channel {channel_id} does not have R2 storage configured")
+
+        # Decrypt credentials
+        encryption_service = get_encryption_service()
+        access_key_id = encryption_service.decrypt(
+            channel.r2_access_key_id_encrypted, channel_id=channel_id
+        )
+        secret_access_key = encryption_service.decrypt(
+            channel.r2_secret_access_key_encrypted, channel_id=channel_id
+        )
+
+        # Create R2 client
+        return R2StorageClient(
+            bucket_name=channel.r2_bucket_name,
+            access_key_id=access_key_id,
+            secret_access_key=secret_access_key,
+            region="auto",
+        )
