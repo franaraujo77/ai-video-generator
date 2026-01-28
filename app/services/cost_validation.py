@@ -20,10 +20,10 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 
-from app.models import VideoCost, Task
+from app.models import Task, VideoCost
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -45,9 +45,7 @@ EXPECTED_COMPONENTS = [
 ]
 
 
-async def validate_task_cost_consistency(
-    db: AsyncSession, task_id: UUID
-) -> tuple[bool, Decimal]:
+async def validate_task_cost_consistency(db: AsyncSession, task_id: UUID) -> tuple[bool, Decimal]:
     """Validate cost consistency between video_costs and task.total_cost_usd.
 
     Args:
@@ -90,9 +88,7 @@ async def validate_task_cost_consistency(
     return is_consistent, discrepancy
 
 
-async def detect_missing_cost_components(
-    db: AsyncSession, task_id: UUID
-) -> list[str]:
+async def detect_missing_cost_components(db: AsyncSession, task_id: UUID) -> list[str]:
     """Detect missing cost components for a completed task.
 
     Args:
@@ -120,9 +116,7 @@ async def detect_missing_cost_components(
     return missing
 
 
-async def detect_duplicate_cost_records(
-    db: AsyncSession, task_id: UUID
-) -> dict[str, int]:
+async def detect_duplicate_cost_records(db: AsyncSession, task_id: UUID) -> dict[str, int]:
     """Detect duplicate cost records for same component.
 
     Args:
@@ -153,9 +147,7 @@ async def detect_duplicate_cost_records(
     return duplicates
 
 
-async def detect_cost_anomalies(
-    db: AsyncSession, task_id: UUID
-) -> list[dict[str, Any]]:
+async def detect_cost_anomalies(db: AsyncSession, task_id: UUID) -> list[dict[str, Any]]:
     """Detect cost anomalies (values outside expected ranges).
 
     Args:
@@ -228,10 +220,7 @@ async def validate_task_costs(db: AsyncSession, task_id: UUID) -> dict[str, Any]
 
     # Determine overall validity
     overall_valid = (
-        is_consistent
-        and len(missing) == 0
-        and len(duplicates) == 0
-        and len(anomalies) == 0
+        is_consistent and len(missing) == 0 and len(duplicates) == 0 and len(anomalies) == 0
     )
 
     report = {

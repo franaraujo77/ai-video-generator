@@ -181,9 +181,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                 # Get R2 client with decrypted credentials
                 credential_service = CredentialService()
                 try:
-                    r2_client = await credential_service.get_r2_client(
-                        channel.channel_id, db
-                    )
+                    r2_client = await credential_service.get_r2_client(channel.channel_id, db)
                 except ValueError as e:
                     log.error(
                         "r2_client_initialization_failed",
@@ -213,8 +211,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
 
                         # Construct R2 key
                         r2_key = (
-                            f"{channel.channel_id}/{project_id}/assets/"
-                            f"{asset_type}/{asset_name}"
+                            f"{channel.channel_id}/{project_id}/assets/{asset_type}/{asset_name}"
                         )
 
                         try:
@@ -393,5 +390,3 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                 error_entry = f"Unexpected error: {e!s}\n\n"
                 task.error_log = (task.error_log or "") + error_entry
                 await db.commit()
-
-

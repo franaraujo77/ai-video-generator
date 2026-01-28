@@ -74,9 +74,9 @@ async def get_active_worker_count(db: AsyncSession) -> dict[str, int | str | Non
     # Query: COUNT active workers + MAX last_seen_at timestamp
     # Uses ix_worker_heartbeats_last_seen_at index for fast execution
     result = await db.execute(
-        select(
-            func.count(WorkerHeartbeat.id), func.max(WorkerHeartbeat.last_seen_at)
-        ).where(WorkerHeartbeat.last_seen_at >= five_minutes_ago)
+        select(func.count(WorkerHeartbeat.id), func.max(WorkerHeartbeat.last_seen_at)).where(
+            WorkerHeartbeat.last_seen_at >= five_minutes_ago
+        )
     )
     count, most_recent = result.one()
 

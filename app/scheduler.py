@@ -266,14 +266,14 @@ async def _cleanup_old_workspaces_job() -> None:
                 disk_freed_mb=result["disk_freed_mb"],
                 r2_assets_deleted=result["r2_assets_deleted"],
                 duration_seconds=result["duration_seconds"],
-                retention_days=retention_days
+                retention_days=retention_days,
             )
         except Exception as e:
             log.error(
                 "workspace_cleanup_job_failed",
                 error=str(e),
                 retention_days=retention_days,
-                exc_info=True
+                exc_info=True,
             )
 
             # Log CRITICAL error for manual intervention
@@ -282,7 +282,7 @@ async def _cleanup_old_workspaces_job() -> None:
                 "workspace_cleanup_requires_manual_intervention",
                 retention_days=retention_days,
                 error=str(e),
-                manual_action="Check workspace disk usage and manually run cleanup if needed"
+                manual_action="Check workspace disk usage and manually run cleanup if needed",
             )
 
             # Don't re-raise to prevent scheduler crash
@@ -433,10 +433,10 @@ async def _calculate_weekly_metrics_job() -> None:
     """
     from datetime import timedelta
 
-    from app.services.weekly_metrics_service import calculate_all_channels_weekly_metrics
-
     # Get today's date in UTC
     from datetime import timezone as tz
+
+    from app.services.weekly_metrics_service import calculate_all_channels_weekly_metrics
 
     today = datetime.now(tz.utc).date()
 
@@ -452,9 +452,7 @@ async def _calculate_weekly_metrics_job() -> None:
     # Create database session
     async with AsyncSessionLocal() as db:  # type: ignore[misc]
         try:
-            metrics_list = await calculate_all_channels_weekly_metrics(
-                week_starting_date, db
-            )
+            metrics_list = await calculate_all_channels_weekly_metrics(week_starting_date, db)
 
             log.info(
                 "weekly_metrics_calculation_job_success",
@@ -486,6 +484,22 @@ async def _calculate_weekly_metrics_job() -> None:
 
             # Don't re-raise to prevent scheduler crash
             # Manual intervention required
+
+    # Story 8.8: Generate weekly cost reports and check thresholds
+    # Use separate session for isolation from weekly metrics calculation
+    async with AsyncSessionLocal() as cost_db:  # type: ignore[misc]
+        try:
+            from app.services.cost_tracker import generate_weekly_cost_report
+
+            await generate_weekly_cost_report(cost_db)
+            log.info("weekly_cost_report_success")
+        except Exception as e:
+            log.error(
+                "weekly_cost_report_failed",
+                error=str(e),
+                exc_info=True,
+            )
+            # Don't re-raise to prevent scheduler crash
 
 
 async def start_weekly_metrics_scheduler() -> None:
@@ -529,9 +543,7 @@ async def start_weekly_metrics_scheduler() -> None:
         "weekly_metrics_scheduler_started",
         timezone="UTC",
         schedule="Every Monday at 00:00 UTC",
-        next_run=str(
-            _weekly_metrics_scheduler.get_job("calculate_weekly_metrics").next_run_time
-        ),
+        next_run=str(_weekly_metrics_scheduler.get_job("calculate_weekly_metrics").next_run_time),
     )
 
 
@@ -556,9 +568,7 @@ def shutdown_weekly_metrics_scheduler() -> None:
     except RuntimeError as e:
         # Handle "Event loop is closed" error during test teardown
         if "Event loop is closed" in str(e):
-            log.debug(
-                "weekly_metrics_scheduler_shutdown_event_loop_closed", error=str(e)
-            )
+            log.debug("weekly_metrics_scheduler_shutdown_event_loop_closed", error=str(e))
         else:
             raise
     finally:
@@ -579,6 +589,4 @@ def is_weekly_metrics_scheduler_running() -> bool:
         >>> is_weekly_metrics_scheduler_running()
         True
     """
-    return (
-        _weekly_metrics_scheduler is not None and _weekly_metrics_scheduler.running
-    )
+    return _weekly_metrics_scheduler is not None and _weekly_metrics_scheduler.running

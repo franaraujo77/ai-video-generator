@@ -262,9 +262,7 @@ class TestGetSuccessRateTrend:
         self, async_session: AsyncSession, channel_with_weekly_metrics: Channel
     ):
         """Test getting 12-week trend (default)."""
-        trend = await get_success_rate_trend(
-            channel_with_weekly_metrics.id, async_session
-        )
+        trend = await get_success_rate_trend(channel_with_weekly_metrics.id, async_session)
 
         assert len(trend) == 12
         # Should be ordered oldest to newest (for time-series charting)
@@ -280,9 +278,7 @@ class TestGetSuccessRateTrend:
         self, async_session: AsyncSession, channel_with_weekly_metrics: Channel
     ):
         """Test getting custom number of weeks."""
-        trend = await get_success_rate_trend(
-            channel_with_weekly_metrics.id, async_session, weeks=4
-        )
+        trend = await get_success_rate_trend(channel_with_weekly_metrics.id, async_session, weeks=4)
 
         assert len(trend) == 4
         # Should be most recent 4 weeks (weeks 9-12)

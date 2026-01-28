@@ -427,6 +427,13 @@ class Channel(Base):
         cascade="all, delete-orphan",
     )
 
+    # Relationship to cost thresholds (one-to-many) - Story 8.8
+    cost_thresholds: Mapped[list["CostThreshold"]] = relationship(
+        "CostThreshold",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
@@ -1649,12 +1656,8 @@ class WeeklyMetrics(Base):
         # Index for audit trail
         Index("ix_weekly_metrics_calculated_at", "calculated_at"),
         # Check constraints for data integrity
-        CheckConstraint(
-            "total_videos_processed >= 0", name="ck_weekly_metrics_total_non_negative"
-        ),
-        CheckConstraint(
-            "successful_videos >= 0", name="ck_weekly_metrics_successful_non_negative"
-        ),
+        CheckConstraint("total_videos_processed >= 0", name="ck_weekly_metrics_total_non_negative"),
+        CheckConstraint("successful_videos >= 0", name="ck_weekly_metrics_successful_non_negative"),
         CheckConstraint(
             "successful_videos <= total_videos_processed",
             name="ck_weekly_metrics_successful_le_total",
@@ -1663,9 +1666,7 @@ class WeeklyMetrics(Base):
             "success_rate >= 0.0 AND success_rate <= 100.0", name="ck_weekly_metrics_rate_range"
         ),
         CheckConstraint("transient_failures >= 0", name="ck_weekly_metrics_transient_non_negative"),
-        CheckConstraint(
-            "permanent_failures >= 0", name="ck_weekly_metrics_permanent_non_negative"
-        ),
+        CheckConstraint("permanent_failures >= 0", name="ck_weekly_metrics_permanent_non_negative"),
         CheckConstraint("unknown_failures >= 0", name="ck_weekly_metrics_unknown_non_negative"),
         CheckConstraint("failed_at_assets >= 0", name="ck_weekly_metrics_assets_non_negative"),
         CheckConstraint("failed_at_video >= 0", name="ck_weekly_metrics_video_non_negative"),
@@ -2229,7 +2230,7 @@ class WorkerHeartbeat(Base):
             worker_id="worker-1",
             last_seen_at=datetime.now(timezone.utc),
             status="online",
-            active_task_count=2
+            active_task_count=2,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["worker_id"],
@@ -2246,8 +2247,9 @@ class WorkerHeartbeat(Base):
         # Query active workers (last 5 minutes)
         five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
         result = await db.execute(
-            select(func.count(WorkerHeartbeat.id))
-            .where(WorkerHeartbeat.last_seen_at >= five_minutes_ago)
+            select(func.count(WorkerHeartbeat.id)).where(
+                WorkerHeartbeat.last_seen_at >= five_minutes_ago
+            )
         )
         active_count = result.scalar_one()
         ```
@@ -2331,4 +2333,148 @@ class WorkerHeartbeat(Base):
         return (
             f"<WorkerHeartbeat(worker_id={self.worker_id!r}, "
             f"last_seen_at={self.last_seen_at}, status={self.status!r})>"
+        )
+
+
+class CostThreshold(Base):
+    """Cost threshold configuration for budget management and alerting (Story 8.8).
+
+    Enables per-channel budget limits with configurable alert thresholds.
+    Supports weekly and monthly periods for flexible budget tracking.
+
+    Alert Behavior:
+        - enabled=True: Threshold checking active
+        - alert_on_approach=True: Alert at 80% threshold (early warning)
+        - Alert at 100%: Threshold exceeded notification
+        - Alerts sent via Discord webhook (Story 6.6 integration)
+
+    Database Schema:
+        - Primary Key: UUID
+        - Foreign Key: channel_id → channels.id (CASCADE)
+        - Indexes: channel_id, enabled
+        - Constraints: threshold_usd > 0, period IN ('weekly', 'monthly')
+
+    Usage Example:
+        ```python
+        # Create weekly threshold for channel
+        threshold = CostThreshold(
+            channel_id=channel.id,
+            threshold_usd=Decimal("500.00"),
+            period="weekly",
+            enabled=True,
+            alert_on_approach=True,
+        )
+        db.add(threshold)
+        await db.commit()
+
+        # Check if current costs exceed threshold
+        from app.services.cost_tracker import get_weekly_cost_summary
+
+        summary = await get_weekly_cost_summary(db, channel.id)
+        if summary["total_cost"] >= threshold.threshold_usd:
+            # Send alert via Discord
+            pass
+        ```
+
+    Related:
+        - Story 8.8: Cost Dashboard & Reporting
+        - Story 8.2: Per-Video Cost Tracking (video_costs table)
+        - Story 6.6: Alert System (Discord webhooks)
+        - AC4: Weekly Cost Report Generation with threshold alerts
+    """
+
+    __tablename__ = "cost_thresholds"
+
+    # Primary Key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=lambda: uuid.uuid4(),
+        nullable=False,
+        comment="Unique threshold ID",
+    )
+
+    # Channel Reference
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="Channel this threshold applies to",
+    )
+
+    # Threshold Configuration
+    threshold_usd: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+        comment="Cost limit in USD (e.g., 500.00 for $500 weekly limit)",
+    )
+
+    # Period (weekly, monthly)
+    period: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        comment="Threshold period: 'weekly' (Mon-Sun) or 'monthly' (1st-last day)",
+    )
+
+    # Alert Configuration
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Whether threshold alerting is active",
+    )
+
+    alert_on_approach: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Alert at 80% threshold (early warning before overspending)",
+    )
+
+    # Discord Webhook (Optional per-threshold override)
+    discord_webhook_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="Optional per-threshold Discord webhook override (uses global webhook if None)",
+    )
+
+    # Audit Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="Threshold creation timestamp",
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="Threshold last update timestamp",
+    )
+
+    # Relationship
+    channel: Mapped["Channel"] = relationship(
+        "Channel",
+        back_populates="cost_thresholds",
+    )
+
+    # Indexes and constraints
+    __table_args__ = (
+        # Index on channel_id for threshold lookups by channel
+        Index("ix_cost_thresholds_channel_id", "channel_id"),
+        # Index on enabled for active threshold queries
+        Index("ix_cost_thresholds_enabled", "enabled"),
+        # Check constraints
+        CheckConstraint("threshold_usd > 0", name="ck_cost_thresholds_positive_threshold"),
+        CheckConstraint("period IN ('weekly', 'monthly')", name="ck_cost_thresholds_valid_period"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<CostThreshold(channel_id={self.channel_id}, "
+            f"threshold_usd={self.threshold_usd}, period={self.period!r}, "
+            f"enabled={self.enabled})>"
         )

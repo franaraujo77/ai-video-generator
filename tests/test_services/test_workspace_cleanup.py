@@ -29,7 +29,7 @@ async def test_cleanup_published_task_older_than_retention(async_test_session, t
         channel=channel,
         status=TaskStatus.PUBLISHED,
         updated_at=datetime.now(timezone.utc) - timedelta(days=10),
-        cleanup_performed_at=None
+        cleanup_performed_at=None,
     )
     async_test_session.add(task)
     await async_test_session.commit()
@@ -61,9 +61,8 @@ async def test_cleanup_published_task_older_than_retention(async_test_session, t
     # Verify cleanup_performed_at was set
     # Need to query fresh from DB since we used SQL update
     from sqlalchemy import select as sql_select
-    result_task = await async_test_session.execute(
-        sql_select(Task).where(Task.id == task_id)
-    )
+
+    result_task = await async_test_session.execute(sql_select(Task).where(Task.id == task_id))
     refreshed_task = result_task.scalar_one()
     assert refreshed_task.cleanup_performed_at is not None
 
@@ -86,7 +85,7 @@ async def test_cleanup_skips_in_progress_tasks(async_test_session):
         task = create_task(
             channel=channel,
             status=status,
-            updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+            updated_at=datetime.now(timezone.utc) - timedelta(days=10),
         )
         async_test_session.add(task)
 
@@ -122,7 +121,7 @@ async def test_cleanup_skips_error_state_tasks(async_test_session):
         task = create_task(
             channel=channel,
             status=status,
-            updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+            updated_at=datetime.now(timezone.utc) - timedelta(days=10),
         )
         async_test_session.add(task)
 
@@ -150,7 +149,7 @@ async def test_cleanup_skips_recently_completed_tasks(async_test_session):
     task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=3)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=3),
     )
     async_test_session.add(task)
     await async_test_session.commit()
@@ -177,7 +176,7 @@ async def test_cleanup_skips_already_cleaned_tasks(async_test_session):
     task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     task.cleanup_performed_at = datetime.now(timezone.utc) - timedelta(days=1)
     async_test_session.add(task)
@@ -203,7 +202,7 @@ async def test_cleanup_handles_nonexistent_workspace(async_test_session, tmp_pat
     task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     async_test_session.add(task)
     await async_test_session.commit()
@@ -228,9 +227,8 @@ async def test_cleanup_handles_nonexistent_workspace(async_test_session, tmp_pat
 
     # Cleanup timestamp should still be set - query fresh from DB
     from sqlalchemy import select as sql_select
-    result_task = await async_test_session.execute(
-        sql_select(Task).where(Task.id == task_id)
-    )
+
+    result_task = await async_test_session.execute(sql_select(Task).where(Task.id == task_id))
     refreshed_task = result_task.scalar_one()
     assert refreshed_task.cleanup_performed_at is not None
 
@@ -242,12 +240,12 @@ async def test_cleanup_handles_permission_error(async_test_session, tmp_path):
     task1 = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     task2 = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     async_test_session.add_all([task1, task2])
     await async_test_session.commit()
@@ -263,9 +261,10 @@ async def test_cleanup_handles_permission_error(async_test_session, tmp_path):
             return workspace1
         return workspace2
 
-    with patch("app.services.workspace_cleanup.get_project_dir", side_effect=mock_get_dir), \
-         patch("shutil.rmtree", side_effect=[PermissionError("Access denied"), None]):
-
+    with (
+        patch("app.services.workspace_cleanup.get_project_dir", side_effect=mock_get_dir),
+        patch("shutil.rmtree", side_effect=[PermissionError("Access denied"), None]),
+    ):
         # Create service with test session factory
         def test_session_factory():
             return async_test_session
@@ -285,7 +284,7 @@ async def test_cleanup_cancelled_tasks(async_test_session, tmp_path):
     task = create_task(
         channel=channel,
         status=TaskStatus.CANCELLED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     async_test_session.add(task)
     await async_test_session.commit()
@@ -316,7 +315,7 @@ async def test_cleanup_calculates_disk_space_freed(async_test_session, tmp_path)
     task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     async_test_session.add(task)
     await async_test_session.commit()
@@ -325,7 +324,7 @@ async def test_cleanup_calculates_disk_space_freed(async_test_session, tmp_path)
     mock_workspace = tmp_path / "workspace"
     mock_workspace.mkdir()
     (mock_workspace / "file1.txt").write_bytes(b"x" * 1024 * 1024)  # 1 MB
-    (mock_workspace / "file2.txt").write_bytes(b"y" * 512 * 1024)   # 0.5 MB
+    (mock_workspace / "file2.txt").write_bytes(b"y" * 512 * 1024)  # 0.5 MB
 
     with patch("app.services.workspace_cleanup.get_project_dir") as mock_get_dir:
         mock_get_dir.return_value = mock_workspace
@@ -339,7 +338,7 @@ async def test_cleanup_calculates_disk_space_freed(async_test_session, tmp_path)
 
     # Verify disk space calculation
     assert result["disk_freed_mb"] >= 1.5  # At least 1.5 MB freed
-    assert result["disk_freed_mb"] < 2.0   # Less than 2 MB
+    assert result["disk_freed_mb"] < 2.0  # Less than 2 MB
 
 
 @pytest.mark.asyncio
@@ -353,7 +352,7 @@ async def test_cleanup_multiple_tasks_atomic(async_test_session, tmp_path):
         task = create_task(
             channel=channel,
             status=TaskStatus.PUBLISHED,
-            updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+            updated_at=datetime.now(timezone.utc) - timedelta(days=10),
         )
         tasks.append(task)
         async_test_session.add(task)
@@ -389,10 +388,9 @@ async def test_cleanup_multiple_tasks_atomic(async_test_session, tmp_path):
 
     # All tasks should have cleanup_performed_at set - query fresh from DB
     from sqlalchemy import select as sql_select
+
     for task in tasks:
-        result_task = await async_test_session.execute(
-            sql_select(Task).where(Task.id == task.id)
-        )
+        result_task = await async_test_session.execute(sql_select(Task).where(Task.id == task.id))
         refreshed_task = result_task.scalar_one()
         assert refreshed_task.cleanup_performed_at is not None
 
@@ -406,13 +404,15 @@ async def test_cleanup_with_custom_retention_days(async_test_session):
     task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=15)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=15),
     )
     async_test_session.add(task)
     await async_test_session.commit()
 
-    with patch("shutil.rmtree") as mock_rmtree, \
-         patch("app.services.workspace_cleanup.get_project_dir") as mock_get_dir:
+    with (
+        patch("shutil.rmtree") as mock_rmtree,
+        patch("app.services.workspace_cleanup.get_project_dir") as mock_get_dir,
+    ):
         mock_dir = MagicMock(spec=Path)
         mock_dir.exists.return_value = True
         mock_dir.rglob.return_value = []

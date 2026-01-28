@@ -16,7 +16,6 @@ Dependencies:
 """
 
 import re
-from datetime import datetime
 from uuid import UUID
 
 import httpx
@@ -113,9 +112,7 @@ class NotionAssetSyncService:
         retry=retry_if_exception_type(NotionSyncRetryError),
         reraise=True,
     )
-    async def update_asset_urls(
-        self, page_id: str, assets: list[AssetMetadata]
-    ) -> dict:
+    async def update_asset_urls(self, page_id: str, assets: list[AssetMetadata]) -> dict:
         """Update Notion page with asset URLs (rate limited, with retry).
 
         Args:
@@ -172,7 +169,6 @@ class NotionAssetSyncService:
             raise NotionSyncError(f"Rate limiter error: {limiter_error}") from limiter_error
 
         try:
-
             # Error classification
             if response.status_code in [400, 401, 403, 404]:
                 # Permanent errors - don't retry

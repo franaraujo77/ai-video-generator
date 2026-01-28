@@ -141,9 +141,7 @@ async def get_r2_config(
             "r2_config_not_found",
             channel_id=channel_id,
         )
-        raise HTTPException(
-            status_code=404, detail=f"R2 not configured for channel {channel_id}"
-        )
+        raise HTTPException(status_code=404, detail=f"R2 not configured for channel {channel_id}")
 
     return R2ConfigResponse(
         channel_id=channel_id,

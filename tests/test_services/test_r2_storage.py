@@ -43,8 +43,7 @@ def mock_file(tmp_path):
 @pytest.mark.asyncio
 async def test_r2_upload_success(r2_client, mock_file):
     """Test successful R2 upload returns public URL."""
-    with patch("aioboto3.Session") as mock_session, \
-         patch("httpx.AsyncClient") as mock_httpx:
+    with patch("aioboto3.Session") as mock_session, patch("httpx.AsyncClient") as mock_httpx:
         # Setup mock S3 client
         mock_s3_client = AsyncMock()
         mock_s3_client.upload_fileobj = AsyncMock()
@@ -128,8 +127,7 @@ async def test_r2_permanent_error_no_such_bucket(r2_client, mock_file):
 @pytest.mark.asyncio
 async def test_r2_transient_error_retry_success(r2_client, mock_file):
     """Test transient error (SlowDown) retries and succeeds."""
-    with patch("aioboto3.Session") as mock_session, \
-         patch("httpx.AsyncClient") as mock_httpx:
+    with patch("aioboto3.Session") as mock_session, patch("httpx.AsyncClient") as mock_httpx:
         # Setup mock to fail twice, then succeed
         mock_s3_client = AsyncMock()
         mock_s3_client.upload_fileobj.side_effect = [
@@ -195,13 +193,17 @@ async def test_r2_transient_error_max_retries_exceeded(r2_client, mock_file):
 @pytest.mark.asyncio
 async def test_r2_transient_error_service_unavailable(r2_client, mock_file):
     """Test ServiceUnavailable is classified as transient and retries."""
-    with patch("aioboto3.Session") as mock_session, \
-         patch("httpx.AsyncClient") as mock_httpx:
+    with patch("aioboto3.Session") as mock_session, patch("httpx.AsyncClient") as mock_httpx:
         # Setup mock to fail once, then succeed
         mock_s3_client = AsyncMock()
         mock_s3_client.upload_fileobj.side_effect = [
             ClientError(
-                {"Error": {"Code": "ServiceUnavailable", "Message": "Service temporarily unavailable"}},
+                {
+                    "Error": {
+                        "Code": "ServiceUnavailable",
+                        "Message": "Service temporarily unavailable",
+                    }
+                },
                 "PutObject",
             ),
             None,  # Success on second attempt
@@ -233,8 +235,7 @@ async def test_r2_transient_error_service_unavailable(r2_client, mock_file):
 @pytest.mark.asyncio
 async def test_r2_unknown_error_classified_as_transient(r2_client, mock_file):
     """Test unknown error is classified as transient (safe default) and retries."""
-    with patch("aioboto3.Session") as mock_session, \
-         patch("httpx.AsyncClient") as mock_httpx:
+    with patch("aioboto3.Session") as mock_session, patch("httpx.AsyncClient") as mock_httpx:
         # Setup mock to raise unknown error once, then succeed
         mock_s3_client = AsyncMock()
         mock_s3_client.upload_fileobj.side_effect = [
@@ -317,8 +318,7 @@ async def test_r2_endpoint_url_format(r2_client):
 @pytest.mark.asyncio
 async def test_r2_public_url_format(r2_client, mock_file):
     """Test public R2 URL format matches expected pattern."""
-    with patch("aioboto3.Session") as mock_session, \
-         patch("httpx.AsyncClient") as mock_httpx:
+    with patch("aioboto3.Session") as mock_session, patch("httpx.AsyncClient") as mock_httpx:
         mock_s3_client = AsyncMock()
         mock_s3_client.upload_fileobj = AsyncMock()
         mock_session.return_value.client.return_value.__aenter__.return_value = mock_s3_client

@@ -158,7 +158,7 @@ async def calculate_weekly_metrics(
 
     # Success rate calculation with zero division handling
     success_rate = (
-        Decimal(str((successful_videos / total_videos_processed * 100)))
+        Decimal(str(successful_videos / total_videos_processed * 100))
         if total_videos_processed > 0
         else Decimal("0.00")
     )
@@ -177,7 +177,7 @@ async def calculate_weekly_metrics(
     tasks_with_retries = [t for t in tasks if t.retry_count > 0]
     if tasks_with_retries:
         recovered = sum(1 for t in tasks_with_retries if t.auto_recovered)
-        auto_recovery_rate = Decimal(str((recovered / len(tasks_with_retries) * 100)))
+        auto_recovery_rate = Decimal(str(recovered / len(tasks_with_retries) * 100))
     else:
         auto_recovery_rate = None
 
@@ -619,9 +619,7 @@ async def get_week_over_week_comparison(
         - delta: Dict of changes (or None if no previous week)
 
     Example:
-        >>> comparison = await get_week_over_week_comparison(
-        ...     channel_id, date(2026, 3, 23), db
-        ... )
+        >>> comparison = await get_week_over_week_comparison(channel_id, date(2026, 3, 23), db)
         >>> # Returns: {
         ...     "current_week": {"week_starting_date": "2026-03-23", "success_rate": 90.18, ...},
         ...     "previous_week": {"week_starting_date": "2026-03-16", "success_rate": 89.81, ...},
@@ -661,12 +659,9 @@ async def get_week_over_week_comparison(
     delta = None
     if current_metrics and prev_metrics:
         delta = {
-            "success_rate_change": float(
-                current_metrics.success_rate - prev_metrics.success_rate
-            ),
+            "success_rate_change": float(current_metrics.success_rate - prev_metrics.success_rate),
             "total_videos_change": (
-                current_metrics.total_videos_processed
-                - prev_metrics.total_videos_processed
+                current_metrics.total_videos_processed - prev_metrics.total_videos_processed
             ),
             "successful_videos_change": (
                 current_metrics.successful_videos - prev_metrics.successful_videos

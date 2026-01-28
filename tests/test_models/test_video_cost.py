@@ -27,7 +27,9 @@ async def test_video_cost_creation(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -60,7 +62,9 @@ async def test_video_cost_task_relationship(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id=channel.id, status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id=channel.id, status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -88,7 +92,9 @@ async def test_task_costs_relationship(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -133,7 +139,9 @@ async def test_video_cost_cascade_delete(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -165,7 +173,9 @@ async def test_video_cost_decimal_precision(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -193,7 +203,9 @@ async def test_video_cost_query_by_task_id_timestamp_index(async_session: AsyncS
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -211,11 +223,7 @@ async def test_video_cost_query_by_task_id_timestamp_index(async_session: AsyncS
     await async_session.commit()
 
     # Act: Query costs for task ordered by timestamp
-    stmt = (
-        select(VideoCost)
-        .where(VideoCost.task_id == task.id)
-        .order_by(VideoCost.timestamp)
-    )
+    stmt = select(VideoCost).where(VideoCost.task_id == task.id).order_by(VideoCost.timestamp)
     result = await async_session.execute(stmt)
     costs = result.scalars().all()
 
@@ -232,7 +240,9 @@ async def test_video_cost_nullable_correlation_id(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 
@@ -260,7 +270,9 @@ async def test_video_cost_repr(async_session: AsyncSession):
     async_session.add(channel)
     await async_session.flush()
 
-    task = create_task(correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS)
+    task = create_task(
+        correlation_id=uuid4(), channel_id="test1", status=TaskStatus.GENERATING_ASSETS
+    )
     async_session.add(task)
     await async_session.flush()
 

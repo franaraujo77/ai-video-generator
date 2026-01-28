@@ -50,7 +50,9 @@ class TestHealthCheckEndpoint:
         assert "queue_depth" in data
         assert "schedulers" in data
 
-    async def test_health_check_degraded_no_workers_active(self, async_client: AsyncClient, async_session):
+    async def test_health_check_degraded_no_workers_active(
+        self, async_client: AsyncClient, async_session
+    ):
         """AC3: Test health check returns degraded when no workers active."""
         # Arrange - No worker heartbeats (or old ones)
 
@@ -149,7 +151,9 @@ class TestHealthCheckEndpoint:
         assert data["status"] == "unhealthy"
         assert data["database"] == "error"
 
-    async def test_health_check_includes_queue_depth(self, async_client: AsyncClient, async_session):
+    async def test_health_check_includes_queue_depth(
+        self, async_client: AsyncClient, async_session
+    ):
         """AC1: Test health check includes queue depth in response."""
         # Arrange - Create channel and pending tasks
         channel = create_channel(channel_id="poke1")
@@ -174,7 +178,9 @@ class TestHealthCheckEndpoint:
         data = response.json()
         assert data["queue_depth"] == 5
 
-    async def test_health_check_response_time_within_budget(self, async_client: AsyncClient, async_session):
+    async def test_health_check_response_time_within_budget(
+        self, async_client: AsyncClient, async_session
+    ):
         """AC4: Test health check completes within 500ms performance budget."""
         # Arrange - Create 3 active workers
         for i in range(1, 4):
@@ -194,9 +200,7 @@ class TestHealthCheckEndpoint:
 
         # Assert
         assert response.status_code == 200
-        assert (
-            elapsed_ms < 500
-        ), f"Health check took {elapsed_ms:.2f}ms, exceeds 500ms budget"
+        assert elapsed_ms < 500, f"Health check took {elapsed_ms:.2f}ms, exceeds 500ms budget"
 
     async def test_health_check_always_returns_200_ok_even_if_unhealthy(
         self, async_client: AsyncClient, async_session
@@ -212,7 +216,9 @@ class TestHealthCheckEndpoint:
         data = response.json()
         assert data["status"] == "degraded"
 
-    async def test_health_check_includes_scheduler_status(self, async_client: AsyncClient, async_session):
+    async def test_health_check_includes_scheduler_status(
+        self, async_client: AsyncClient, async_session
+    ):
         """Test that health check includes scheduler status fields."""
         # Arrange - Create 3 active workers for healthy state
         for i in range(1, 4):

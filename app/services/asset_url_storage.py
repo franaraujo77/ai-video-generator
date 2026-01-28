@@ -30,11 +30,11 @@ from app.utils.logging import get_logger
 log = get_logger(__name__)
 
 __all__ = [
-    "record_asset_url",
-    "get_unsynced_assets",
     "get_task_assets",
-    "mark_synced",
+    "get_unsynced_assets",
     "mark_assets_synced_batch",
+    "mark_synced",
+    "record_asset_url",
 ]
 
 
@@ -79,7 +79,7 @@ async def record_asset_url(
         ...     asset_name="bulbasaur_01.png",
         ...     storage_strategy="r2",
         ...     asset_url="https://bucket.r2.dev/poke1/vid_123/characters/bulbasaur_01.png",
-        ...     local_file_path="/app/workspace/channels/poke1/projects/vid_123/assets/characters/bulbasaur_01.png"
+        ...     local_file_path="/app/workspace/channels/poke1/projects/vid_123/assets/characters/bulbasaur_01.png",
         ... )
     """
     correlation_id = get_correlation_id()

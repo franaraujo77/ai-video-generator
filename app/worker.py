@@ -574,8 +574,8 @@ async def worker_main_loop() -> None:
         from app.entrypoints import register_entrypoints
         from app.queue import initialize_pgqueuer
         from app.scheduler import (
-            start_quota_reset_scheduler,
             start_cleanup_scheduler,
+            start_quota_reset_scheduler,
             start_weekly_metrics_scheduler,
         )
         from app.services.youtube_service import YouTubeService
@@ -676,8 +676,8 @@ async def shutdown_worker() -> None:
 
     # Shutdown quota reset scheduler (Story 7.0)
     from app.scheduler import (
-        shutdown_quota_reset_scheduler,
         shutdown_cleanup_scheduler,
+        shutdown_quota_reset_scheduler,
         shutdown_weekly_metrics_scheduler,
     )
 

@@ -38,10 +38,21 @@ async def test_validate_cost_consistency_pass(async_session: AsyncSession):
 
     # Add cost records that sum to 10.50
     costs = [
-        VideoCost(task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22),
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18),
-        VideoCost(task_id=task.id, component="elevenlabs_narration", cost_usd=Decimal("0.72"), units_used=18),
-        VideoCost(task_id=task.id, component="elevenlabs_sfx", cost_usd=Decimal("0.72"), units_used=18),
+        VideoCost(
+            task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22
+        ),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18
+        ),
+        VideoCost(
+            task_id=task.id,
+            component="elevenlabs_narration",
+            cost_usd=Decimal("0.72"),
+            units_used=18,
+        ),
+        VideoCost(
+            task_id=task.id, component="elevenlabs_sfx", cost_usd=Decimal("0.72"), units_used=18
+        ),
     ]
     for cost in costs:
         async_session.add(cost)
@@ -70,10 +81,21 @@ async def test_validate_cost_consistency_fail(async_session: AsyncSession):
 
     # Add cost records that sum to 10.50
     costs = [
-        VideoCost(task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22),
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18),
-        VideoCost(task_id=task.id, component="elevenlabs_narration", cost_usd=Decimal("0.72"), units_used=18),
-        VideoCost(task_id=task.id, component="elevenlabs_sfx", cost_usd=Decimal("0.72"), units_used=18),
+        VideoCost(
+            task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22
+        ),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18
+        ),
+        VideoCost(
+            task_id=task.id,
+            component="elevenlabs_narration",
+            cost_usd=Decimal("0.72"),
+            units_used=18,
+        ),
+        VideoCost(
+            task_id=task.id, component="elevenlabs_sfx", cost_usd=Decimal("0.72"), units_used=18
+        ),
     ]
     for cost in costs:
         async_session.add(cost)
@@ -101,8 +123,12 @@ async def test_detect_missing_cost_components(async_session: AsyncSession):
 
     # Add only 2 of 4 expected components
     costs = [
-        VideoCost(task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22),
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18),
+        VideoCost(
+            task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22
+        ),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18
+        ),
     ]
     for cost in costs:
         async_session.add(cost)
@@ -131,9 +157,15 @@ async def test_detect_duplicate_cost_records(async_session: AsyncSession):
 
     # Add duplicate kling_video records
     costs = [
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18),
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18),
-        VideoCost(task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18
+        ),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18
+        ),
+        VideoCost(
+            task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22
+        ),
     ]
     for cost in costs:
         async_session.add(cost)
@@ -161,9 +193,18 @@ async def test_detect_cost_anomalies(async_session: AsyncSession):
 
     # Add cost with anomalous value (kling_video way too high)
     costs = [
-        VideoCost(task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22),
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("100.00"), units_used=18),  # Anomaly!
-        VideoCost(task_id=task.id, component="elevenlabs_narration", cost_usd=Decimal("0.72"), units_used=18),
+        VideoCost(
+            task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22
+        ),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("100.00"), units_used=18
+        ),  # Anomaly!
+        VideoCost(
+            task_id=task.id,
+            component="elevenlabs_narration",
+            cost_usd=Decimal("0.72"),
+            units_used=18,
+        ),
     ]
     for cost in costs:
         async_session.add(cost)
@@ -191,10 +232,21 @@ async def test_no_anomalies_for_normal_costs(async_session: AsyncSession):
 
     # Add all costs within normal ranges
     costs = [
-        VideoCost(task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22),
-        VideoCost(task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18),
-        VideoCost(task_id=task.id, component="elevenlabs_narration", cost_usd=Decimal("0.72"), units_used=18),
-        VideoCost(task_id=task.id, component="elevenlabs_sfx", cost_usd=Decimal("0.72"), units_used=18),
+        VideoCost(
+            task_id=task.id, component="gemini_assets", cost_usd=Decimal("1.50"), units_used=22
+        ),
+        VideoCost(
+            task_id=task.id, component="kling_video", cost_usd=Decimal("7.56"), units_used=18
+        ),
+        VideoCost(
+            task_id=task.id,
+            component="elevenlabs_narration",
+            cost_usd=Decimal("0.72"),
+            units_used=18,
+        ),
+        VideoCost(
+            task_id=task.id, component="elevenlabs_sfx", cost_usd=Decimal("0.72"), units_used=18
+        ),
     ]
     for cost in costs:
         async_session.add(cost)

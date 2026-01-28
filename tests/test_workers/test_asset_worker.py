@@ -419,7 +419,9 @@ class TestProcessAssetGenerationTask:
                     duration = time.time() - start
 
                     # Should complete in < 2 seconds (not wait for 5s Notion sync)
-                    assert duration < 2.0, "Worker should not wait for Notion sync (fire-and-forget)"
+                    assert duration < 2.0, (
+                        "Worker should not wait for Notion sync (fire-and-forget)"
+                    )
 
                     # Verify sync was called (but not awaited)
                     # Note: Due to fire-and-forget, the call happens asynchronously

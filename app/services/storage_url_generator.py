@@ -78,10 +78,7 @@ def generate_r2_public_url(
 
     Example:
         >>> generate_r2_public_url(
-        ...     "poke-assets",
-        ...     "poke1",
-        ...     "vid_123",
-        ...     "assets/characters/bulbasaur_01.png"
+        ...     "poke-assets", "poke1", "vid_123", "assets/characters/bulbasaur_01.png"
         ... )
         "https://poke-assets.r2.dev/poke1/vid_123/assets/characters/bulbasaur_01.png"
     """
@@ -126,16 +123,12 @@ class StorageURLGenerator:
         Example (Notion storage):
             >>> generator = StorageURLGenerator(channel)
             >>> url = await generator.generate_asset_url(
-            ...     "assets/char.png",
-            ...     notion_response=notion_upload_response
+            ...     "assets/char.png", notion_response=notion_upload_response
             ... )
 
         Example (R2 storage):
             >>> generator = StorageURLGenerator(channel)
-            >>> url = await generator.generate_asset_url(
-            ...     "assets/char.png",
-            ...     project_id="vid_123"
-            ... )
+            >>> url = await generator.generate_asset_url("assets/char.png", project_id="vid_123")
         """
         if self.strategy == "notion":
             if not notion_response:

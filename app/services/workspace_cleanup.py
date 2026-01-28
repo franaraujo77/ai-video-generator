@@ -20,14 +20,12 @@ Dependencies:
 
 import shutil
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import AsyncSessionLocal
-from app.models import Task, TaskStatus, AssetMetadata
+from app.models import AssetMetadata, Task, TaskStatus
 from app.utils.context import get_correlation_id, set_correlation_id
 from app.utils.filesystem import get_project_dir
 
@@ -45,15 +43,11 @@ class WorkspaceCleanupService:
                            Defaults to AsyncSessionLocal from app.database.
         """
         from app.database import AsyncSessionLocal as DefaultSessionFactory
+
         self._session_factory = session_factory or DefaultSessionFactory
 
-    async def cleanup_old_workspaces(
-        self,
-        db: AsyncSession,
-        retention_days: int = 7
-    ) -> dict:
-        """
-        Clean up workspace directories for completed tasks older than retention period.
+    async def cleanup_old_workspaces(self, db: AsyncSession, retention_days: int = 7) -> dict:
+        """Clean up workspace directories for completed tasks older than retention period.
 
         Args:
             db: Database session
@@ -83,7 +77,7 @@ class WorkspaceCleanupService:
             .where(
                 Task.status.in_([TaskStatus.PUBLISHED, TaskStatus.CANCELLED]),
                 Task.updated_at < cutoff_date,
-                Task.cleanup_performed_at.is_(None)  # Not already cleaned
+                Task.cleanup_performed_at.is_(None),  # Not already cleaned
             )
             .order_by(Task.updated_at.asc())  # Oldest first
         )
@@ -115,7 +109,7 @@ class WorkspaceCleanupService:
                     task_id=str(task.id),
                     channel_id=task.channel.channel_id,
                     error=str(e),
-                    exc_info=True
+                    exc_info=True,
                 )
                 # Continue cleaning other tasks despite failures
 
@@ -126,10 +120,9 @@ class WorkspaceCleanupService:
             for task in tasks:
                 # Update cleanup_performed_at using direct SQL to avoid triggering status validation
                 from sqlalchemy import update
+
                 await db_update.execute(
-                    update(Task)
-                    .where(Task.id == task.id)
-                    .values(cleanup_performed_at=cleanup_time)
+                    update(Task).where(Task.id == task.id).values(cleanup_performed_at=cleanup_time)
                 )
 
             await db_update.commit()
@@ -141,19 +134,18 @@ class WorkspaceCleanupService:
             directories_cleaned=directories_cleaned,
             disk_freed_mb=round(total_disk_freed, 2),
             r2_assets_deleted=total_r2_assets_deleted,
-            duration_seconds=round(duration, 2)
+            duration_seconds=round(duration, 2),
         )
 
         return {
             "directories_cleaned": directories_cleaned,
             "disk_freed_mb": round(total_disk_freed, 2),
             "r2_assets_deleted": total_r2_assets_deleted,
-            "duration_seconds": round(duration, 2)
+            "duration_seconds": round(duration, 2),
         }
 
     async def _cleanup_task_workspace(self, task: Task) -> dict:
-        """
-        Clean up workspace directory and R2 assets for a single task.
+        """Clean up workspace directory and R2 assets for a single task.
 
         Args:
             task: Task model instance
@@ -164,19 +156,14 @@ class WorkspaceCleanupService:
         correlation_id = get_correlation_id()
 
         # Get workspace path via filesystem helper
-        project_dir = get_project_dir(
-            channel_id=task.channel.channel_id,
-            project_id=str(task.id)
-        )
+        project_dir = get_project_dir(channel_id=task.channel.channel_id, project_id=str(task.id))
 
         disk_freed_mb = 0.0
         r2_assets_deleted = 0
 
         # Calculate disk space before deletion
         if project_dir.exists():
-            total_size = sum(
-                f.stat().st_size for f in project_dir.rglob('*') if f.is_file()
-            )
+            total_size = sum(f.stat().st_size for f in project_dir.rglob("*") if f.is_file())
             disk_freed_mb = total_size / (1024 * 1024)
 
             # Delete workspace directory
@@ -189,14 +176,12 @@ class WorkspaceCleanupService:
                     channel_id=task.channel.channel_id,
                     status=task.status.value,
                     disk_freed_mb=round(disk_freed_mb, 2),
-                    correlation_id=correlation_id
+                    correlation_id=correlation_id,
                 )
 
             except FileNotFoundError:
                 log.warning(
-                    "workspace_already_deleted",
-                    task_id=str(task.id),
-                    correlation_id=correlation_id
+                    "workspace_already_deleted", task_id=str(task.id), correlation_id=correlation_id
                 )
 
             except PermissionError as e:
@@ -205,7 +190,7 @@ class WorkspaceCleanupService:
                     task_id=str(task.id),
                     error=str(e),
                     correlation_id=correlation_id,
-                    exc_info=True
+                    exc_info=True,
                 )
                 raise
 
@@ -214,21 +199,17 @@ class WorkspaceCleanupService:
                 "workspace_not_found",
                 task_id=str(task.id),
                 project_dir=str(project_dir),
-                correlation_id=correlation_id
+                correlation_id=correlation_id,
             )
 
         # Delete R2 assets if storage_strategy="r2"
         if task.channel.storage_strategy == "r2":
             r2_assets_deleted = await self._cleanup_r2_assets(task)
 
-        return {
-            "disk_freed_mb": disk_freed_mb,
-            "r2_assets_deleted": r2_assets_deleted
-        }
+        return {"disk_freed_mb": disk_freed_mb, "r2_assets_deleted": r2_assets_deleted}
 
     async def _cleanup_r2_assets(self, task: Task) -> int:
-        """
-        Delete R2 assets for task.
+        """Delete R2 assets for task.
 
         Args:
             task: Task model instance
@@ -244,8 +225,7 @@ class WorkspaceCleanupService:
             # Query all R2 assets for task
             assets_result = await db.execute(
                 select(AssetMetadata).where(
-                    AssetMetadata.task_id == task.id,
-                    AssetMetadata.storage_strategy == "r2"
+                    AssetMetadata.task_id == task.id, AssetMetadata.storage_strategy == "r2"
                 )
             )
 
@@ -276,7 +256,7 @@ class WorkspaceCleanupService:
                         asset_id=str(asset.id),
                         asset_type=asset.asset_type,
                         r2_key=r2_key,
-                        correlation_id=correlation_id
+                        correlation_id=correlation_id,
                     )
 
             except IndexError as e:
@@ -288,7 +268,7 @@ class WorkspaceCleanupService:
                     asset_url=asset.asset_url,
                     error=str(e),
                     reason="malformed_url",
-                    correlation_id=correlation_id
+                    correlation_id=correlation_id,
                 )
             except Exception as e:
                 # R2 deletion error or other unexpected issue
@@ -299,7 +279,7 @@ class WorkspaceCleanupService:
                     asset_url=asset.asset_url,
                     error=str(e),
                     error_type=type(e).__name__,
-                    correlation_id=correlation_id
+                    correlation_id=correlation_id,
                 )
 
         log.info(
@@ -307,7 +287,7 @@ class WorkspaceCleanupService:
             task_id=str(task.id),
             r2_assets_deleted=deleted_count,
             total_r2_assets=len(r2_assets),
-            correlation_id=correlation_id
+            correlation_id=correlation_id,
         )
 
         return deleted_count

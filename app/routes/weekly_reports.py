@@ -10,7 +10,7 @@ Endpoints:
 - GET /api/v1/reports/weekly-summary - Cross-channel weekly summary
 """
 
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 from uuid import UUID
 
@@ -22,9 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models import Channel
 from app.services.weekly_metrics_service import (
-    get_failure_pattern_analysis,
     get_success_rate_trend,
-    get_week_over_week_comparison,
     get_week_starting_date,
     get_weekly_metrics,
     get_weekly_metrics_range,
@@ -98,9 +96,7 @@ class FailurePatternAnalysisResponse(BaseModel):
     category_breakdown: dict = Field(
         description="Failures by category (transient, permanent, unknown)"
     )
-    stage_breakdown: dict = Field(
-        description="Failures by stage (assets, video, audio, upload)"
-    )
+    stage_breakdown: dict = Field(description="Failures by stage (assets, video, audio, upload)")
     most_common_category: str
     most_common_stage: str
 
@@ -155,9 +151,7 @@ async def list_weekly_metrics(
         )
 
     # Get metrics in range
-    metrics_list = await get_weekly_metrics_range(
-        channel_id, start_date, end_date, db
-    )
+    metrics_list = await get_weekly_metrics_range(channel_id, start_date, end_date, db)
 
     # Convert to response models
     metrics_responses = [
@@ -371,9 +365,7 @@ async def get_weekly_summary(
     )
 
     # Count channels meeting target (>= 90%)
-    channels_meeting_target = sum(
-        1 for m in metrics_list if m.success_rate >= Decimal("90.00")
-    )
+    channels_meeting_target = sum(1 for m in metrics_list if m.success_rate >= Decimal("90.00"))
 
     return WeeklySummaryResponse(
         week_starting_date=week_start.isoformat(),

@@ -574,9 +574,11 @@ class TestCredentialServiceR2Credentials:
         )
 
         # Retrieve credentials
-        retrieved_access, retrieved_secret, retrieved_bucket = (
-            await credential_service.get_r2_credentials("poke1", async_session)
-        )
+        (
+            retrieved_access,
+            retrieved_secret,
+            retrieved_bucket,
+        ) = await credential_service.get_r2_credentials("poke1", async_session)
 
         assert retrieved_access == access_key
         assert retrieved_secret == secret_key

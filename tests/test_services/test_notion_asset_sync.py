@@ -73,8 +73,12 @@ async def test_notion_asset_sync_service_success(mocker: MockerFixture):
 
     # Mock asset metadata
     mock_assets = [
-        mocker.Mock(asset_type="character", asset_name="char1", asset_url="https://test.com/char1.png"),
-        mocker.Mock(asset_type="video_clip", asset_name="clip1", asset_url="https://test.com/clip1.mp4"),
+        mocker.Mock(
+            asset_type="character", asset_name="char1", asset_url="https://test.com/char1.png"
+        ),
+        mocker.Mock(
+            asset_type="video_clip", asset_name="clip1", asset_url="https://test.com/clip1.mp4"
+        ),
     ]
 
     # Create service and update assets
@@ -102,7 +106,9 @@ async def test_notion_asset_sync_service_permanent_error(mocker: MockerFixture):
     mocker.patch("httpx.AsyncClient", return_value=mock_client)
 
     mock_assets = [
-        mocker.Mock(asset_type="character", asset_name="char1", asset_url="https://test.com/char1.png"),
+        mocker.Mock(
+            asset_type="character", asset_name="char1", asset_url="https://test.com/char1.png"
+        ),
     ]
 
     service = NotionAssetSyncService("test_token")
@@ -128,7 +134,9 @@ async def test_notion_asset_sync_service_transient_error(mocker: MockerFixture):
     mocker.patch("httpx.AsyncClient", return_value=mock_client)
 
     mock_assets = [
-        mocker.Mock(asset_type="character", asset_name="char1", asset_url="https://test.com/char1.png"),
+        mocker.Mock(
+            asset_type="character", asset_name="char1", asset_url="https://test.com/char1.png"
+        ),
     ]
 
     service = NotionAssetSyncService("test_token")

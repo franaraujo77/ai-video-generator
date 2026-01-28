@@ -29,10 +29,7 @@ class TestWorkerHeartbeatCheckIn:
 
         # Act - Simulate atomic upsert (insert)
         stmt = pg_insert(WorkerHeartbeat).values(
-            worker_id=worker_id,
-            last_seen_at=last_seen,
-            status="online",
-            active_task_count=0
+            worker_id=worker_id, last_seen_at=last_seen, status="online", active_task_count=0
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=["worker_id"],
@@ -67,10 +64,7 @@ class TestWorkerHeartbeatCheckIn:
         initial_time = datetime.now(timezone.utc) - timedelta(minutes=1)
 
         initial_heartbeat = WorkerHeartbeat(
-            worker_id=worker_id,
-            last_seen_at=initial_time,
-            status="idle",
-            active_task_count=0
+            worker_id=worker_id, last_seen_at=initial_time, status="idle", active_task_count=0
         )
         async_session.add(initial_heartbeat)
         await async_session.commit()
@@ -132,10 +126,7 @@ class TestWorkerHeartbeatCheckIn:
 
         # Act - Direct insert (SQLite doesn't preserve timezone info, but we use UTC in code)
         heartbeat = WorkerHeartbeat(
-            worker_id=worker_id,
-            last_seen_at=utc_time,
-            status="online",
-            active_task_count=0
+            worker_id=worker_id, last_seen_at=utc_time, status="online", active_task_count=0
         )
         async_session.add(heartbeat)
         await async_session.commit()
@@ -161,7 +152,7 @@ class TestWorkerHeartbeatCheckIn:
                 worker_id=worker_id,
                 last_seen_at=datetime.now(timezone.utc),
                 status="online",
-                active_task_count=i
+                active_task_count=i,
             )
             stmt = stmt.on_conflict_do_update(
                 index_elements=["worker_id"],
@@ -193,7 +184,7 @@ class TestWorkerHeartbeatCheckIn:
                 worker_id=worker_id,
                 last_seen_at=datetime.now(timezone.utc),
                 status="online",
-                active_task_count=0
+                active_task_count=0,
             )
             stmt = stmt.on_conflict_do_update(
                 index_elements=["worker_id"],
@@ -227,7 +218,7 @@ class TestWorkerHeartbeatCheckIn:
                 worker_id=worker_id,
                 last_seen_at=datetime.now(timezone.utc),
                 status=status,
-                active_task_count=0
+                active_task_count=0,
             )
             stmt = stmt.on_conflict_do_update(
                 index_elements=["worker_id"],

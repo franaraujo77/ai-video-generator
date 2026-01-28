@@ -85,9 +85,7 @@ class StructuredLogger:
         self._logger.debug(self._format_json(event, **kwargs))
 
 
-def add_correlation_id(
-    logger: Any, method_name: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def add_correlation_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject correlation_id from async context into every log entry.
 
     Args:
@@ -106,9 +104,7 @@ def add_correlation_id(
     return event_dict
 
 
-def add_channel_id(
-    logger: Any, method_name: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def add_channel_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject channel_id from async context into every log entry.
 
     Args:
@@ -127,9 +123,7 @@ def add_channel_id(
     return event_dict
 
 
-def add_worker_id(
-    logger: Any, method_name: str, event_dict: dict[str, Any]
-) -> dict[str, Any]:
+def add_worker_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     """Inject worker_id from RAILWAY_SERVICE_NAME env var into every log entry.
 
     Args:

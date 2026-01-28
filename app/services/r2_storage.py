@@ -95,12 +95,12 @@ class R2StorageClient:
         >>> client = R2StorageClient(
         ...     bucket_name="ai-video-assets",
         ...     access_key_id="your_access_key",
-        ...     secret_access_key="your_secret_key"
+        ...     secret_access_key="your_secret_key",
         ... )
         >>> url = await client.upload_asset(
         ...     local_file_path=Path("/workspace/asset.png"),
         ...     r2_key="poke1/task123/assets/char.png",
-        ...     content_type="image/png"
+        ...     content_type="image/png",
         ... )
         >>> print(url)
         "https://ai-video-assets.r2.dev/poke1/task123/assets/char.png"
@@ -160,7 +160,7 @@ class R2StorageClient:
             >>> url = await client.upload_asset(
             ...     local_file_path=Path("/workspace/channel/task/asset.png"),
             ...     r2_key="poke1/uuid-task-123/assets/characters/bulbasaur_01.png",
-            ...     content_type="image/png"
+            ...     content_type="image/png",
             ... )
             >>> print(url)
             "https://ai-video-assets.r2.dev/poke1/uuid-task-123/assets/characters/bulbasaur_01.png"

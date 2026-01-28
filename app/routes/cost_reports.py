@@ -22,8 +22,12 @@ from app.database import get_session
 from app.services.cost_tracker import (
     get_average_cost_per_video,
     get_channel_cost_summary,
+    get_cost_comparison_across_channels,
+    get_cost_trend_data,
+    get_monthly_cost_summary,
     get_task_cost_breakdown,
     get_task_total_cost,
+    get_weekly_cost_summary,
 )
 from app.services.cost_validation import validate_task_costs
 
@@ -204,3 +208,219 @@ async def validate_costs(
     """
     report = await validate_task_costs(db, task_id)
     return report
+
+
+# ============================================================================
+# Story 8.8: Cost Dashboard & Reporting - Dashboard Endpoints
+# ============================================================================
+
+
+class WeeklyCostSummaryResponse(BaseModel):
+    """Response schema for weekly cost summary."""
+
+    channel_id: UUID
+    total_cost: Decimal
+    video_count: int
+    avg_cost_per_video: Decimal
+    breakdown_by_component: dict[str, Decimal]
+    start_date: datetime
+    end_date: datetime
+
+
+class MonthlyCostSummaryResponse(BaseModel):
+    """Response schema for monthly cost summary."""
+
+    channel_id: UUID
+    total_cost: Decimal
+    video_count: int
+    avg_cost_per_video: Decimal
+    breakdown_by_component: dict[str, Decimal]
+    start_date: datetime
+    end_date: datetime
+
+
+class ChannelComparisonItem(BaseModel):
+    """Single channel comparison data."""
+
+    channel_id: UUID
+    channel_name: str
+    total_cost: Decimal
+    video_count: int
+    avg_cost_per_video: Decimal
+
+
+class ChannelComparisonResponse(BaseModel):
+    """Response schema for channel comparison."""
+
+    channels: list[ChannelComparisonItem]
+    days: int
+
+
+class CostDashboardResponse(BaseModel):
+    """Response schema for complete cost dashboard."""
+
+    weekly_summary: WeeklyCostSummaryResponse
+    monthly_summary: MonthlyCostSummaryResponse
+    channel_comparison: list[ChannelComparisonItem]
+    trend_data: dict[str, Any]
+
+
+@router.get(
+    "/reports/weekly-cost-summary",
+    response_model=WeeklyCostSummaryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get weekly cost summary",
+    description="Returns cost summary for current week (Monday-Sunday) for specified channel",
+)
+async def get_weekly_summary(
+    channel_id: UUID = Query(..., description="Channel UUID"),
+    db: AsyncSession = Depends(get_session),
+) -> WeeklyCostSummaryResponse:
+    """Get weekly cost summary for current week.
+
+    Args:
+        channel_id: UUID of the channel
+        db: Database session (injected)
+
+    Returns:
+        WeeklyCostSummaryResponse with current week costs
+
+    Example:
+        GET /api/v1/reports/weekly-cost-summary?channel_id=123e4567-e89b-12d3-a456-426614174000
+    """
+    summary = await get_weekly_cost_summary(db, channel_id)
+
+    return WeeklyCostSummaryResponse(
+        channel_id=channel_id,
+        total_cost=summary["total_cost"],
+        video_count=summary["video_count"],
+        avg_cost_per_video=summary["avg_cost_per_video"],
+        breakdown_by_component=summary["breakdown_by_component"],
+        start_date=summary["start_date"],
+        end_date=summary["end_date"],
+    )
+
+
+@router.get(
+    "/reports/monthly-cost-summary",
+    response_model=MonthlyCostSummaryResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get monthly cost summary",
+    description="Returns cost summary for current month for specified channel",
+)
+async def get_monthly_summary(
+    channel_id: UUID = Query(..., description="Channel UUID"),
+    db: AsyncSession = Depends(get_session),
+) -> MonthlyCostSummaryResponse:
+    """Get monthly cost summary for current month.
+
+    Args:
+        channel_id: UUID of the channel
+        db: Database session (injected)
+
+    Returns:
+        MonthlyCostSummaryResponse with current month costs
+
+    Example:
+        GET /api/v1/reports/monthly-cost-summary?channel_id=123e4567-e89b-12d3-a456-426614174000
+    """
+    summary = await get_monthly_cost_summary(db, channel_id)
+
+    return MonthlyCostSummaryResponse(
+        channel_id=channel_id,
+        total_cost=summary["total_cost"],
+        video_count=summary["video_count"],
+        avg_cost_per_video=summary["avg_cost_per_video"],
+        breakdown_by_component=summary["breakdown_by_component"],
+        start_date=summary["start_date"],
+        end_date=summary["end_date"],
+    )
+
+
+@router.get(
+    "/reports/channel-comparison",
+    response_model=ChannelComparisonResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get channel cost comparison",
+    description="Returns cost efficiency comparison across all active channels",
+)
+async def get_channel_comparison(
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze (default: 30)"),
+    db: AsyncSession = Depends(get_session),
+) -> ChannelComparisonResponse:
+    """Get cost comparison across channels.
+
+    Sorted by efficiency (lowest avg cost per video first).
+
+    Args:
+        days: Number of days to analyze (default: 30)
+        db: Database session (injected)
+
+    Returns:
+        ChannelComparisonResponse with channel efficiency data
+
+    Example:
+        GET /api/v1/reports/channel-comparison?days=30
+    """
+    comparison = await get_cost_comparison_across_channels(db, days=days)
+
+    return ChannelComparisonResponse(
+        channels=[ChannelComparisonItem(**item) for item in comparison], days=days
+    )
+
+
+@router.get(
+    "/reports/cost-dashboard",
+    response_model=CostDashboardResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get complete cost dashboard data",
+    description="Returns comprehensive cost dashboard with weekly, monthly, comparison, and trend data",
+)
+async def get_cost_dashboard(
+    channel_id: UUID = Query(..., description="Channel UUID"),
+    trend_days: int = Query(30, ge=1, le=365, description="Days for trend analysis (default: 30)"),
+    db: AsyncSession = Depends(get_session),
+) -> CostDashboardResponse:
+    """Get complete cost dashboard data for a channel.
+
+    Aggregates weekly summary, monthly summary, channel comparison, and trend data.
+
+    Args:
+        channel_id: UUID of the channel
+        trend_days: Number of days for trend analysis (default: 30)
+        db: Database session (injected)
+
+    Returns:
+        CostDashboardResponse with complete dashboard data
+
+    Example:
+        GET /api/v1/reports/cost-dashboard?channel_id=123e4567-e89b-12d3-a456-426614174000&trend_days=30
+    """
+    # Fetch all dashboard data in parallel (could be optimized with asyncio.gather)
+    weekly = await get_weekly_cost_summary(db, channel_id)
+    monthly = await get_monthly_cost_summary(db, channel_id)
+    comparison = await get_cost_comparison_across_channels(db, days=trend_days)
+    trend = await get_cost_trend_data(db, channel_id, days=trend_days)
+
+    return CostDashboardResponse(
+        weekly_summary=WeeklyCostSummaryResponse(
+            channel_id=channel_id,
+            total_cost=weekly["total_cost"],
+            video_count=weekly["video_count"],
+            avg_cost_per_video=weekly["avg_cost_per_video"],
+            breakdown_by_component=weekly["breakdown_by_component"],
+            start_date=weekly["start_date"],
+            end_date=weekly["end_date"],
+        ),
+        monthly_summary=MonthlyCostSummaryResponse(
+            channel_id=channel_id,
+            total_cost=monthly["total_cost"],
+            video_count=monthly["video_count"],
+            avg_cost_per_video=monthly["avg_cost_per_video"],
+            breakdown_by_component=monthly["breakdown_by_component"],
+            start_date=monthly["start_date"],
+            end_date=monthly["end_date"],
+        ),
+        channel_comparison=[ChannelComparisonItem(**item) for item in comparison],
+        trend_data=trend,
+    )

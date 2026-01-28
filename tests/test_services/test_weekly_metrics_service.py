@@ -99,7 +99,9 @@ class TestCalculateWeeklyMetrics:
                 story_direction="Test direction",
                 status=TaskStatus.PUBLISHED,
                 created_at=datetime(2026, 1, 20, 10, 0, tzinfo=timezone.utc),
-                updated_at=datetime(2026, 1, 20 + (i % 6), 12, 0, tzinfo=timezone.utc),  # Cycles Jan 20-25
+                updated_at=datetime(
+                    2026, 1, 20 + (i % 6), 12, 0, tzinfo=timezone.utc
+                ),  # Cycles Jan 20-25
             )
             async_session.add(task)
 
@@ -525,7 +527,9 @@ class TestCheckSuccessRateThresholds:
         with patch(
             "app.services.weekly_metrics_service.send_discord_alert", new_callable=AsyncMock
         ) as mock_alert:
-            with patch("app.services.weekly_metrics_service.os.getenv", return_value="mock_webhook"):
+            with patch(
+                "app.services.weekly_metrics_service.os.getenv", return_value="mock_webhook"
+            ):
                 await check_success_rate_thresholds(metrics, async_session)
 
                 # Assert: Alert sent
@@ -567,7 +571,9 @@ class TestCheckSuccessRateThresholds:
         with patch(
             "app.services.weekly_metrics_service.send_discord_alert", new_callable=AsyncMock
         ) as mock_alert:
-            with patch("app.services.weekly_metrics_service.os.getenv", return_value="mock_webhook"):
+            with patch(
+                "app.services.weekly_metrics_service.os.getenv", return_value="mock_webhook"
+            ):
                 await check_success_rate_thresholds(metrics, async_session)
 
                 # Assert: Alert mentions video stage

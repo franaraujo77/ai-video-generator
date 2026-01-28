@@ -36,17 +36,7 @@ def test_extract_notion_file_url_success():
 def test_extract_notion_file_url_custom_property():
     """Test extracting file URL from custom Notion property."""
     notion_response = {
-        "properties": {
-            "MyFile": {
-                "files": [
-                    {
-                        "file": {
-                            "url": "https://notion.so/files/test.png"
-                        }
-                    }
-                ]
-            }
-        }
+        "properties": {"MyFile": {"files": [{"file": {"url": "https://notion.so/files/test.png"}}]}}
     }
 
     url = extract_notion_file_url(notion_response, property_name="MyFile")
@@ -55,11 +45,7 @@ def test_extract_notion_file_url_custom_property():
 
 def test_extract_notion_file_url_missing_property():
     """Test error handling when property not found."""
-    notion_response = {
-        "properties": {
-            "OtherProperty": {}
-        }
-    }
+    notion_response = {"properties": {"OtherProperty": {}}}
 
     with pytest.raises(ValueError, match="Failed to extract file URL"):
         extract_notion_file_url(notion_response)
@@ -67,13 +53,7 @@ def test_extract_notion_file_url_missing_property():
 
 def test_extract_notion_file_url_empty_files():
     """Test error handling when files array is empty."""
-    notion_response = {
-        "properties": {
-            "Asset": {
-                "files": []
-            }
-        }
-    }
+    notion_response = {"properties": {"Asset": {"files": []}}}
 
     with pytest.raises(ValueError, match="No files found"):
         extract_notion_file_url(notion_response)
@@ -131,17 +111,7 @@ async def test_storage_url_generator_notion_strategy():
     assert not generator.is_r2_storage()
 
     notion_response = {
-        "properties": {
-            "Asset": {
-                "files": [
-                    {
-                        "file": {
-                            "url": "https://notion.so/files/test.png"
-                        }
-                    }
-                ]
-            }
-        }
+        "properties": {"Asset": {"files": [{"file": {"url": "https://notion.so/files/test.png"}}]}}
     }
 
     url = await generator.generate_asset_url(

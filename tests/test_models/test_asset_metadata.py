@@ -82,7 +82,9 @@ async def test_asset_metadata_creation(async_session: AsyncSession, task: Task, 
 
 
 @pytest.mark.asyncio
-async def test_asset_metadata_relationships(async_session: AsyncSession, task: Task, channel: Channel):
+async def test_asset_metadata_relationships(
+    async_session: AsyncSession, task: Task, channel: Channel
+):
     """Test relationships to Task and Channel models."""
     asset = AssetMetadata(
         task_id=task.id,

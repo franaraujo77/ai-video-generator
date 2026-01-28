@@ -27,10 +27,7 @@ class TestWorkerHeartbeatModel:
 
         # Act
         heartbeat = WorkerHeartbeat(
-            worker_id=worker_id,
-            last_seen_at=last_seen,
-            status="online",
-            active_task_count=2
+            worker_id=worker_id, last_seen_at=last_seen, status="online", active_task_count=2
         )
         async_session.add(heartbeat)
         await async_session.commit()
@@ -49,9 +46,7 @@ class TestWorkerHeartbeatModel:
         # Arrange
         worker_id = "worker-1"
         heartbeat1 = WorkerHeartbeat(
-            worker_id=worker_id,
-            last_seen_at=datetime.now(timezone.utc),
-            status="online"
+            worker_id=worker_id, last_seen_at=datetime.now(timezone.utc), status="online"
         )
         async_session.add(heartbeat1)
         await async_session.commit()
@@ -60,7 +55,7 @@ class TestWorkerHeartbeatModel:
         heartbeat2 = WorkerHeartbeat(
             worker_id=worker_id,  # Same worker_id
             last_seen_at=datetime.now(timezone.utc),
-            status="online"
+            status="online",
         )
         async_session.add(heartbeat2)
 
@@ -71,8 +66,7 @@ class TestWorkerHeartbeatModel:
         """Test that default values are set correctly."""
         # Arrange & Act - Create with minimal fields
         heartbeat = WorkerHeartbeat(
-            worker_id="worker-test",
-            last_seen_at=datetime.now(timezone.utc)
+            worker_id="worker-test", last_seen_at=datetime.now(timezone.utc)
         )
         async_session.add(heartbeat)
         await async_session.commit()
@@ -112,9 +106,7 @@ class TestWorkerHeartbeatModel:
         # Arrange - Create multiple heartbeats
         for i in range(1, 4):
             heartbeat = WorkerHeartbeat(
-                worker_id=f"worker-{i}",
-                last_seen_at=datetime.now(timezone.utc),
-                status="online"
+                worker_id=f"worker-{i}", last_seen_at=datetime.now(timezone.utc), status="online"
             )
             async_session.add(heartbeat)
         await async_session.commit()
@@ -137,18 +129,14 @@ class TestWorkerHeartbeatModel:
 
         # Old heartbeat (inactive)
         old_heartbeat = WorkerHeartbeat(
-            worker_id="worker-old",
-            last_seen_at=old_timestamp,
-            status="idle"
+            worker_id="worker-old", last_seen_at=old_timestamp, status="idle"
         )
         async_session.add(old_heartbeat)
 
         # Recent heartbeats (active)
         for i in range(1, 3):
             heartbeat = WorkerHeartbeat(
-                worker_id=f"worker-{i}",
-                last_seen_at=recent_timestamp,
-                status="online"
+                worker_id=f"worker-{i}", last_seen_at=recent_timestamp, status="online"
             )
             async_session.add(heartbeat)
         await async_session.commit()
@@ -170,9 +158,7 @@ class TestWorkerHeartbeatModel:
         # Arrange
         last_seen = datetime.now(timezone.utc)
         heartbeat = WorkerHeartbeat(
-            worker_id="worker-1",
-            last_seen_at=last_seen,
-            status="processing"
+            worker_id="worker-1", last_seen_at=last_seen, status="processing"
         )
         async_session.add(heartbeat)
         await async_session.commit()
@@ -191,9 +177,9 @@ class TestWorkerHeartbeatModel:
         statuses = ["online", "idle", "processing"]
         for i, status_val in enumerate(statuses):
             heartbeat = WorkerHeartbeat(
-                worker_id=f"worker-{i+1}",
+                worker_id=f"worker-{i + 1}",
                 last_seen_at=datetime.now(timezone.utc),
-                status=status_val
+                status=status_val,
             )
             async_session.add(heartbeat)
         await async_session.commit()
@@ -213,7 +199,7 @@ class TestWorkerHeartbeatModel:
             worker_id="worker-busy",
             last_seen_at=datetime.now(timezone.utc),
             status="processing",
-            active_task_count=5
+            active_task_count=5,
         )
         async_session.add(heartbeat)
         await async_session.commit()

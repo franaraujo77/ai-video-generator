@@ -50,9 +50,7 @@ class TestCheckDatabaseConnection:
     async def test_check_database_connection_error(self, async_session):
         """Test that check returns False when database query raises exception."""
         # Arrange - Mock execute to raise exception
-        async_session.execute = AsyncMock(
-            side_effect=Exception("Connection refused")
-        )
+        async_session.execute = AsyncMock(side_effect=Exception("Connection refused"))
 
         # Act
         result = await check_database_connection(async_session)
@@ -85,9 +83,7 @@ class TestGetActiveWorkerCount:
         assert result["count"] == 3
         assert result["active_timestamp"] is not None
 
-    async def test_get_active_worker_count_partial_workers_active(
-        self, async_session
-    ):
+    async def test_get_active_worker_count_partial_workers_active(self, async_session):
         """Test that only recent workers are counted (5-minute threshold)."""
         # Arrange - 2 active, 1 inactive
         now = datetime.now(timezone.utc)
@@ -169,9 +165,7 @@ class TestGetActiveWorkerCount:
         # Assert
         assert result["count"] == 0  # Worker excluded (>= 5 min ago)
 
-    async def test_get_active_worker_count_most_recent_timestamp(
-        self, async_session
-    ):
+    async def test_get_active_worker_count_most_recent_timestamp(self, async_session):
         """Test that active_timestamp reflects most recent heartbeat."""
         # Arrange - Multiple workers with different timestamps
         now = datetime.now(timezone.utc)

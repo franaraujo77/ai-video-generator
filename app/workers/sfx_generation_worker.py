@@ -201,9 +201,7 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
 
                 credential_service = CredentialService()
                 try:
-                    r2_client = await credential_service.get_r2_client(
-                        channel.channel_id, db
-                    )
+                    r2_client = await credential_service.get_r2_client(channel.channel_id, db)
                 except ValueError as e:
                     log.error(
                         "r2_client_initialization_failed",

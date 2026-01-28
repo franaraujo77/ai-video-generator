@@ -169,6 +169,7 @@ async def async_client(async_engine):
             yield session
 
     from app.database import get_session
+
     app.dependency_overrides[get_session] = override_get_session
 
     # Create client with ASGI transport

@@ -12,7 +12,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
-from app.models import AssetMetadata, Channel, Task
+from app.models import Channel, Task
 from app.services.asset_url_storage import get_task_assets, get_unsynced_assets
 from app.services.credential_service import CredentialService
 from app.services.notion_asset_sync import sync_task_assets_to_notion
@@ -50,7 +50,9 @@ class TaskAssetsResponse(BaseModel):
 @router.get("/tasks/{task_id}/assets", response_model=TaskAssetsResponse)
 async def get_task_asset_urls(
     task_id: UUID,
-    asset_type: str | None = Query(None, description="Filter by asset type (character, video_clip, etc.)"),
+    asset_type: str | None = Query(
+        None, description="Filter by asset type (character, video_clip, etc.)"
+    ),
     db: AsyncSession = Depends(get_session),
 ) -> TaskAssetsResponse:
     """Get all asset URLs for a task, optionally filtered by asset type.

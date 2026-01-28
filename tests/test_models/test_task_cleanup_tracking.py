@@ -58,14 +58,14 @@ async def test_query_tasks_by_cleanup_performed_at(async_test_session):
     cleaned_task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
     cleaned_task.cleanup_performed_at = datetime.now(timezone.utc)
 
     uncleaned_task = create_task(
         channel=channel,
         status=TaskStatus.PUBLISHED,
-        updated_at=datetime.now(timezone.utc) - timedelta(days=10)
+        updated_at=datetime.now(timezone.utc) - timedelta(days=10),
     )
 
     async_test_session.add_all([cleaned_task, uncleaned_task])

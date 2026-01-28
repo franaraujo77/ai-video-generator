@@ -444,11 +444,7 @@ class CredentialService:
 
         Example:
             >>> await service.store_r2_credentials(
-            ...     "poke1",
-            ...     "access_key_id",
-            ...     "secret_access_key",
-            ...     "ai-video-assets",
-            ...     db
+            ...     "poke1", "access_key_id", "secret_access_key", "ai-video-assets", db
             ... )
         """
         channel = await self._get_channel(channel_id, db)
