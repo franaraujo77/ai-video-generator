@@ -131,165 +131,165 @@ def register_entrypoints(pgq: PgQueuer) -> None:
 
         try:
             # Step 1: Claim and log with priority context (short transaction)
-        async with AsyncSessionLocal() as db:  # type: ignore[misc]
-            task = await db.get(Task, task_id)
-            if not task:
-                log.error("task_not_found", task_id=task_id)
-                raise ValueError(f"Task not found: {task_id}")
+            async with AsyncSessionLocal() as db:  # type: ignore[misc]
+                task = await db.get(Task, task_id)
+                if not task:
+                    log.error("task_not_found", task_id=task_id)
+                    raise ValueError(f"Task not found: {task_id}")
 
-            # Story 8.1: Bind correlation_id and channel_id to async context
-            # This makes them available to all logs throughout task processing
-            set_correlation_id(str(task.id))
-            set_channel_id(task.channel_id)
+                # Story 8.1: Bind correlation_id and channel_id to async context
+                # This makes them available to all logs throughout task processing
+                set_correlation_id(str(task.id))
+                set_channel_id(task.channel_id)
 
-            # Log claim with priority context (Story 4.3)
-            # Note: correlation_id, channel_id, worker_id auto-injected by structlog processors
-            log.info(
-                "task_claimed",
-                worker_id=worker_id,
-                task_id=task_id,
-                priority=task.priority,  # Story 4.3: Log priority level
-                channel_id=task.channel_id,
-                pgqueuer_job_id=str(job.id),
-            )
+                # Log claim with priority context (Story 4.3)
+                # Note: correlation_id, channel_id, worker_id auto-injected by structlog processors
+                log.info(
+                    "task_claimed",
+                    worker_id=worker_id,
+                    task_id=task_id,
+                    priority=task.priority,  # Story 4.3: Log priority level
+                    channel_id=task.channel_id,
+                    pgqueuer_job_id=str(job.id),
+                )
 
-            # Step 1.4: Retry eligibility check (Story 6.9, Task 5)
-            # Don't claim tasks that are waiting for their retry time
-            from app.services.error_logger import log_retry_started
-            from app.services.retry_state_service import should_retry
+                # Step 1.4: Retry eligibility check (Story 6.9, Task 5)
+                # Don't claim tasks that are waiting for their retry time
+                from app.services.error_logger import log_retry_started
+                from app.services.retry_state_service import should_retry
 
-            # Check if task has retry_count > 0 (indicating it's in retry state)
-            if task.retry_count > 0:
-                # Use should_retry to check eligibility (retry time must have arrived)
-                if not should_retry(
-                    retry_attempt=task.retry_count,
-                    next_retry_at=task.next_retry_at,
-                    max_attempts=task.max_retry_attempts,
-                ):
-                    # Task is waiting for retry - release back to queue
-                    next_retry_iso = task.next_retry_at.isoformat() if task.next_retry_at else None
-                    log.info(
-                        "task_retry_not_ready_releasing",
-                        task_id=task_id,
-                        retry_count=task.retry_count,
-                        next_retry_at=next_retry_iso,
-                        max_retry_attempts=task.max_retry_attempts,
+                # Check if task has retry_count > 0 (indicating it's in retry state)
+                if task.retry_count > 0:
+                    # Use should_retry to check eligibility (retry time must have arrived)
+                    if not should_retry(
+                        retry_attempt=task.retry_count,
+                        next_retry_at=task.next_retry_at,
+                        max_attempts=task.max_retry_attempts,
+                    ):
+                        # Task is waiting for retry - release back to queue
+                        next_retry_iso = task.next_retry_at.isoformat() if task.next_retry_at else None
+                        log.info(
+                            "task_retry_not_ready_releasing",
+                            task_id=task_id,
+                            retry_count=task.retry_count,
+                            next_retry_at=next_retry_iso,
+                            max_retry_attempts=task.max_retry_attempts,
+                        )
+                        # Return early - don't process this task yet
+                        return
+
+                    # Retry time has arrived - log retry started (Story 6.9, Task 7)
+                    await log_retry_started(
+                        task_id=task.id,
+                        correlation_id=task.id,
+                        channel_id=str(task.channel_id),
+                        retry_attempt=task.retry_count,
+                        step_name=task.status.value,  # Current step being retried
                     )
-                    # Return early - don't process this task yet
+
+                # Step 1.5: Rate limit awareness - double-check quota (Story 4.5)
+                # Determine which API this task requires based on its status
+                required_api = get_required_api(task.status.value)
+
+                rate_limit_hit = False
+
+                if required_api == "youtube":
+                    # Check YouTube quota before upload
+                    quota_available = await check_youtube_quota(
+                        channel_id=task.channel_id, operation="upload", db=db
+                    )
+                    if not quota_available:
+                        rate_limit_hit = True
+                        log.warning(
+                            "youtube_quota_exhausted_releasing_task",
+                            task_id=task_id,
+                            channel_id=task.channel_id,
+                            status=task.status.value,
+                        )
+
+                elif required_api == "gemini":
+                    # Check asset generation concurrency limit first (Story 4.6 - cheaper check)
+                    if not worker_state.can_claim_asset_task():
+                        rate_limit_hit = True
+                        log.warning(
+                            "asset_concurrency_limit_releasing_task",
+                            task_id=task_id,
+                            active_tasks=worker_state.active_asset_tasks,
+                            max_concurrent=worker_state.max_concurrent_asset_gen,
+                        )
+                    # Then check Gemini quota flag (worker-local) with auto-reset (Story 4.5)
+                    elif not worker_state.check_gemini_quota_available():
+                        rate_limit_hit = True
+                        reset_time_iso = (
+                            worker_state.gemini_quota_reset_time.isoformat()
+                            if worker_state.gemini_quota_reset_time
+                            else None
+                        )
+                        log.warning(
+                            "gemini_quota_exhausted_releasing_task",
+                            task_id=task_id,
+                            status=task.status.value,
+                            reset_time=reset_time_iso,
+                        )
+
+                elif required_api == "kling":
+                    # Check Kling concurrency limit (worker-local)
+                    if not worker_state.can_claim_video_task():
+                        rate_limit_hit = True
+                        log.warning(
+                            "kling_concurrency_limit_releasing_task",
+                            task_id=task_id,
+                            active_tasks=worker_state.active_video_tasks,
+                            max_concurrent=worker_state.max_concurrent_video,
+                        )
+
+                elif required_api == "elevenlabs":
+                    # Check audio generation concurrency limit (Story 4.6)
+                    if not worker_state.can_claim_audio_task():
+                        rate_limit_hit = True
+                        log.warning(
+                            "audio_concurrency_limit_releasing_task",
+                            task_id=task_id,
+                            active_tasks=worker_state.active_audio_tasks,
+                            max_concurrent=worker_state.max_concurrent_audio_gen,
+                        )
+
+                # If rate limit hit, release task back to queue
+                if rate_limit_hit:
+                    # Do NOT update task status - leave it in current state
+                    # PgQueuer will make it available for other workers
+                    log.info(
+                        "task_released_due_to_rate_limit",
+                        task_id=task_id,
+                        required_api=required_api,
+                        worker_id=worker_id,
+                    )
+                    # Return early - don't process this task
                     return
 
-                # Retry time has arrived - log retry started (Story 6.9, Task 7)
-                await log_retry_started(
-                    task_id=task.id,
-                    correlation_id=task.id,
-                    channel_id=str(task.channel_id),
-                    retry_attempt=task.retry_count,
-                    step_name=task.status.value,  # Current step being retried
-                )
+                # Increment task counters for tracked API types
+                # (Story 4.5: video, Story 4.6: asset/audio)
+                if required_api == "kling":
+                    worker_state.increment_video_tasks()
+                elif required_api == "gemini":
+                    worker_state.increment_asset_tasks()
+                elif required_api == "elevenlabs":
+                    worker_state.increment_audio_tasks()
 
-            # Step 1.5: Rate limit awareness - double-check quota (Story 4.5)
-            # Determine which API this task requires based on its status
-            required_api = get_required_api(task.status.value)
+                # Transition: claimed → processing (with dynamic status based on task type)
+                task.status = TaskStatus.CLAIMED
+                await db.commit()
 
-            rate_limit_hit = False
-
-            if required_api == "youtube":
-                # Check YouTube quota before upload
-                quota_available = await check_youtube_quota(
-                    channel_id=task.channel_id, operation="upload", db=db
-                )
-                if not quota_available:
-                    rate_limit_hit = True
-                    log.warning(
-                        "youtube_quota_exhausted_releasing_task",
-                        task_id=task_id,
-                        channel_id=task.channel_id,
-                        status=task.status.value,
-                    )
-
-            elif required_api == "gemini":
-                # Check asset generation concurrency limit first (Story 4.6 - cheaper check)
-                if not worker_state.can_claim_asset_task():
-                    rate_limit_hit = True
-                    log.warning(
-                        "asset_concurrency_limit_releasing_task",
-                        task_id=task_id,
-                        active_tasks=worker_state.active_asset_tasks,
-                        max_concurrent=worker_state.max_concurrent_asset_gen,
-                    )
-                # Then check Gemini quota flag (worker-local) with auto-reset (Story 4.5)
-                elif not worker_state.check_gemini_quota_available():
-                    rate_limit_hit = True
-                    reset_time_iso = (
-                        worker_state.gemini_quota_reset_time.isoformat()
-                        if worker_state.gemini_quota_reset_time
-                        else None
-                    )
-                    log.warning(
-                        "gemini_quota_exhausted_releasing_task",
-                        task_id=task_id,
-                        status=task.status.value,
-                        reset_time=reset_time_iso,
-                    )
-
-            elif required_api == "kling":
-                # Check Kling concurrency limit (worker-local)
-                if not worker_state.can_claim_video_task():
-                    rate_limit_hit = True
-                    log.warning(
-                        "kling_concurrency_limit_releasing_task",
-                        task_id=task_id,
-                        active_tasks=worker_state.active_video_tasks,
-                        max_concurrent=worker_state.max_concurrent_video,
-                    )
-
-            elif required_api == "elevenlabs":
-                # Check audio generation concurrency limit (Story 4.6)
-                if not worker_state.can_claim_audio_task():
-                    rate_limit_hit = True
-                    log.warning(
-                        "audio_concurrency_limit_releasing_task",
-                        task_id=task_id,
-                        active_tasks=worker_state.active_audio_tasks,
-                        max_concurrent=worker_state.max_concurrent_audio_gen,
-                    )
-
-            # If rate limit hit, release task back to queue
-            if rate_limit_hit:
-                # Do NOT update task status - leave it in current state
-                # PgQueuer will make it available for other workers
-                log.info(
-                    "task_released_due_to_rate_limit",
-                    task_id=task_id,
-                    required_api=required_api,
-                    worker_id=worker_id,
-                )
-                # Return early - don't process this task
-                return
-
-            # Increment task counters for tracked API types
-            # (Story 4.5: video, Story 4.6: asset/audio)
-            if required_api == "kling":
-                worker_state.increment_video_tasks()
-            elif required_api == "gemini":
-                worker_state.increment_asset_tasks()
-            elif required_api == "elevenlabs":
-                worker_state.increment_audio_tasks()
-
-            # Transition: claimed → processing (with dynamic status based on task type)
-            task.status = TaskStatus.CLAIMED
-            await db.commit()
-
-            # Determine next processing status based on current status
-            status_transitions = {
-                TaskStatus.QUEUED: TaskStatus.GENERATING_ASSETS,
-                TaskStatus.COMPOSITES_READY: TaskStatus.GENERATING_VIDEO,
-                TaskStatus.VIDEO_APPROVED: TaskStatus.GENERATING_AUDIO,
-                TaskStatus.FINAL_REVIEW: TaskStatus.UPLOADING,
-            }
-            next_status = status_transitions.get(task.status, TaskStatus.GENERATING_ASSETS)
-            task.status = next_status
-            await db.commit()
+                # Determine next processing status based on current status
+                status_transitions = {
+                    TaskStatus.QUEUED: TaskStatus.GENERATING_ASSETS,
+                    TaskStatus.COMPOSITES_READY: TaskStatus.GENERATING_VIDEO,
+                    TaskStatus.VIDEO_APPROVED: TaskStatus.GENERATING_AUDIO,
+                    TaskStatus.FINAL_REVIEW: TaskStatus.UPLOADING,
+                }
+                next_status = status_transitions.get(task.status, TaskStatus.GENERATING_ASSETS)
+                task.status = next_status
+                await db.commit()
 
         log.info(
             "task_processing_started",
@@ -340,6 +340,16 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 retry_count=task.retry_count,
             )
 
+        except Exception as e:
+            # Log error and re-raise for pgqueuer to handle
+            log.error(
+                "task_processing_failed",
+                worker_id=worker_id,
+                task_id=task_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise
         finally:
             # Story 8.1: Clear correlation context after task completion
             # Prevents correlation_id leakage between tasks (good hygiene)
