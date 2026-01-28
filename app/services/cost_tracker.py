@@ -195,7 +195,7 @@ async def get_channel_cost_summary(
 
     # Calculate aggregations
     total_cost = sum(cost.cost_usd for cost in costs)
-    task_ids = set(cost.task_id for cost in costs)
+    task_ids = {cost.task_id for cost in costs}
     video_count = len(task_ids)
     avg_cost = total_cost / video_count if video_count > 0 else Decimal("0.00")
 

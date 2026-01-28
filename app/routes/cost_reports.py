@@ -9,6 +9,8 @@ Endpoints:
 - GET /api/v1/reports/cost-trends - Cost trends over time
 """
 
+# ruff: noqa: B008
+
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -374,11 +376,16 @@ async def get_channel_comparison(
     response_model=CostDashboardResponse,
     status_code=status.HTTP_200_OK,
     summary="Get complete cost dashboard data",
-    description="Returns comprehensive cost dashboard with weekly, monthly, comparison, and trend data",
+    description=(
+        "Returns comprehensive cost dashboard with weekly, monthly, "
+        "comparison, and trend data"
+    ),
 )
 async def get_cost_dashboard(
     channel_id: UUID = Query(..., description="Channel UUID"),
-    trend_days: int = Query(30, ge=1, le=365, description="Days for trend analysis (default: 30)"),
+    trend_days: int = Query(
+        30, ge=1, le=365, description="Days for trend analysis (default: 30)"
+    ),
     db: AsyncSession = Depends(get_session),
 ) -> CostDashboardResponse:
     """Get complete cost dashboard data for a channel.
@@ -394,7 +401,7 @@ async def get_cost_dashboard(
         CostDashboardResponse with complete dashboard data
 
     Example:
-        GET /api/v1/reports/cost-dashboard?channel_id=123e4567-e89b-12d3-a456-426614174000&trend_days=30
+        GET /api/v1/reports/cost-dashboard?channel_id=123e4567-...&trend_days=30
     """
     # Fetch all dashboard data in parallel (could be optimized with asyncio.gather)
     weekly = await get_weekly_cost_summary(db, channel_id)
