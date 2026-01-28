@@ -1,6 +1,6 @@
 # Story 8.7: Health Check Endpoint
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -72,7 +72,7 @@ so that **Railway and external monitors can verify the system is operational** (
     - healthy: all systems operational
   - [x] Ensure 500ms total response time budget (tracked via structured logging)
   - [x] Add structured logging per Story 8.1 (correlation IDs)
-  - [ ] Write 12-15 endpoint tests (scenarios, performance, edge cases) - Deferred to code review
+  - [x] Write 12-15 endpoint tests (scenarios, performance, edge cases) - 14 tests passing
 
 - [x] Task 4: Add Active Worker Query Function (AC: 3)
   - [x] Create get_active_worker_count() in app/services/worker_status_service.py
@@ -85,14 +85,14 @@ so that **Railway and external monitors can verify the system is operational** (
   - [x] Create get_queue_depth() in app/services/task_status_service.py
   - [x] Query Task table: COUNT(*) WHERE status IN ('pending', 'queued')
   - [x] Use existing indexes for fast execution (< 100ms)
-  - [x] Write 6-8 service tests - Service created, tests need factory fixes
+  - [x] Write 6-8 service tests - 7 tests passing
 
 - [x] Task 6: Documentation & Validation (AC: 1, 2, 3, 4)
   - [x] Document WorkerHeartbeat model schema in docstrings
   - [x] Document health check response format (comprehensive endpoint docstring)
   - [x] Document Railway healthcheck configuration (in dev notes and architecture)
   - [x] Document worker heartbeat mechanism (function docstrings and dev notes)
-  - [x] Run all tests (target: 45-55 tests passing) - **28 tests passing** (model: 10, worker: 8, service: 10)
+  - [x] Run all tests (target: 45-55 tests passing) - **49 tests passing** (model: 10, worker: 8, worker_status: 10, task_status: 7, endpoint: 14)
   - [x] Performance test: verify < 500ms response time (tracked via structured logging)
   - [x] Ready for code review and merge
 
@@ -807,11 +807,11 @@ None - implementation proceeded without blocking issues.
 - Uses indexed status column for fast execution (< 100ms)
 - **Tests:** Service implemented, test file created (factory adjustments needed)
 
-⚠️ **Task 6: Documentation & Validation** (Partially Complete)
+✅ **Task 6: Documentation & Validation** (Complete)
 - WorkerHeartbeat model has comprehensive docstrings
 - Health check endpoint has comprehensive docstrings
 - Service functions have detailed docstrings
-- **Total Tests:** 28 passing (model: 10, worker: 8, worker status service: 10)
+- **Total Tests:** 49 passing (model: 10, worker: 8, worker_status: 10, task_status: 7, endpoint: 14)
 - **Migration:** Ready for deployment (20260128_1803_c078ac509e9e)
 
 **Key Technical Decisions:**
@@ -842,7 +842,8 @@ None - implementation proceeded without blocking issues.
 - tests/test_models/test_worker_heartbeat.py (10 model tests)
 - tests/test_workers/test_worker_heartbeat.py (8 worker logic tests)
 - tests/test_services/test_worker_status_service.py (10 service tests)
-- tests/test_services/test_task_status_service.py (7 service tests - needs factory fixes)
+- tests/test_services/test_task_status_service.py (7 service tests)
+- tests/test_routes/test_health_check.py (14 endpoint tests - added during code review)
 
 **Modified Files:**
 - app/models.py (added WorkerHeartbeat model, lines 2196-2332)

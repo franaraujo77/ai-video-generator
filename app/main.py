@@ -6,6 +6,7 @@ Epic 2+: Adds Notion sync background task, webhook endpoints, task management, e
 """
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -16,10 +17,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
-from app.database import get_db
+from app.database import get_session
 from app.middleware.correlation import CorrelationMiddleware
 from app.routes import admin, asset_urls, cost_reports, r2_config, webhooks, weekly_reports
+from app.scheduler import (
+    is_cleanup_scheduler_running,
+    is_scheduler_running,
+    is_weekly_metrics_scheduler_running,
+)
 from app.services.notion_sync import sync_database_to_notion_loop
+from app.services.task_status_service import get_queue_depth
+from app.services.worker_status_service import (
+    check_database_connection,
+    get_active_worker_count,
+)
 from app.utils.logging import configure_structlog
 
 # Configure structlog with correlation ID processors (Story 8.1)
@@ -112,7 +123,7 @@ app.include_router(weekly_reports.router)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
-async def health_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
+async def health_check(db: AsyncSession = Depends(get_session)) -> JSONResponse:
     """Health check endpoint for Railway deployment and system monitoring (Story 8.7).
 
     Performs comprehensive system health checks within 500ms response budget:
@@ -153,21 +164,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> JSONResponse:
         - AC3: Worker Heartbeat Monitoring
         - AC4: Performance Budget
     """
-    import time
-    from app.database import AsyncSession
-    from app.scheduler import (
-        is_scheduler_running,
-        is_cleanup_scheduler_running,
-        is_weekly_metrics_scheduler_running,
-    )
-    from app.services.worker_status_service import (
-        check_database_connection,
-        get_active_worker_count,
-    )
-    from app.services.task_status_service import get_queue_depth
-    from app.utils.logging import get_logger
-
-    log = get_logger()
+    log = structlog.get_logger()
     start_time = time.time()
 
     # Initialize response data

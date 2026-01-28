@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from app.models import Task
 from app.services.task_status_service import get_queue_depth
-from tests.support.factories import create_channel
+from tests.support.factories import create_channel, create_task
 
 
 @pytest.mark.asyncio
@@ -36,12 +36,11 @@ class TestGetQueueDepth:
         await async_session.commit()
 
         for i in range(3):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
-                notion_page_id=f"page{i}",  # 32-char format
-                title=f"Test Task {i}",  # Required field
-                status="pending",  # Pending status
+                notion_page_id=f"pending{i}",
+                title=f"Pending Task {i}",
+                status="pending",
             )
             async_session.add(task)
         await async_session.commit()
@@ -60,12 +59,11 @@ class TestGetQueueDepth:
         await async_session.commit()
 
         for i in range(2):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
-                notion_page_id=f"page{i}",
-                title=f"Test Task {i}",  # Required field
-                status="queued",  # Queued status
+                notion_page_id=f"queued{i}",
+                title=f"Queued Task {i}",
+                status="queued",
             )
             async_session.add(task)
         await async_session.commit()
@@ -85,8 +83,7 @@ class TestGetQueueDepth:
 
         # Pending tasks
         for i in range(2):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
                 notion_page_id=f"pending{i}",
                 title=f"Pending Task {i}",
@@ -96,8 +93,7 @@ class TestGetQueueDepth:
 
         # Queued tasks
         for i in range(3):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
                 notion_page_id=f"queued{i}",
                 title=f"Queued Task {i}",
@@ -122,8 +118,7 @@ class TestGetQueueDepth:
 
         # Pending/queued (should be counted)
         for i in range(2):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
                 notion_page_id=f"pending{i}",
                 title=f"Pending Task {i}",
@@ -132,10 +127,9 @@ class TestGetQueueDepth:
             async_session.add(task)
 
         # Other statuses (should NOT be counted)
-        excluded_statuses = ["processing", "completed", "failed", "asset_review"]
+        excluded_statuses = ["claimed", "generating_assets", "assets_ready", "asset_error"]
         for i, status in enumerate(excluded_statuses):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
                 notion_page_id=f"excluded{i}",
                 title=f"Excluded Task {i}",
@@ -161,8 +155,7 @@ class TestGetQueueDepth:
 
         # Tasks for channel 1
         for i in range(2):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel1.id,
                 notion_page_id=f"ch1task{i}",
                 title=f"Channel 1 Task {i}",
@@ -172,8 +165,7 @@ class TestGetQueueDepth:
 
         # Tasks for channel 2
         for i in range(3):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel2.id,
                 notion_page_id=f"ch2task{i}",
                 title=f"Channel 2 Task {i}",
@@ -197,8 +189,7 @@ class TestGetQueueDepth:
         await async_session.commit()
 
         for i in range(50):
-            task = Task(
-                id=uuid4(),
+            task = create_task(
                 channel_id=channel.id,
                 notion_page_id=f"task{i:03d}",  # Padded to avoid duplicates
                 title=f"Task {i}",
