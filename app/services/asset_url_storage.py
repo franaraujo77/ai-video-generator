@@ -78,8 +78,8 @@ async def record_asset_url(
         ...     asset_type="character",
         ...     asset_name="bulbasaur_01.png",
         ...     storage_strategy="r2",
-        ...     asset_url="https://bucket.r2.dev/poke1/vid_123/characters/bulbasaur_01.png",
-        ...     local_file_path="/app/workspace/channels/poke1/projects/vid_123/assets/characters/bulbasaur_01.png",
+        ...     asset_url="https://bucket.r2.dev/poke1/vid_123/characters/bulbasaur.png",
+        ...     local_file_path="/app/workspace/poke1/vid_123/assets/bulbasaur.png",
         ... )
     """
     correlation_id = get_correlation_id()

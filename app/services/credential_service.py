@@ -18,12 +18,17 @@ Security Notes:
     - Use short database transactions (get → close → encrypt → save)
 """
 
+from typing import TYPE_CHECKING
+
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Channel
 from app.utils.encryption import DecryptionError, get_encryption_service
+
+if TYPE_CHECKING:
+    from app.services.r2_storage import R2StorageClient
 
 log = structlog.get_logger(__name__)
 

@@ -180,7 +180,7 @@ class NotionAssetSyncService:
                 # Transient errors - retry with backoff
                 retry_after = response.headers.get("Retry-After", "1")
                 raise NotionSyncRetryError(
-                    f"Notion API transient error: {response.status_code} (retry after {retry_after}s)"
+                    f"Notion API error: {response.status_code} (retry after {retry_after}s)"
                 )
 
             response.raise_for_status()

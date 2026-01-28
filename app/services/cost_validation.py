@@ -101,7 +101,7 @@ async def detect_missing_cost_components(db: AsyncSession, task_id: UUID) -> lis
     # Get existing components
     stmt = select(VideoCost.component).where(VideoCost.task_id == task_id)
     result = await db.execute(stmt)
-    existing_components = set(row[0] for row in result.all())
+    existing_components = {row[0] for row in result.all()}
 
     # Find missing components
     missing = [c for c in EXPECTED_COMPONENTS if c not in existing_components]
