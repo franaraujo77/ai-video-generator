@@ -15,6 +15,8 @@ Dependencies:
 - Epic 3: Worker cost calculation methods
 """
 
+# ruff: noqa: D417
+
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
