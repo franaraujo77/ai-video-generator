@@ -413,3 +413,172 @@ def is_cleanup_scheduler_running() -> bool:
         True
     """
     return _cleanup_scheduler is not None and _cleanup_scheduler.running
+
+
+# Global weekly metrics scheduler instance (Story 8.6)
+_weekly_metrics_scheduler: AsyncIOScheduler | None = None
+
+
+async def _calculate_weekly_metrics_job() -> None:
+    """Scheduled job to calculate weekly metrics at Monday 00:00 UTC (Story 8.6).
+
+    Calculates metrics for the week that just ended (previous Monday to Sunday).
+    When this job runs on Monday at 00:00, it calculates metrics for the week
+    starting 7 days ago.
+
+    Example:
+        - Job runs: Monday Jan 26, 2026 at 00:00 UTC
+        - Calculates week: Monday Jan 19 to Sunday Jan 25
+        - week_starting_date: Jan 19 (7 days ago)
+    """
+    from datetime import timedelta
+
+    from app.services.weekly_metrics_service import calculate_all_channels_weekly_metrics
+
+    # Get today's date in UTC
+    from datetime import timezone as tz
+
+    today = datetime.now(tz.utc).date()
+
+    # Calculate week_starting_date (7 days ago = previous Monday)
+    week_starting_date = today - timedelta(days=7)
+
+    log.info(
+        "weekly_metrics_calculation_job_started",
+        today=str(today),
+        week_starting_date=str(week_starting_date),
+    )
+
+    # Create database session
+    async with AsyncSessionLocal() as db:  # type: ignore[misc]
+        try:
+            metrics_list = await calculate_all_channels_weekly_metrics(
+                week_starting_date, db
+            )
+
+            log.info(
+                "weekly_metrics_calculation_job_success",
+                channels_processed=len(metrics_list),
+                week_starting_date=str(week_starting_date),
+                today=str(today),
+            )
+        except Exception as e:
+            log.error(
+                "weekly_metrics_calculation_job_failed",
+                error=str(e),
+                week_starting_date=str(week_starting_date),
+                today=str(today),
+                exc_info=True,
+            )
+
+            # Log CRITICAL error for manual intervention
+            # TODO: Send Discord alert (Story 8.x)
+            log.critical(
+                "weekly_metrics_calculation_requires_manual_intervention",
+                week_starting_date=str(week_starting_date),
+                today=str(today),
+                error=str(e),
+                manual_action=(
+                    f"Check weekly metrics calculation for week {week_starting_date}. "
+                    "Manually run: calculate_all_channels_weekly_metrics() if needed."
+                ),
+            )
+
+            # Don't re-raise to prevent scheduler crash
+            # Manual intervention required
+
+
+async def start_weekly_metrics_scheduler() -> None:
+    """Start APScheduler with weekly metrics calculation job (Story 8.6).
+
+    Registers job that runs every Monday at 00:00 UTC to calculate previous week's metrics.
+
+    Configuration:
+    - Timezone: UTC (weekly metrics use ISO weeks in UTC)
+    - Schedule: Every Monday at 00:00 (day_of_week=0, hour=0, minute=0)
+    - Calculates: Previous week (Monday to Sunday ending yesterday)
+    - Misfire grace time: 60 seconds (skip if worker down >60s past midnight)
+    - Replace existing: True (prevent duplicates on restart)
+
+    Example:
+        >>> await start_weekly_metrics_scheduler()
+        >>> # Scheduler running, metrics job will fire every Monday at 00:00 UTC
+    """
+    global _weekly_metrics_scheduler
+
+    if _weekly_metrics_scheduler is not None and _weekly_metrics_scheduler.running:
+        log.warning("weekly_metrics_scheduler_already_running")
+        return
+
+    # Create scheduler with UTC timezone (weekly metrics use UTC ISO weeks)
+    _weekly_metrics_scheduler = AsyncIOScheduler(timezone="UTC")
+
+    # Add weekly metrics calculation job (Monday 00:00 UTC)
+    _weekly_metrics_scheduler.add_job(
+        _calculate_weekly_metrics_job,
+        trigger=CronTrigger(day_of_week=0, hour=0, minute=0, timezone="UTC"),  # Monday = 0
+        id="calculate_weekly_metrics",
+        replace_existing=True,  # Prevent duplicates on restart
+        misfire_grace_time=60,  # Skip if more than 60s late
+    )
+
+    # Start scheduler
+    _weekly_metrics_scheduler.start()
+
+    log.info(
+        "weekly_metrics_scheduler_started",
+        timezone="UTC",
+        schedule="Every Monday at 00:00 UTC",
+        next_run=str(
+            _weekly_metrics_scheduler.get_job("calculate_weekly_metrics").next_run_time
+        ),
+    )
+
+
+def shutdown_weekly_metrics_scheduler() -> None:
+    """Gracefully shut down the weekly metrics scheduler (Story 8.6).
+
+    Stops the scheduler and waits for running jobs to complete.
+    Called on worker termination.
+
+    Example:
+        >>> shutdown_weekly_metrics_scheduler()
+        >>> # Scheduler stopped, no more metrics jobs will run
+    """
+    global _weekly_metrics_scheduler
+
+    if _weekly_metrics_scheduler is None or not _weekly_metrics_scheduler.running:
+        log.warning("weekly_metrics_scheduler_not_running")
+        return
+
+    try:
+        _weekly_metrics_scheduler.shutdown(wait=True)
+    except RuntimeError as e:
+        # Handle "Event loop is closed" error during test teardown
+        if "Event loop is closed" in str(e):
+            log.debug(
+                "weekly_metrics_scheduler_shutdown_event_loop_closed", error=str(e)
+            )
+        else:
+            raise
+    finally:
+        _weekly_metrics_scheduler = None
+
+    log.info("weekly_metrics_scheduler_shutdown")
+
+
+def is_weekly_metrics_scheduler_running() -> bool:
+    """Check if weekly metrics scheduler is running (Story 8.6).
+
+    Used for health check endpoint.
+
+    Returns:
+        True if scheduler is running, False otherwise
+
+    Example:
+        >>> is_weekly_metrics_scheduler_running()
+        True
+    """
+    return (
+        _weekly_metrics_scheduler is not None and _weekly_metrics_scheduler.running
+    )

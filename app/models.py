@@ -420,6 +420,13 @@ class Channel(Base):
         cascade="all, delete-orphan",
     )
 
+    # Relationship to weekly metrics (one-to-many) - Story 8.6
+    weekly_metrics: Mapped[list["WeeklyMetrics"]] = relationship(
+        "WeeklyMetrics",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
+
     def __repr__(self) -> str:
         """Return string representation for debugging.
 
@@ -1447,6 +1454,231 @@ class AutoRecoveryMetrics(Base):
             f"<AutoRecoveryMetrics(channel_id={self.channel_id!s:.8}, "
             f"week={self.week_starting_date!s}, success_rate={self.success_rate:.1f}%, "
             f"recovered={self.total_auto_recovered}/{self.total_retry_attempts})>"
+        )
+
+
+class WeeklyMetrics(Base):
+    """Weekly pipeline success metrics per channel (Story 8.6).
+
+    Tracks overall pipeline health, success rate, and failure patterns on a weekly basis.
+    Workers calculate metrics weekly (Monday 00:00 UTC) for previous week's data.
+
+    Composite Primary Key:
+        (channel_id, week_starting_date) - One row per channel per week (ISO week).
+
+    Success Rate Calculation:
+        success_rate = (successful_videos / total_videos_processed) * 100
+
+    Alert Thresholds:
+        - success_rate < 90%: WARNING alert to Discord webhook with failure patterns
+        - Includes week-over-week trend comparison
+        - Identifies most common failure stage for investigation
+
+    Attributes:
+        channel_id: Foreign key to channels.id (part of composite PK).
+        week_starting_date: Monday of ISO week (part of composite PK).
+        total_videos_processed: Tasks reaching any terminal state (default: 0).
+        successful_videos: Tasks reaching 'published' status (default: 0).
+        success_rate: Percentage of successful videos (default: 0.00).
+        avg_processing_time_seconds: Average end-to-end duration (nullable).
+        auto_recovery_rate: % of failed tasks that auto-recovered (nullable).
+        transient_failures: error_category=TRANSIENT count (default: 0).
+        permanent_failures: error_category=PERMANENT count (default: 0).
+        unknown_failures: error_category=UNKNOWN count (default: 0).
+        failed_at_assets: status=asset_error count (default: 0).
+        failed_at_video: status=video_error count (default: 0).
+        failed_at_audio: status=audio_error count (default: 0).
+        failed_at_upload: status=upload_error count (default: 0).
+        calculated_at: When metrics were calculated (UTC).
+        updated_at: Last update timestamp (UTC).
+
+    Indexes:
+        - Composite PK on (channel_id, week_starting_date) for fast lookups
+        - DESC index on week_starting_date for trend queries (most recent first)
+        - Index on calculated_at for audit trail
+
+    Constraints:
+        - total_videos_processed >= 0
+        - successful_videos >= 0
+        - successful_videos <= total_videos_processed
+        - success_rate >= 0.0 AND success_rate <= 100.0
+        - Failure counts >= 0
+
+    Usage:
+        # Calculate metrics for previous week
+        week_start = get_week_starting_date(date.today() - timedelta(days=7))
+        metrics = await calculate_weekly_metrics(channel_id, week_start, db)
+
+        # Check threshold and alert if needed
+        await check_success_rate_thresholds(metrics, db)
+
+    Related:
+        - Story 8.6: Weekly Success Rate Calculation
+        - Story 6.10: Auto-Recovery Metrics (similar pattern)
+        - Story 8.2: Cost Tracking (similar aggregate metrics pattern)
+    """
+
+    __tablename__ = "weekly_metrics"
+
+    # Composite primary key: (channel_id, week_starting_date)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+
+    week_starting_date: Mapped[date] = mapped_column(
+        Date,
+        primary_key=True,
+        nullable=False,
+    )
+
+    # Volume metrics
+    total_videos_processed: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    successful_videos: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    success_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),  # 0.00-100.00
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default="0.00",
+    )
+
+    # Performance metrics
+    avg_processing_time_seconds: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    # Recovery metrics
+    auto_recovery_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2),  # 0.00-100.00
+        nullable=True,
+    )
+
+    # Failure breakdown by category
+    transient_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    permanent_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    unknown_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Failure breakdown by stage
+    failed_at_assets: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    failed_at_video: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    failed_at_audio: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    failed_at_upload: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Metadata
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+    # Relationship to channel
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="weekly_metrics")
+
+    __table_args__ = (
+        # Composite primary key constraint (explicit name)
+        PrimaryKeyConstraint("channel_id", "week_starting_date", name="pk_weekly_metrics"),
+        # Index for trend queries (most recent first)
+        Index(
+            "ix_weekly_metrics_channel_week_desc",
+            "channel_id",
+            "week_starting_date",
+            postgresql_ops={"week_starting_date": "DESC"},
+        ),
+        # Index for audit trail
+        Index("ix_weekly_metrics_calculated_at", "calculated_at"),
+        # Check constraints for data integrity
+        CheckConstraint(
+            "total_videos_processed >= 0", name="ck_weekly_metrics_total_non_negative"
+        ),
+        CheckConstraint(
+            "successful_videos >= 0", name="ck_weekly_metrics_successful_non_negative"
+        ),
+        CheckConstraint(
+            "successful_videos <= total_videos_processed",
+            name="ck_weekly_metrics_successful_le_total",
+        ),
+        CheckConstraint(
+            "success_rate >= 0.0 AND success_rate <= 100.0", name="ck_weekly_metrics_rate_range"
+        ),
+        CheckConstraint("transient_failures >= 0", name="ck_weekly_metrics_transient_non_negative"),
+        CheckConstraint(
+            "permanent_failures >= 0", name="ck_weekly_metrics_permanent_non_negative"
+        ),
+        CheckConstraint("unknown_failures >= 0", name="ck_weekly_metrics_unknown_non_negative"),
+        CheckConstraint("failed_at_assets >= 0", name="ck_weekly_metrics_assets_non_negative"),
+        CheckConstraint("failed_at_video >= 0", name="ck_weekly_metrics_video_non_negative"),
+        CheckConstraint("failed_at_audio >= 0", name="ck_weekly_metrics_audio_non_negative"),
+        CheckConstraint("failed_at_upload >= 0", name="ck_weekly_metrics_upload_non_negative"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<WeeklyMetrics(channel_id={self.channel_id!s:.8}, "
+            f"week={self.week_starting_date!s}, success_rate={self.success_rate:.1f}%, "
+            f"videos={self.successful_videos}/{self.total_videos_processed})>"
         )
 
 

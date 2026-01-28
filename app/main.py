@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from app.clients.notion import NotionClient
 from app.config import get_notion_api_token
 from app.middleware.correlation import CorrelationMiddleware
-from app.routes import admin, asset_urls, cost_reports, r2_config, webhooks
+from app.routes import admin, asset_urls, cost_reports, r2_config, webhooks, weekly_reports
 from app.services.notion_sync import sync_database_to_notion_loop
 from app.utils.logging import configure_structlog
 
@@ -105,6 +105,9 @@ app.include_router(asset_urls.router)
 # Register R2 configuration routes (Story 8.4)
 app.include_router(r2_config.router)
 
+# Register weekly metrics reporting routes (Story 8.6)
+app.include_router(weekly_reports.router)
+
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 async def health_check() -> JSONResponse:
@@ -112,23 +115,35 @@ async def health_check() -> JSONResponse:
 
     Epic 1: Validates that the application can start and respond to requests.
     Story 7.0: Adds scheduler status check for quota reset jobs.
+    Story 8.5: Adds workspace cleanup scheduler status.
+    Story 8.6: Adds weekly metrics scheduler status.
     Future epics will add database connectivity checks, service health checks, etc.
 
     Returns:
         JSONResponse: Status and basic system information
     """
-    # Check quota reset scheduler status (Story 7.0)
-    from app.scheduler import is_scheduler_running
+    # Check scheduler statuses
+    from app.scheduler import (
+        is_scheduler_running,
+        is_cleanup_scheduler_running,
+        is_weekly_metrics_scheduler_running,
+    )
 
-    scheduler_running = is_scheduler_running()
+    quota_scheduler_running = is_scheduler_running()
+    cleanup_scheduler_running = is_cleanup_scheduler_running()
+    weekly_metrics_scheduler_running = is_weekly_metrics_scheduler_running()
 
     return JSONResponse(
         content={
             "status": "healthy",
             "service": "ai-video-generator",
-            "epic": "epic-7",
+            "epic": "epic-8",
             "message": "Foundation services operational",
-            "quota_reset_scheduler": "running" if scheduler_running else "not_running",
+            "quota_reset_scheduler": "running" if quota_scheduler_running else "not_running",
+            "cleanup_scheduler": "running" if cleanup_scheduler_running else "not_running",
+            "weekly_metrics_scheduler": (
+                "running" if weekly_metrics_scheduler_running else "not_running"
+            ),
         }
     )
 

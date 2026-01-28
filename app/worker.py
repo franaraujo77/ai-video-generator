@@ -457,7 +457,11 @@ async def worker_main_loop() -> None:
         # Import queue initialization
         from app.entrypoints import register_entrypoints
         from app.queue import initialize_pgqueuer
-        from app.scheduler import start_quota_reset_scheduler, start_cleanup_scheduler
+        from app.scheduler import (
+            start_quota_reset_scheduler,
+            start_cleanup_scheduler,
+            start_weekly_metrics_scheduler,
+        )
         from app.services.youtube_service import YouTubeService
 
         # Initialize PgQueuer
@@ -498,6 +502,9 @@ async def worker_main_loop() -> None:
 
         # Start workspace cleanup scheduler (Story 8.5)
         await start_cleanup_scheduler()
+
+        # Start weekly metrics scheduler (Story 8.6)
+        await start_weekly_metrics_scheduler()
 
         # Run PgQueuer worker loop
         # Handles: polling, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED, retry logic
@@ -544,12 +551,19 @@ async def shutdown_worker() -> None:
     log.info("closing_database_connections")
 
     # Shutdown quota reset scheduler (Story 7.0)
-    from app.scheduler import shutdown_quota_reset_scheduler, shutdown_cleanup_scheduler
+    from app.scheduler import (
+        shutdown_quota_reset_scheduler,
+        shutdown_cleanup_scheduler,
+        shutdown_weekly_metrics_scheduler,
+    )
 
     shutdown_quota_reset_scheduler()
 
     # Shutdown workspace cleanup scheduler (Story 8.5)
     shutdown_cleanup_scheduler()
+
+    # Shutdown weekly metrics scheduler (Story 8.6)
+    shutdown_weekly_metrics_scheduler()
 
     # Close asyncpg pool (used by PgQueuer)
     if asyncpg_pool:

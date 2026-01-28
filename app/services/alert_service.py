@@ -22,7 +22,12 @@ log = structlog.get_logger()
 
 AlertSeverity = Literal["INFO", "WARNING", "CRITICAL"]
 AlertType = Literal[
-    "terminal_failure", "quota_warning", "quota_exhausted", "worker_down", "low_recovery_rate"
+    "terminal_failure",
+    "quota_warning",
+    "quota_exhausted",
+    "worker_down",
+    "low_recovery_rate",
+    "low_success_rate",  # Story 8.6: Weekly success rate alerts
 ]
 
 # In-memory alert batching tracker

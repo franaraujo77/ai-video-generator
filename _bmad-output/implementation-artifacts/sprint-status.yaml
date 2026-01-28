@@ -139,7 +139,7 @@ development_status:
   8-3-asset-url-population-in-notion: done  # Code review complete 2026-01-27, 6 issues fixed (2 HIGH, 3 MEDIUM, 1 LOW), 77 tests passing, all ACs met, correlation IDs added
   8-4-cloudflare-r2-storage-integration: done  # Implementation complete 2026-01-27, core services implemented (R2StorageClient, R2 credentials), 20 passing tests, worker integration complete
   8-5-temporary-file-cleanup: done  # Code review complete 2026-01-27, all CRITICAL/HIGH issues fixed, 40 tests passing (models, service, config, scheduler)
-  8-6-weekly-success-rate-calculation: backlog
+  8-6-weekly-success-rate-calculation: done  # Code review complete 2026-01-28, 12 issues fixed (8 HIGH, 3 MEDIUM, 1 LOW), 70 tests passing, scheduler integration complete
   8-7-health-check-endpoint: backlog
   8-8-cost-dashboard-reporting: backlog
   epic-8-retrospective: optional

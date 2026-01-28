@@ -1,7 +1,7 @@
 """Add cleanup_performed_at to tasks table
 
 Revision ID: 20260127_2300
-Revises: 20260127_1600
+Revises: g7f6e5d4c3b2
 Create Date: 2026-01-27
 
 Story 8.5 Task 4: AssetMetadata Cleanup Tracking
@@ -24,7 +24,7 @@ from sqlalchemy import text
 
 # revision identifiers
 revision = '20260127_2300'
-down_revision = '20260127_1600'
+down_revision = 'g7f6e5d4c3b2'
 branch_labels = None
 depends_on = None
 
