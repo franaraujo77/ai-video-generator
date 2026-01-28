@@ -2192,3 +2192,143 @@ class AssetMetadata(Base):
             f"<AssetMetadata(id={self.id!s:.8}, task_id={self.task_id!s:.8}, "
             f"asset_type={self.asset_type!r}, asset_name={self.asset_name!r})>"
         )
+
+
+class WorkerHeartbeat(Base):
+    """Worker heartbeat tracking for health check monitoring (Story 8.7).
+
+    Tracks worker process liveness and activity for system health monitoring.
+    Each worker (worker-1, worker-2, worker-3) updates its heartbeat every 30 seconds.
+    Health check endpoint queries this table to determine system operational status.
+
+    Architecture:
+        - Atomic Upsert: Unique constraint on worker_id enables INSERT ON CONFLICT UPDATE
+        - 5-Minute Timeout: Workers inactive for 5+ minutes trigger "degraded" health status
+        - Railway Integration: Health check endpoint uses this data for liveness probes
+
+    Worker Lifecycle:
+        1. Worker startup: Initial heartbeat with status="online"
+        2. Every 30s: Atomic upsert updates last_seen_at timestamp
+        3. Task processing: Updates active_task_count field
+        4. Health check: Queries workers with last_seen_at within last 5 minutes
+
+    Composite Unique Constraint:
+        - worker_id: Unique identifier per worker (e.g., "worker-1", "worker-2")
+        - Enables atomic upsert pattern using PostgreSQL INSERT ON CONFLICT UPDATE
+
+    Indexes:
+        - ix_worker_heartbeats_worker_id: Unique index for atomic upserts
+        - ix_worker_heartbeats_last_seen_at: Index for active worker queries (< 100ms)
+
+    Example Usage:
+        ```python
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        # Atomic upsert heartbeat
+        stmt = pg_insert(WorkerHeartbeat).values(
+            worker_id="worker-1",
+            last_seen_at=datetime.now(timezone.utc),
+            status="online",
+            active_task_count=2
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["worker_id"],
+            set_={
+                "last_seen_at": stmt.excluded.last_seen_at,
+                "status": stmt.excluded.status,
+                "active_task_count": stmt.excluded.active_task_count,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+        # Query active workers (last 5 minutes)
+        five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+        result = await db.execute(
+            select(func.count(WorkerHeartbeat.id))
+            .where(WorkerHeartbeat.last_seen_at >= five_minutes_ago)
+        )
+        active_count = result.scalar_one()
+        ```
+
+    Related:
+        - Story 8.7: Health Check Endpoint
+        - AC3: Worker Heartbeat Monitoring
+        - FR-R1: System health and liveness monitoring
+    """
+
+    __tablename__ = "worker_heartbeats"
+
+    # Primary Key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=lambda: uuid.uuid4(),
+        nullable=False,
+        comment="Unique heartbeat record ID",
+    )
+
+    # Worker Identification
+    worker_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        unique=True,
+        comment="Worker identifier (e.g., worker-1, worker-2, worker-3)",
+    )
+
+    # Heartbeat Timestamp
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="Last heartbeat timestamp (UTC)",
+    )
+
+    # Worker Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="online",
+        server_default="online",
+        comment="Worker status: online, idle, processing",
+    )
+
+    # Active Task Count
+    active_task_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Number of tasks currently processing",
+    )
+
+    # Audit Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="Record creation timestamp",
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="Record last update timestamp",
+    )
+
+    # Indexes and constraints
+    __table_args__ = (
+        # Unique index on worker_id for atomic upserts
+        Index("ix_worker_heartbeats_worker_id", "worker_id", unique=True),
+        # Index on last_seen_at for efficient active worker queries (< 100ms)
+        Index("ix_worker_heartbeats_last_seen_at", "last_seen_at"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<WorkerHeartbeat(worker_id={self.worker_id!r}, "
+            f"last_seen_at={self.last_seen_at}, status={self.status!r})>"
+        )
