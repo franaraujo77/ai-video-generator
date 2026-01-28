@@ -167,7 +167,9 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                         max_attempts=task.max_retry_attempts,
                     ):
                         # Task is waiting for retry - release back to queue
-                        next_retry_iso = task.next_retry_at.isoformat() if task.next_retry_at else None
+                        next_retry_iso = (
+                            task.next_retry_at.isoformat() if task.next_retry_at else None
+                        )
                         log.info(
                             "task_retry_not_ready_releasing",
                             task_id=task_id,
@@ -291,54 +293,54 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 task.status = next_status
                 await db.commit()
 
-        log.info(
-            "task_processing_started",
-            worker_id=worker_id,
-            task_id=task_id,
-        )
-
-        # Step 2: Execute pipeline (OUTSIDE transaction)
-        # TODO Story 4.8: Implement full pipeline orchestration with exception handling
-        # When implemented, the pipeline will:
-        #   1. Call: await orchestrate_pipeline(task_id)
-        #   2. Handle YouTubeAuthError (Story 7.2) - mark as UPLOAD_ERROR, skip retry
-        #   3. Handle other exceptions - classify as retriable/non-retriable (AC10)
-        #   4. Decrement task counters in finally block
-        # For now, this is a placeholder that immediately marks tasks as completed.
-
-        # Decrement task counters for tracked API types
-        # (Story 4.5: video, Story 4.6: asset/audio)
-        if required_api == "kling":
-            worker_state.decrement_video_tasks()
-        elif required_api == "gemini":
-            worker_state.decrement_asset_tasks()
-        elif required_api == "elevenlabs":
-            worker_state.decrement_audio_tasks()
-
-        # Step 3: Update status to completed (short transaction)
-        # NOTE: This is placeholder code - in production, workers handle status transitions
-        async with AsyncSessionLocal() as db:  # type: ignore[misc]
-            task = await db.get(Task, task_id)
-            if not task:
-                raise ValueError(f"Task disappeared during processing: {task_id}")
-
-            task.status = TaskStatus.PUBLISHED
-
-            # Story 6.10: Mark auto-recovery if task recovered from error via retry
-            if task.retry_count > 0:
-                await mark_task_recovered(UUID(task_id), db)
-
-            await db.commit()
-
-            # Log completion with priority context (Story 4.3)
             log.info(
-                "task_completed",
+                "task_processing_started",
                 worker_id=worker_id,
                 task_id=task_id,
-                priority=task.priority,  # Story 4.3: Include priority in completion log
-                auto_recovered=task.auto_recovered,  # Story 6.10: Log recovery status
-                retry_count=task.retry_count,
             )
+
+            # Step 2: Execute pipeline (OUTSIDE transaction)
+            # TODO Story 4.8: Implement full pipeline orchestration with exception handling
+            # When implemented, the pipeline will:
+            #   1. Call: await orchestrate_pipeline(task_id)
+            #   2. Handle YouTubeAuthError (Story 7.2) - mark as UPLOAD_ERROR, skip retry
+            #   3. Handle other exceptions - classify as retriable/non-retriable (AC10)
+            #   4. Decrement task counters in finally block
+            # For now, this is a placeholder that immediately marks tasks as completed.
+
+            # Decrement task counters for tracked API types
+            # (Story 4.5: video, Story 4.6: asset/audio)
+            if required_api == "kling":
+                worker_state.decrement_video_tasks()
+            elif required_api == "gemini":
+                worker_state.decrement_asset_tasks()
+            elif required_api == "elevenlabs":
+                worker_state.decrement_audio_tasks()
+
+            # Step 3: Update status to completed (short transaction)
+            # NOTE: This is placeholder code - in production, workers handle status transitions
+            async with AsyncSessionLocal() as db:  # type: ignore[misc]
+                task = await db.get(Task, task_id)
+                if not task:
+                    raise ValueError(f"Task disappeared during processing: {task_id}")
+
+                task.status = TaskStatus.PUBLISHED
+
+                # Story 6.10: Mark auto-recovery if task recovered from error via retry
+                if task.retry_count > 0:
+                    await mark_task_recovered(UUID(task_id), db)
+
+                await db.commit()
+
+                # Log completion with priority context (Story 4.3)
+                log.info(
+                    "task_completed",
+                    worker_id=worker_id,
+                    task_id=task_id,
+                    priority=task.priority,  # Story 4.3: Include priority in completion log
+                    auto_recovered=task.auto_recovered,  # Story 6.10: Log recovery status
+                    retry_count=task.retry_count,
+                )
 
         except Exception as e:
             # Log error and re-raise for pgqueuer to handle
