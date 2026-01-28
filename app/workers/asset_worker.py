@@ -53,7 +53,10 @@ from app.services.asset_generation import AssetGenerationService
 from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
 from app.services.credential_service import CredentialService
+from app.services.notion_asset_sync import sync_task_assets_to_notion
 from app.utils.cli_wrapper import CLIScriptError
+from app.utils.context import set_correlation_id
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -111,6 +114,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
         # Note: task.channel_id is UUID FK, need channel.channel_id string
         await db.refresh(task, ["channel"])  # Ensure relationship is loaded
         channel_id_str = task.channel.channel_id
+        channel = task.channel  # Store channel for Notion token access
 
         # Store task details for asset generation
         project_id = str(task.id)  # Use task UUID as project_id
@@ -208,7 +212,10 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                         asset_name = asset_path.name
 
                         # Construct R2 key
-                        r2_key = f"{channel.channel_id}/{project_id}/assets/{asset_type}/{asset_name}"
+                        r2_key = (
+                            f"{channel.channel_id}/{project_id}/assets/"
+                            f"{asset_type}/{asset_name}"
+                        )
 
                         try:
                             # Upload to R2
@@ -285,24 +292,64 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
 
             log.info("task_updated", task_id=str(task_id), status="assets_ready")
 
-        # Step 5: Update Notion (async, non-blocking)
-        # Note: Notion sync service not yet implemented in Epic 2
-        # This is a placeholder for future integration
-        #
+        # Step 5: Sync asset URLs to Notion (fire-and-forget background job - Story 8.3)
         # Pattern: Fire-and-forget task with exception suppression
         # The task is intentionally not awaited to avoid blocking the worker.
         # Exception handling is done via done_callback to prevent unhandled exceptions.
-        # This is acceptable for placeholder code; production code should use task groups.
-        notion_task = asyncio.create_task(
-            _update_notion_status_async(notion_page_id, "Assets Ready")
-        )
+        try:
+            # Validate channel exists (Issue #4: Missing channel validation)
+            if not channel:
+                log.warning(
+                    "notion_asset_sync_skipped_no_channel",
+                    task_id=str(task_id),
+                    reason="Channel not loaded",
+                )
+                # Don't raise - this is non-critical best-effort sync
+                return
 
-        def handle_notion_task_done(task: asyncio.Task[None]) -> None:
-            # Notion updates are best-effort; don't fail task on Notion errors
-            with contextlib.suppress(Exception):
-                task.result()  # Re-raise exception if occurred
+            # Validate Notion credentials exist (Issue #5: Missing credential validation)
+            if not channel.notion_token_encrypted:
+                log.info(
+                    "notion_asset_sync_skipped_no_credentials",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    reason="Channel not configured with Notion credentials",
+                )
+                # Don't raise - channels may not use Notion integration
+                return
 
-        notion_task.add_done_callback(handle_notion_task_done)
+            # Decrypt Notion token from channel
+            encryption_service = get_encryption_service()
+            notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
+
+            # Create fire-and-forget task for Notion asset sync
+            async def _sync_assets_to_notion() -> None:
+                # Set correlation ID for distributed tracing (Issue #3)
+                set_correlation_id(str(task_id))
+                async with async_session_factory() as db:
+                    await sync_task_assets_to_notion(db, task_id, notion_token)
+
+            notion_task = asyncio.create_task(_sync_assets_to_notion())
+
+            def handle_notion_task_done(task: asyncio.Task[None]) -> None:
+                # Notion updates are best-effort; don't fail task on Notion errors
+                with contextlib.suppress(Exception):
+                    task.result()  # Re-raise exception if occurred
+
+            notion_task.add_done_callback(handle_notion_task_done)
+
+            log.info(
+                "notion_asset_sync_queued",
+                task_id=str(task_id),
+                notion_page_id=notion_page_id,
+            )
+        except Exception as e:
+            # Log but don't fail task if Notion sync setup fails
+            log.warning(
+                "notion_asset_sync_setup_failed",
+                task_id=str(task_id),
+                error=str(e),
+            )
 
     except CLIScriptError as e:
         log.error(
@@ -348,22 +395,3 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                 await db.commit()
 
 
-async def _update_notion_status_async(notion_page_id: str, status: str) -> None:
-    """Update Notion page status asynchronously (non-blocking).
-
-    This is a placeholder for future Notion integration from Epic 2.
-    Actual implementation will use NotionSyncService.
-
-    Args:
-        notion_page_id: Notion page UUID
-        status: New status value to set in Notion
-
-    Note:
-        This function should NOT block the main worker flow. Notion updates
-        are "fire and forget" - failures are logged but don't affect task status.
-    """
-    # TODO: Implement Notion status update using Epic 2 NotionSyncService
-    # For now, just log the intent
-    log.info("notion_status_update_placeholder", notion_page_id=notion_page_id, status=status)
-    # In production, this would call:
-    # await notion_client.update_page_status(notion_page_id, status)

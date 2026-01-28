@@ -38,6 +38,8 @@ Usage:
     await process_sfx_generation_task(task_id="uuid-here")
 """
 
+import asyncio
+import contextlib
 from decimal import Decimal
 from uuid import UUID
 
@@ -48,8 +50,11 @@ from app.models import Channel, Task, TaskStatus
 from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
 from app.services.credential_service import CredentialService
+from app.services.notion_asset_sync import sync_task_assets_to_notion
 from app.services.sfx_generation import SFXGenerationService
 from app.utils.cli_wrapper import CLIScriptError
+from app.utils.context import set_correlation_id
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -93,6 +98,10 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
     if isinstance(task_id, str):
         task_id = UUID(task_id)
 
+    # Initialize variables outside transaction scope
+    channel = None  # Store for Notion sync (Issue #6: Standardized naming)
+    notion_page_id = None
+
     # Step 1: Claim task (short transaction)
     if async_session_factory is None:
         log.error("database_not_configured", task_id=str(task_id))
@@ -106,12 +115,15 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
             log.error("task_not_found", task_id=str(task_id))
             return
 
+        # Store notion_page_id for later use
+        notion_page_id = task.notion_page_id
+
         # Update task status to generating_sfx (audio_approved → generating_sfx)
         task.status = TaskStatus.GENERATING_SFX
         await db.commit()
         log.info("task_claimed", task_id=str(task_id), status="generating_sfx")
 
-        # Load channel for channel_id (SFX doesn't require voice_id)
+        # Load channel for channel_id and store for Notion sync (SFX doesn't require voice_id)
         channel_result = await db.execute(select(Channel).where(Channel.id == task.channel_id))
         channel = channel_result.scalar_one_or_none()
         if not channel:
@@ -285,14 +297,59 @@ async def process_sfx_generation_task(task_id: str | UUID) -> None:
                 await db.commit()
                 log.info("task_updated", task_id=str(task_id), status="sfx_ready")
 
-        # Step 5: Update Notion (async, non-blocking)
-        # Future enhancement: Extract notion_page_id and update via Notion API
-        # asyncio.create_task(update_notion_status(task.notion_page_id, "SFX Ready"))
-        log.info(
-            "notion_update_skipped",
-            task_id=str(task_id),
-            reason="Notion integration deferred to Story 5.6",
-        )
+        # Step 5: Sync SFX URLs to Notion (fire-and-forget - Story 8.3)
+        try:
+            # Validate channel exists (Issue #4: Missing channel validation)
+            if not channel:
+                log.warning(
+                    "notion_asset_sync_skipped_no_channel",
+                    task_id=str(task_id),
+                    reason="Channel not loaded",
+                )
+                return
+
+            # Validate Notion credentials exist (Issue #5: Missing credential validation)
+            if not channel.notion_token_encrypted:
+                log.info(
+                    "notion_asset_sync_skipped_no_credentials",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    reason="Channel not configured with Notion credentials",
+                )
+                return
+
+            # Decrypt Notion token from channel
+            encryption_service = get_encryption_service()
+            notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
+
+            # Create fire-and-forget task for Notion asset sync
+            async def _sync_assets_to_notion() -> None:
+                # Set correlation ID for distributed tracing (Issue #3)
+                set_correlation_id(str(task_id))
+                async with async_session_factory() as db:
+                    await sync_task_assets_to_notion(db, task_id, notion_token)
+
+            notion_task = asyncio.create_task(_sync_assets_to_notion())
+
+            def handle_notion_task_done(task: asyncio.Task[None]) -> None:
+                # Notion updates are best-effort; don't fail task on Notion errors
+                with contextlib.suppress(Exception):
+                    task.result()
+
+            notion_task.add_done_callback(handle_notion_task_done)
+
+            log.info(
+                "notion_asset_sync_queued",
+                task_id=str(task_id),
+                notion_page_id=notion_page_id,
+            )
+        except Exception as e:
+            # Log but don't fail task if Notion sync setup fails
+            log.warning(
+                "notion_asset_sync_setup_failed",
+                task_id=str(task_id),
+                error=str(e),
+            )
 
     except CLIScriptError as e:
         log.error(

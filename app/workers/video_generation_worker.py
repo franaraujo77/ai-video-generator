@@ -48,6 +48,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import re
 from uuid import UUID
 
@@ -58,8 +59,11 @@ from app.models import Task, TaskStatus
 from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
 from app.services.credential_service import CredentialService
+from app.services.notion_asset_sync import sync_task_assets_to_notion
 from app.services.video_generation import VideoGenerationService
 from app.utils.cli_wrapper import CLIScriptError
+from app.utils.context import set_correlation_id
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -160,6 +164,8 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
     topic = None
     story_direction = None
     failed_clip_numbers = None  # Story 5.4 AC3: Partial regeneration
+    channel = None  # Store for Notion sync
+    notion_page_id = None
 
     # Step 1: Claim task (short transaction)
     async with async_session_factory() as db, db.begin():
@@ -171,11 +177,13 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
         # Get channel_id string from relationship
         await db.refresh(task, ["channel"])  # Ensure relationship is loaded
         channel_id_str = task.channel.channel_id
+        channel = task.channel  # Store channel for Notion sync
 
         # Store task details for video generation
         project_id = str(task.id)  # Use task UUID as project_id
         topic = task.topic
         story_direction = task.story_direction
+        notion_page_id = task.notion_page_id
 
         # Story 5.4 AC3: Check for partial regeneration
         if task.step_completion_metadata:
@@ -377,6 +385,60 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 "task_updated_video_ready",
                 task_id=str(task_id),
                 status="video_ready",
+            )
+
+        # Step 4.5: Sync video URLs to Notion (fire-and-forget - Story 8.3)
+        try:
+            # Validate channel exists (Issue #4: Missing channel validation)
+            if not channel:
+                log.warning(
+                    "notion_asset_sync_skipped_no_channel",
+                    task_id=str(task_id),
+                    reason="Channel not loaded",
+                )
+                return
+
+            # Validate Notion credentials exist (Issue #5: Missing credential validation)
+            if not channel.notion_token_encrypted:
+                log.info(
+                    "notion_asset_sync_skipped_no_credentials",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    reason="Channel not configured with Notion credentials",
+                )
+                return
+
+            # Decrypt Notion token from channel
+            encryption_service = get_encryption_service()
+            notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
+
+            # Create fire-and-forget task for Notion asset sync
+            async def _sync_assets_to_notion() -> None:
+                # Set correlation ID for distributed tracing (Issue #3)
+                set_correlation_id(str(task_id))
+                async with async_session_factory() as db:
+                    await sync_task_assets_to_notion(db, task_id, notion_token)
+
+            notion_task = asyncio.create_task(_sync_assets_to_notion())
+
+            def handle_notion_task_done(task: asyncio.Task[None]) -> None:
+                # Notion updates are best-effort; don't fail task on Notion errors
+                with contextlib.suppress(Exception):
+                    task.result()
+
+            notion_task.add_done_callback(handle_notion_task_done)
+
+            log.info(
+                "notion_asset_sync_queued",
+                task_id=str(task_id),
+                notion_page_id=notion_page_id,
+            )
+        except Exception as e:
+            # Log but don't fail task if Notion sync setup fails
+            log.warning(
+                "notion_asset_sync_setup_failed",
+                task_id=str(task_id),
+                error=str(e),
             )
 
         # Step 5: Cleanup service resources
