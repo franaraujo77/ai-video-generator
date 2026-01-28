@@ -868,6 +868,17 @@ class Task(Base):
         onupdate=utcnow,
     )
 
+    # Cleanup tracking (Story 8.5)
+    # Timestamp when workspace cleanup was performed for this task
+    # NULL if cleanup has not yet been performed
+    # Used to prevent duplicate cleanup attempts (idempotent operation)
+    cleanup_performed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,  # Index for efficient cleanup eligibility queries
+        comment="Timestamp when workspace cleanup was performed (Story 8.5)",
+    )
+
     # Relationship to channel
     channel: Mapped["Channel"] = relationship("Channel", back_populates="tasks")
 

@@ -9,6 +9,9 @@ Environment Variables:
     GOOGLE_CLIENT_ID: Google OAuth client ID for YouTube operations (required for Story 7.2)
     GOOGLE_CLIENT_SECRET: Google OAuth client secret for YouTube operations (required for Story 7.2)
     DEFAULT_VOICE_ID: Fallback ElevenLabs voice ID when channel voice not set (optional)
+    WORKSPACE_CLEANUP_ENABLED: Enable daily workspace cleanup (default: "true", Story 8.5)
+    WORKSPACE_CLEANUP_RETENTION_DAYS: Days to retain workspace files (default: 7, Story 8.5)
+    WORKSPACE_CLEANUP_SCHEDULE: Cron schedule for cleanup (default: "0 3 * * *", Story 8.5)
 
 Usage:
     from app.config import get_default_voice_id, get_database_url, get_google_client_id
@@ -440,3 +443,72 @@ def get_max_concurrent_audio_gen() -> int:
     Story: 4.6 - Parallel Task Execution (AC2)
     """
     return int(os.getenv("MAX_CONCURRENT_AUDIO_GEN", str(DEFAULT_MAX_CONCURRENT_AUDIO)))
+
+
+def get_workspace_cleanup_enabled() -> bool:
+    """Get workspace cleanup enabled flag from environment.
+
+    Environment Variable:
+        WORKSPACE_CLEANUP_ENABLED: Enable daily workspace cleanup (default: "true")
+        Values: "true", "false" (case-insensitive)
+
+    Returns:
+        True if cleanup is enabled, False otherwise.
+
+    Note:
+        When disabled, workspace cleanup scheduler will not start.
+        Set to "false" in development to preserve workspace files for debugging.
+
+    Story: 8.5 - Temporary File Cleanup
+    """
+    return os.getenv("WORKSPACE_CLEANUP_ENABLED", "true").lower() == "true"
+
+
+def get_workspace_cleanup_retention_days() -> int:
+    """Get workspace cleanup retention period from environment.
+
+    Environment Variable:
+        WORKSPACE_CLEANUP_RETENTION_DAYS: Days to retain completed task workspaces (default: 7)
+
+    Returns:
+        Number of days to retain workspace files (minimum 1, maximum 365).
+
+    Note:
+        Only tasks in PUBLISHED or CANCELLED status older than this period
+        will have their workspace directories deleted. Tasks in error states
+        or in-progress are preserved indefinitely.
+
+    Story: 8.5 - Temporary File Cleanup
+    """
+    try:
+        retention = int(os.getenv("WORKSPACE_CLEANUP_RETENTION_DAYS", "7"))
+        # Clamp between 1 day and 365 days
+        return max(1, min(365, retention))
+    except ValueError:
+        log.warning(
+            "invalid_cleanup_retention_days",
+            value=os.getenv("WORKSPACE_CLEANUP_RETENTION_DAYS"),
+            using_default=7,
+        )
+        return 7
+
+
+def get_workspace_cleanup_schedule() -> str:
+    """Get workspace cleanup cron schedule from environment.
+
+    Environment Variable:
+        WORKSPACE_CLEANUP_SCHEDULE: Cron schedule for cleanup job (default: "0 3 * * *")
+        Format: "minute hour day month day_of_week"
+        Example: "0 3 * * *" = daily at 3am Pacific Time
+
+    Returns:
+        Cron schedule string.
+
+    Note:
+        Default schedule runs at 3am Pacific Time (QUOTA_TIMEZONE) to avoid
+        interfering with prime-time video generation workloads. Timezone is
+        configured via QUOTA_TIMEZONE environment variable (default: America/Los_Angeles).
+
+    Story: 8.5 - Temporary File Cleanup
+    """
+    return os.getenv("WORKSPACE_CLEANUP_SCHEDULE", "0 3 * * *")
