@@ -1110,6 +1110,60 @@ PENDING_STATUSES = [TaskStatus.QUEUED]
 
 **Commit:** bf7501b - "fix: Replace invalid 'pending' status with PENDING_STATUSES constant"
 
+### Fifth Code Review (2026-01-29) - Health Check Test Fixes
+
+**Test Failure Status:** ✅ HEALTH CHECK TESTS FIXED
+
+**Failing Tests Found:** 2 (in Story 8.7 health check endpoint tests)
+**Failing Tests Fixed:** 2 (100% fixed)
+
+**Failed Tests (Story 8.7 Health Check Endpoint):**
+- test_health_check_includes_queue_depth - Expected 5, got 0
+- test_health_check_large_queue_depth - Expected 100, got 50
+
+**Issue: Same Invalid "pending" Status Bug**
+- **File:** tests/test_routes/test_health_check.py (lines 168, 339)
+- **Problem:** Tests created tasks with `status="pending"` (invalid enum value)
+- **Impact:** Tasks were created but not counted by get_queue_depth(), causing assertion failures
+- **Root Cause:** Cascading effect from fixing task_status_service.py - exposed that tests also used invalid status
+
+**Why Tests Failed After Previous Fix:**
+1. Before: get_queue_depth() query looked for both "pending" and "queued" statuses
+2. Fix 4: Changed query to use PENDING_STATUSES (only QUEUED)
+3. Result: Tests creating tasks with "pending" now had 0 matches
+4. This revealed the tests themselves were using invalid status values
+
+**Fixes Applied:**
+
+1. **tests/test_routes/test_health_check.py:**
+   - Added import: `from app.models import TaskStatus`
+   - Line 168: `status="pending"` → `status=TaskStatus.QUEUED`
+   - Line 339: `status="pending" if i % 2 == 0 else "queued"` → `status=TaskStatus.QUEUED`
+   - Updated test docstrings: "pending tasks" → "queued tasks"
+
+**Test Matrix After Fix:**
+```
+test_health_check_includes_queue_depth:      ✅ PASSING (was failing: 0 == 5)
+test_health_check_large_queue_depth:         ✅ PASSING (was failing: 50 == 100)
+All 30 Story 8.8 tests:                      ✅ STILL PASSING
+All 7 task_status_service tests:             ✅ STILL PASSING
+```
+
+**CI Impact:**
+- Fixed 2 of 8 failing tests in pytest suite
+- Remaining 6 failures are pre-existing issues:
+  - 5 test_main.py tests (DATABASE_URL not configured in test environment)
+  - 1 test_video_review_workflow.py test (transaction already begun)
+
+**Verification:**
+- Both health check tests now pass locally and in CI
+- Queue depth correctly counts tasks with QUEUED status
+- No regressions in Story 8.8 or Story 8.7 tests
+
+**Note:** This is a cascading fix from Code Review #4. Fixing the service exposed that the tests also used invalid status values. This is a good example of comprehensive testing revealing issues across the codebase.
+
+**Commit:** 40d1205 - "fix: Replace invalid 'pending' status in health check tests"
+
 ### File List
 
 **Modified Files:**
