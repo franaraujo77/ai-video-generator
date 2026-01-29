@@ -202,7 +202,7 @@ async def get_channel_cost_summary(
     avg_cost = total_cost / video_count if video_count > 0 else Decimal("0.00")
 
     # Breakdown by component
-    breakdown = {}
+    breakdown: dict[str, Decimal] = {}
     for cost in costs:
         breakdown[cost.component] = breakdown.get(cost.component, Decimal("0.00")) + cost.cost_usd
 
@@ -227,7 +227,8 @@ async def get_average_cost_per_video(db: AsyncSession, channel_id: UUID, days: i
     start_date = datetime.now(timezone.utc) - timedelta(days=days)
     summary = await get_channel_cost_summary(db, channel_id, start_date=start_date)
 
-    return summary["avg_cost_per_video"]
+    avg_cost: Decimal = summary["avg_cost_per_video"]
+    return avg_cost
 
 
 # ============================================================================
