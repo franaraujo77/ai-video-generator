@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from httpx import AsyncClient
 
-from app.models import WorkerHeartbeat
+from app.models import TaskStatus, WorkerHeartbeat
 from tests.support.factories import create_channel, create_task
 
 
@@ -155,7 +155,7 @@ class TestHealthCheckEndpoint:
         self, async_client: AsyncClient, async_session
     ):
         """AC1: Test health check includes queue depth in response."""
-        # Arrange - Create channel and pending tasks
+        # Arrange - Create channel and queued tasks
         channel = create_channel(channel_id="poke1")
         async_session.add(channel)
         await async_session.commit()
@@ -163,9 +163,9 @@ class TestHealthCheckEndpoint:
         for i in range(5):
             task = create_task(
                 channel_id=channel.id,
-                notion_page_id=f"pending{i}",
+                notion_page_id=f"queued{i}",
                 title=f"Task {i}",
-                status="pending",
+                status=TaskStatus.QUEUED,
             )
             async_session.add(task)
         await async_session.commit()
@@ -326,7 +326,7 @@ class TestHealthCheckEndpoint:
 
     async def test_health_check_large_queue_depth(self, async_client: AsyncClient, async_session):
         """Test health check with large queue depth (stress test)."""
-        # Arrange - Create channel and 100 pending tasks
+        # Arrange - Create channel and 100 queued tasks
         channel = create_channel(channel_id="poke1")
         async_session.add(channel)
         await async_session.commit()
@@ -336,7 +336,7 @@ class TestHealthCheckEndpoint:
                 channel_id=channel.id,
                 notion_page_id=f"task{i:03d}",
                 title=f"Task {i}",
-                status="pending" if i % 2 == 0 else "queued",
+                status=TaskStatus.QUEUED,
             )
             async_session.add(task)
         await async_session.commit()
