@@ -1,7 +1,7 @@
 """Tests for task status service (Story 8.7 - Task 5).
 
 These tests validate the task status service functions including:
-- Queue depth queries (pending + queued tasks)
+- Queue depth queries (queued tasks)
 - Status filtering logic
 - Performance requirements (< 100ms execution)
 """
@@ -9,7 +9,7 @@ These tests validate the task status service functions including:
 import pytest
 from uuid import uuid4
 
-from app.models import Task
+from app.models import Task, TaskStatus
 from app.services.task_status_service import get_queue_depth
 from tests.support.factories import create_channel, create_task
 
@@ -40,7 +40,7 @@ class TestGetQueueDepth:
                 channel_id=channel.id,
                 notion_page_id=f"pending{i}",
                 title=f"Pending Task {i}",
-                status="pending",
+                status=TaskStatus.QUEUED,
             )
             async_session.add(task)
         await async_session.commit()
@@ -87,7 +87,7 @@ class TestGetQueueDepth:
                 channel_id=channel.id,
                 notion_page_id=f"pending{i}",
                 title=f"Pending Task {i}",
-                status="pending",
+                status=TaskStatus.QUEUED,
             )
             async_session.add(task)
 
@@ -122,7 +122,7 @@ class TestGetQueueDepth:
                 channel_id=channel.id,
                 notion_page_id=f"pending{i}",
                 title=f"Pending Task {i}",
-                status="pending",
+                status=TaskStatus.QUEUED,
             )
             async_session.add(task)
 
@@ -159,7 +159,7 @@ class TestGetQueueDepth:
                 channel_id=channel1.id,
                 notion_page_id=f"ch1task{i}",
                 title=f"Channel 1 Task {i}",
-                status="pending",
+                status=TaskStatus.QUEUED,
             )
             async_session.add(task)
 
@@ -193,7 +193,7 @@ class TestGetQueueDepth:
                 channel_id=channel.id,
                 notion_page_id=f"task{i:03d}",  # Padded to avoid duplicates
                 title=f"Task {i}",
-                status="pending" if i % 2 == 0 else "queued",
+                status=TaskStatus.QUEUED if i % 2 == 0 else "queued",
             )
             async_session.add(task)
         await async_session.commit()
