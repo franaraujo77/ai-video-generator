@@ -15,7 +15,8 @@ Transaction Pattern (CRITICAL - Architecture Decision 3):
     2. Close database connection
     3. Generate assets (long-running, outside transaction)
     4. Reopen database connection
-    5. Update task (short transaction, set status="assets_ready" or "asset_error")
+    5. Track API cost (short transaction, Story 8.2)
+    6. Update task (short transaction, set status="assets_ready" or "asset_error")
 
 Error Handling:
     - CLIScriptError → Mark task "asset_error", log details, allow retry
@@ -43,12 +44,19 @@ Usage:
 
 import asyncio
 import contextlib
+from decimal import Decimal
 from uuid import UUID
 
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
 from app.services.asset_generation import AssetGenerationService
+from app.services.asset_url_storage import record_asset_url
+from app.services.cost_tracker import track_api_cost
+from app.services.credential_service import CredentialService
+from app.services.notion_asset_sync import sync_task_assets_to_notion
 from app.utils.cli_wrapper import CLIScriptError
+from app.utils.context import set_correlation_id
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -106,6 +114,7 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
         # Note: task.channel_id is UUID FK, need channel.channel_id string
         await db.refresh(task, ["channel"])  # Ensure relationship is loaded
         channel_id_str = task.channel.channel_id
+        channel = task.channel  # Store channel for Notion token access
 
         # Store task details for asset generation
         project_id = str(task.id)  # Use task UUID as project_id
@@ -149,7 +158,125 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
             total_cost_usd=result["total_cost_usd"],
         )
 
-        # Step 3: Update task (short transaction)
+        # Step 2.5: Upload assets to R2 and record URLs (Story 8.4)
+        async with async_session_factory() as db:
+            # Get channel to check storage_strategy
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_r2_upload", task_id=str(task_id))
+                return
+
+            await db.refresh(task, ["channel"])
+            channel = task.channel
+            storage_strategy = channel.storage_strategy
+
+            if storage_strategy == "r2":
+                log.info(
+                    "r2_upload_start",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    asset_count=len(manifest.assets),
+                )
+
+                # Get R2 client with decrypted credentials
+                credential_service = CredentialService()
+                try:
+                    r2_client = await credential_service.get_r2_client(channel.channel_id, db)
+                except ValueError as e:
+                    log.error(
+                        "r2_client_initialization_failed",
+                        task_id=str(task_id),
+                        error=str(e),
+                    )
+                    # Continue without R2 upload - will fall back to Notion
+                    storage_strategy = "notion"
+
+                if storage_strategy == "r2":
+                    # Upload each asset to R2
+                    uploaded_count = 0
+                    for asset_prompt in manifest.assets:
+                        asset_path = asset_prompt.output_path
+                        if not asset_path.exists():
+                            log.warning(
+                                "asset_file_missing",
+                                task_id=str(task_id),
+                                asset_path=str(asset_path),
+                            )
+                            continue
+
+                        # Determine asset type from directory structure
+                        # Path format: .../assets/{asset_type}/{filename}
+                        asset_type = asset_path.parent.name  # "characters", "environments", etc.
+                        asset_name = asset_path.name
+
+                        # Construct R2 key
+                        r2_key = (
+                            f"{channel.channel_id}/{project_id}/assets/{asset_type}/{asset_name}"
+                        )
+
+                        try:
+                            # Upload to R2
+                            asset_url = await r2_client.upload_asset(
+                                local_file_path=asset_path,
+                                r2_key=r2_key,
+                                content_type="image/png",
+                            )
+
+                            # Record asset URL in database (Story 8.3)
+                            async with async_session_factory() as db2, db2.begin():
+                                await record_asset_url(
+                                    db=db2,
+                                    task_id=task.id,
+                                    channel_id=channel.id,
+                                    asset_type=asset_type,
+                                    asset_name=asset_name,
+                                    storage_strategy="r2",
+                                    asset_url=asset_url,
+                                    local_file_path=str(asset_path),
+                                )
+
+                            uploaded_count += 1
+                            log.info(
+                                "asset_uploaded_to_r2",
+                                task_id=str(task_id),
+                                asset_name=asset_name,
+                                asset_url=asset_url,
+                            )
+
+                        except Exception as e:
+                            log.error(
+                                "r2_asset_upload_failed",
+                                task_id=str(task_id),
+                                asset_name=asset_name,
+                                error=str(e),
+                            )
+                            # Continue with next asset - don't fail entire task
+
+                    log.info(
+                        "r2_upload_complete",
+                        task_id=str(task_id),
+                        uploaded=uploaded_count,
+                        total=len(manifest.assets),
+                    )
+
+        # Step 3: Track API cost (short transaction) - Story 8.2
+        async with async_session_factory() as db, db.begin():
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_cost_tracking", task_id=str(task_id))
+                return
+
+            await track_api_cost(
+                db=db,
+                task_id=task.id,
+                component="gemini_assets",
+                cost_usd=Decimal(str(result["total_cost_usd"])),
+                api_calls=result["generated"],
+                units_consumed=result["generated"],
+            )
+            # Note: track_api_cost() commits internally, no extra commit needed
+
+        # Step 4: Update task (short transaction)
         async with async_session_factory() as db, db.begin():
             task = await db.get(Task, task_id)
             if not task:
@@ -162,24 +289,64 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
 
             log.info("task_updated", task_id=str(task_id), status="assets_ready")
 
-        # Step 4: Update Notion (async, non-blocking)
-        # Note: Notion sync service not yet implemented in Epic 2
-        # This is a placeholder for future integration
-        #
+        # Step 5: Sync asset URLs to Notion (fire-and-forget background job - Story 8.3)
         # Pattern: Fire-and-forget task with exception suppression
         # The task is intentionally not awaited to avoid blocking the worker.
         # Exception handling is done via done_callback to prevent unhandled exceptions.
-        # This is acceptable for placeholder code; production code should use task groups.
-        notion_task = asyncio.create_task(
-            _update_notion_status_async(notion_page_id, "Assets Ready")
-        )
+        try:
+            # Validate channel exists (Issue #4: Missing channel validation)
+            if not channel:
+                log.warning(
+                    "notion_asset_sync_skipped_no_channel",
+                    task_id=str(task_id),
+                    reason="Channel not loaded",
+                )
+                # Don't raise - this is non-critical best-effort sync
+                return
 
-        def handle_notion_task_done(task: asyncio.Task[None]) -> None:
-            # Notion updates are best-effort; don't fail task on Notion errors
-            with contextlib.suppress(Exception):
-                task.result()  # Re-raise exception if occurred
+            # Validate Notion credentials exist (Issue #5: Missing credential validation)
+            if not channel.notion_token_encrypted:
+                log.info(
+                    "notion_asset_sync_skipped_no_credentials",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    reason="Channel not configured with Notion credentials",
+                )
+                # Don't raise - channels may not use Notion integration
+                return
 
-        notion_task.add_done_callback(handle_notion_task_done)
+            # Decrypt Notion token from channel
+            encryption_service = get_encryption_service()
+            notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
+
+            # Create fire-and-forget task for Notion asset sync
+            async def _sync_assets_to_notion() -> None:
+                # Set correlation ID for distributed tracing (Issue #3)
+                set_correlation_id(str(task_id))
+                async with async_session_factory() as db:
+                    await sync_task_assets_to_notion(db, task_id, notion_token)
+
+            notion_task = asyncio.create_task(_sync_assets_to_notion())
+
+            def handle_notion_task_done(task: asyncio.Task[None]) -> None:
+                # Notion updates are best-effort; don't fail task on Notion errors
+                with contextlib.suppress(Exception):
+                    task.result()  # Re-raise exception if occurred
+
+            notion_task.add_done_callback(handle_notion_task_done)
+
+            log.info(
+                "notion_asset_sync_queued",
+                task_id=str(task_id),
+                notion_page_id=notion_page_id,
+            )
+        except Exception as e:
+            # Log but don't fail task if Notion sync setup fails
+            log.warning(
+                "notion_asset_sync_setup_failed",
+                task_id=str(task_id),
+                error=str(e),
+            )
 
     except CLIScriptError as e:
         log.error(
@@ -223,24 +390,3 @@ async def process_asset_generation_task(task_id: str | UUID) -> None:
                 error_entry = f"Unexpected error: {e!s}\n\n"
                 task.error_log = (task.error_log or "") + error_entry
                 await db.commit()
-
-
-async def _update_notion_status_async(notion_page_id: str, status: str) -> None:
-    """Update Notion page status asynchronously (non-blocking).
-
-    This is a placeholder for future Notion integration from Epic 2.
-    Actual implementation will use NotionSyncService.
-
-    Args:
-        notion_page_id: Notion page UUID
-        status: New status value to set in Notion
-
-    Note:
-        This function should NOT block the main worker flow. Notion updates
-        are "fire and forget" - failures are logged but don't affect task status.
-    """
-    # TODO: Implement Notion status update using Epic 2 NotionSyncService
-    # For now, just log the intent
-    log.info("notion_status_update_placeholder", notion_page_id=notion_page_id, status=status)
-    # In production, this would call:
-    # await notion_client.update_page_status(notion_page_id, status)

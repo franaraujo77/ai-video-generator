@@ -61,6 +61,7 @@ from sqlalchemy import and_, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Channel, ReviewActionAuditLog, TaskStatus
+from app.utils.context import get_correlation_id
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -187,6 +188,10 @@ class ReviewAuditService:
         # Default timestamp to now if not provided
         if action_timestamp is None:
             action_timestamp = datetime.now(timezone.utc)
+
+        # Story 8.1: Use correlation_id from context if not explicitly provided
+        if correlation_id is None:
+            correlation_id = get_correlation_id()
 
         # Create audit log entry
         audit_entry = ReviewActionAuditLog(

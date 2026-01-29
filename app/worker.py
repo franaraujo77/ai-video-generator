@@ -42,7 +42,11 @@ from app.config import (
     get_google_client_secret,
 )
 from app.database import async_engine
-from app.utils.logging import get_logger
+from app.utils.logging import configure_structlog, get_logger
+
+# Configure structlog with correlation ID processors (Story 8.1)
+# Must be called before any structlog loggers are created
+configure_structlog()
 
 # Initialize structured logger
 log = get_logger(__name__)
@@ -343,6 +347,121 @@ def signal_handler(signum: int, frame: object) -> None:
     shutdown_requested = True
 
 
+async def heartbeat_check_in_background() -> None:
+    """Background task that updates worker heartbeat every 30 seconds.
+
+    Story 8.7: Worker Heartbeat Monitoring for Health Check
+
+    Updates worker heartbeat record in database using atomic upsert pattern
+    (INSERT ON CONFLICT UPDATE). Health check endpoint queries this table to
+    determine system operational status.
+
+    Behavior:
+        - Runs in background alongside PgQueuer worker loop
+        - Updates heartbeat every 30 seconds (5-minute timeout threshold)
+        - Uses atomic upsert (PostgreSQL INSERT ON CONFLICT UPDATE)
+        - Exits gracefully when shutdown_requested is set
+
+    Error Handling:
+        - Catches exceptions to prevent background task crash
+        - Logs errors but continues heartbeat updates
+        - Non-fatal failures (database temporary unavailable)
+
+    Environment:
+        WORKER_ID: Worker identifier (e.g., "worker-1", "worker-2", "worker-3")
+                   Set by Railway service environment. Defaults to "worker-unknown".
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    from app.database import AsyncSessionLocal
+    from app.models import WorkerHeartbeat
+
+    # Get worker ID from environment variable
+    worker_id = os.getenv("WORKER_ID", os.getenv("RAILWAY_SERVICE_NAME", "worker-unknown"))
+    log.info("worker_heartbeat_started", worker_id=worker_id, interval_seconds=30)
+
+    # Initial heartbeat
+    try:
+        async with AsyncSessionLocal() as db:  # type: ignore[misc]
+            stmt = pg_insert(WorkerHeartbeat).values(
+                worker_id=worker_id,
+                last_seen_at=datetime.now(timezone.utc),
+                status="online",
+                active_task_count=0,
+            )
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["worker_id"],
+                set_={
+                    "last_seen_at": stmt.excluded.last_seen_at,
+                    "status": stmt.excluded.status,
+                    "active_task_count": stmt.excluded.active_task_count,
+                    "updated_at": datetime.now(timezone.utc),
+                },
+            )
+            await db.execute(stmt)
+            await db.commit()
+            log.info("worker_heartbeat_initial_check_in", worker_id=worker_id)
+    except Exception as e:
+        log.error(
+            "worker_heartbeat_initial_failed",
+            worker_id=worker_id,
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
+
+    # Periodic heartbeat updates
+    while not shutdown_requested:
+        try:
+            # Wait 30 seconds before next heartbeat (or until shutdown)
+            for _ in range(30):
+                if shutdown_requested:
+                    break
+                await asyncio.sleep(1)
+
+            if shutdown_requested:
+                break
+
+            # Update heartbeat (atomic upsert)
+            async with AsyncSessionLocal() as db:  # type: ignore[misc]
+                stmt = pg_insert(WorkerHeartbeat).values(
+                    worker_id=worker_id,
+                    last_seen_at=datetime.now(timezone.utc),
+                    status="online",
+                    active_task_count=0,  # TODO: Track actual task count from WorkerState
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["worker_id"],
+                    set_={
+                        "last_seen_at": stmt.excluded.last_seen_at,
+                        "status": stmt.excluded.status,
+                        "active_task_count": stmt.excluded.active_task_count,
+                        "updated_at": datetime.now(timezone.utc),
+                    },
+                )
+                await db.execute(stmt)
+                await db.commit()
+                log.debug("worker_heartbeat_check_in", worker_id=worker_id)
+
+        except asyncio.CancelledError:
+            log.info("worker_heartbeat_cancelled", worker_id=worker_id)
+            break
+        except Exception as e:
+            log.error(
+                "worker_heartbeat_error",
+                worker_id=worker_id,
+                error=str(e),
+                error_type=type(e).__name__,
+                exc_info=True,
+            )
+            # Continue heartbeat despite errors (non-fatal)
+            await asyncio.sleep(30)
+
+    log.info("worker_heartbeat_stopped", worker_id=worker_id)
+
+
 async def retry_task_poller(pgq: PgQueuer) -> None:
     """Background task that periodically polls for tasks ready for retry.
 
@@ -446,14 +565,19 @@ async def worker_main_loop() -> None:
     worker_id = os.getenv("RAILWAY_SERVICE_NAME", "worker-local")
     log.info("worker_started_with_pgqueuer", worker_id=worker_id)
 
-    # Background task handle
+    # Background task handles
     retry_poller_task = None
+    heartbeat_task = None
 
     try:
         # Import queue initialization
         from app.entrypoints import register_entrypoints
         from app.queue import initialize_pgqueuer
-        from app.scheduler import start_quota_reset_scheduler
+        from app.scheduler import (
+            start_cleanup_scheduler,
+            start_quota_reset_scheduler,
+            start_weekly_metrics_scheduler,
+        )
         from app.services.youtube_service import YouTubeService
 
         # Initialize PgQueuer
@@ -486,11 +610,20 @@ async def worker_main_loop() -> None:
         # Register entrypoints with PgQueuer
         register_entrypoints(pgq)
 
+        # Start worker heartbeat in background (Story 8.7)
+        heartbeat_task = asyncio.create_task(heartbeat_check_in_background())
+
         # Start retry task poller in background (Story 6.2, epic6-ai-3)
         retry_poller_task = asyncio.create_task(retry_task_poller(pgq))
 
         # Start quota reset scheduler (Story 7.0)
         await start_quota_reset_scheduler()
+
+        # Start workspace cleanup scheduler (Story 8.5)
+        await start_cleanup_scheduler()
+
+        # Start weekly metrics scheduler (Story 8.6)
+        await start_weekly_metrics_scheduler()
 
         # Run PgQueuer worker loop
         # Handles: polling, LISTEN/NOTIFY, FOR UPDATE SKIP LOCKED, retry logic
@@ -509,7 +642,12 @@ async def worker_main_loop() -> None:
         )
         raise
     finally:
-        # Cancel background retry poller
+        # Cancel background tasks
+        if heartbeat_task and not heartbeat_task.done():
+            heartbeat_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await heartbeat_task
+
         if retry_poller_task and not retry_poller_task.done():
             retry_poller_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -529,6 +667,7 @@ async def shutdown_worker() -> None:
 
     Side Effects:
         - Shuts down quota reset scheduler (Story 7.0)
+        - Shuts down workspace cleanup scheduler (Story 8.5)
         - Closes asyncpg pool (PgQueuer)
         - Closes async database engine (SQLAlchemy)
         - Disposes connection pool
@@ -536,9 +675,19 @@ async def shutdown_worker() -> None:
     log.info("closing_database_connections")
 
     # Shutdown quota reset scheduler (Story 7.0)
-    from app.scheduler import shutdown_quota_reset_scheduler
+    from app.scheduler import (
+        shutdown_cleanup_scheduler,
+        shutdown_quota_reset_scheduler,
+        shutdown_weekly_metrics_scheduler,
+    )
 
     shutdown_quota_reset_scheduler()
+
+    # Shutdown workspace cleanup scheduler (Story 8.5)
+    shutdown_cleanup_scheduler()
+
+    # Shutdown weekly metrics scheduler (Story 8.6)
+    shutdown_weekly_metrics_scheduler()
 
     # Close asyncpg pool (used by PgQueuer)
     if asyncpg_pool:

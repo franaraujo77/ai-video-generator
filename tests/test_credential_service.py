@@ -548,3 +548,200 @@ class TestDatabaseMigration:
         assert "op.drop_column" in content
         # Count drop_column calls (should be 4)
         assert content.count("op.drop_column") == 4
+
+
+class TestCredentialServiceR2Credentials:
+    """Test suite for R2 credential storage and retrieval (Story 8.4)."""
+
+    async def test_store_and_retrieve_r2_credentials(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        channel_poke1: Channel,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test storing and retrieving R2 credentials for a channel."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        access_key = "test_r2_access_key"
+        secret_key = "test_r2_secret_key"
+        bucket_name = "test-bucket"
+
+        # Store R2 credentials
+        await credential_service.store_r2_credentials(
+            "poke1", access_key, secret_key, bucket_name, async_session
+        )
+
+        # Retrieve credentials
+        (
+            retrieved_access,
+            retrieved_secret,
+            retrieved_bucket,
+        ) = await credential_service.get_r2_credentials("poke1", async_session)
+
+        assert retrieved_access == access_key
+        assert retrieved_secret == secret_key
+        assert retrieved_bucket == bucket_name
+
+    async def test_get_r2_credentials_returns_none_for_channel_without_credentials(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        channel_poke1: Channel,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test retrieving R2 credentials from channel without credentials returns (None, None, None)."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        result = await credential_service.get_r2_credentials("poke1", async_session)
+
+        assert result == (None, None, None)
+
+    async def test_get_r2_credentials_for_nonexistent_channel(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test retrieving R2 credentials for nonexistent channel returns (None, None, None)."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        result = await credential_service.get_r2_credentials("nonexistent", async_session)
+
+        assert result == (None, None, None)
+
+    async def test_store_r2_credentials_for_nonexistent_channel_raises(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test storing R2 credentials for nonexistent channel raises ValueError."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        with pytest.raises(ValueError, match="Channel not found: nonexistent"):
+            await credential_service.store_r2_credentials(
+                "nonexistent", "access", "secret", "bucket", async_session
+            )
+
+    async def test_r2_credentials_encrypted_in_database(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        channel_poke1: Channel,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test that R2 credentials are encrypted before storage."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        plaintext_access = "test_access_key"
+        plaintext_secret = "test_secret_key"
+
+        # Store credentials
+        await credential_service.store_r2_credentials(
+            "poke1", plaintext_access, plaintext_secret, "test-bucket", async_session
+        )
+
+        # Refresh channel to get latest DB state
+        await async_session.refresh(channel_poke1)
+
+        # Verify stored data is bytes (encrypted)
+        assert isinstance(channel_poke1.r2_access_key_id_encrypted, bytes)
+        assert isinstance(channel_poke1.r2_secret_access_key_encrypted, bytes)
+
+        # Verify stored data is NOT plaintext
+        assert channel_poke1.r2_access_key_id_encrypted != plaintext_access.encode()
+        assert channel_poke1.r2_secret_access_key_encrypted != plaintext_secret.encode()
+
+        # Verify we can still decrypt them
+        retrieved_access, retrieved_secret, _ = await credential_service.get_r2_credentials(
+            "poke1", async_session
+        )
+        assert retrieved_access == plaintext_access
+        assert retrieved_secret == plaintext_secret
+
+    async def test_update_r2_bucket_name(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        channel_poke1: Channel,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test updating R2 bucket name for existing channel."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        # Store initial credentials
+        await credential_service.store_r2_credentials(
+            "poke1", "access", "secret", "old-bucket", async_session
+        )
+
+        # Update bucket name
+        await credential_service.store_r2_credentials(
+            "poke1", "access", "secret", "new-bucket", async_session
+        )
+
+        # Verify bucket name updated
+        _, _, bucket = await credential_service.get_r2_credentials("poke1", async_session)
+        assert bucket == "new-bucket"
+
+    async def test_get_r2_client(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        channel_poke1: Channel,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test getting R2 storage client with decrypted credentials."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        # Store R2 credentials
+        await credential_service.store_r2_credentials(
+            "poke1",
+            "test_access_key",
+            "test_secret_key",
+            "test-bucket",
+            async_session,
+        )
+
+        # Get R2 client
+        client = await credential_service.get_r2_client("poke1", async_session)
+
+        # Verify client is configured correctly
+        assert client.bucket_name == "test-bucket"
+        assert client.access_key_id == "test_access_key"
+        assert client.secret_access_key == "test_secret_key"
+        assert client.region == "auto"
+
+    async def test_get_r2_client_for_channel_without_credentials_raises(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        channel_poke1: Channel,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test getting R2 client for channel without credentials raises ValueError."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        with pytest.raises(ValueError, match="does not have R2 storage configured"):
+            await credential_service.get_r2_client("poke1", async_session)
+
+    async def test_get_r2_client_for_nonexistent_channel_raises(
+        self,
+        credential_service: CredentialService,
+        async_session: AsyncSession,
+        valid_fernet_key: str,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Test getting R2 client for nonexistent channel raises ValueError."""
+        monkeypatch.setenv("FERNET_KEY", valid_fernet_key)
+
+        with pytest.raises(ValueError, match="Channel not found"):
+            await credential_service.get_r2_client("nonexistent", async_session)

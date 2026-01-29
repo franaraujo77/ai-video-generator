@@ -12,13 +12,46 @@ Enhanced Features (Story 6.1):
 - log_error() helper for error logging with required metadata
 - ISO 8601 timestamp format (UTC timezone)
 - Integration with error_classifier for transient/permanent classification
+
+Enhanced Features (Story 8.1):
+- Correlation ID, channel ID, worker ID processors for structlog
+- Automatic context injection from ContextVar
+- ISO 8601 formatter for stdlib logging
 """
 
 import json
 import logging
 import sys
+from collections.abc import MutableMapping
 from datetime import datetime, timezone
 from typing import Any
+
+import structlog
+
+from app.utils.context import get_channel_id, get_correlation_id, get_step, get_worker_id
+
+
+class ISO8601Formatter(logging.Formatter):
+    """Custom formatter that outputs ISO 8601 timestamps in UTC.
+
+    Replaces asctime formatter with ISO 8601 format: YYYY-MM-DDTHH:MM:SS.ffffffZ
+
+    Story: 8.1 - Structured Logging with Correlation IDs (AC: 7)
+    """
+
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: N802
+        """Format timestamp as ISO 8601 in UTC timezone.
+
+        Args:
+            record: Log record containing timestamp
+            datefmt: Ignored (always uses ISO 8601)
+
+        Returns:
+            ISO 8601 formatted timestamp string: YYYY-MM-DDTHH:MM:SS.ffffffZ
+        """
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        # Replace +00:00 with Z for standard ISO 8601 UTC format
+        return dt.isoformat().replace("+00:00", "Z")
 
 
 class StructuredLogger:
@@ -53,6 +86,127 @@ class StructuredLogger:
         self._logger.debug(self._format_json(event, **kwargs))
 
 
+def add_correlation_id(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Inject correlation_id from async context into every log entry.
+
+    Args:
+        logger: Logger instance (unused, required by structlog)
+        method_name: Method name (unused, required by structlog)
+        event_dict: Log event dictionary to modify
+
+    Returns:
+        Modified event_dict with correlation_id if context has one
+
+    Story: 8.1 - Structured Logging with Correlation IDs (AC: 2, 3)
+    """
+    correlation_id = get_correlation_id()
+    if correlation_id:
+        event_dict["correlation_id"] = correlation_id
+    return event_dict
+
+
+def add_channel_id(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Inject channel_id from async context into every log entry.
+
+    Args:
+        logger: Logger instance (unused, required by structlog)
+        method_name: Method name (unused, required by structlog)
+        event_dict: Log event dictionary to modify
+
+    Returns:
+        Modified event_dict with channel_id if context has one
+
+    Story: 8.1 - Structured Logging with Correlation IDs (AC: 2)
+    """
+    channel_id = get_channel_id()
+    if channel_id:
+        event_dict["channel_id"] = channel_id
+    return event_dict
+
+
+def add_worker_id(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Inject worker_id from RAILWAY_SERVICE_NAME env var into every log entry.
+
+    Args:
+        logger: Logger instance (unused, required by structlog)
+        method_name: Method name (unused, required by structlog)
+        event_dict: Log event dictionary to modify
+
+    Returns:
+        Modified event_dict with worker_id if env var is set
+
+    Story: 8.1 - Structured Logging with Correlation IDs (AC: 2)
+    """
+    worker_id = get_worker_id()
+    if worker_id:
+        event_dict["worker_id"] = worker_id
+    return event_dict
+
+
+def add_step(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
+    """Inject step (pipeline step name) from async context into every log entry.
+
+    Args:
+        logger: Logger instance (unused, required by structlog)
+        method_name: Method name (unused, required by structlog)
+        event_dict: Log event dictionary to modify
+
+    Returns:
+        Modified event_dict with step if context has one
+
+    Story: 8.1 - Structured Logging with Correlation IDs (AC: 2)
+    """
+    step = get_step()
+    if step:
+        event_dict["step"] = step
+    return event_dict
+
+
+def configure_structlog() -> None:
+    """Configure structlog with correlation ID processors and JSON output.
+
+    This configures structlog with:
+    - Correlation ID processor (injects from async context)
+    - Channel ID processor (injects from async context)
+    - Worker ID processor (injects from env var)
+    - ISO 8601 timestamps
+    - JSON output for Railway compatibility
+
+    Safe to call multiple times - only configures if not already configured.
+
+    Story: 8.1 - Structured Logging with Correlation IDs (AC: 2, 7)
+    """
+    if not structlog.is_configured():
+        structlog.configure(
+            processors=[
+                add_correlation_id,  # Inject correlation_id from context
+                add_channel_id,  # Inject channel_id from context
+                add_worker_id,  # Inject worker_id from env var
+                add_step,  # Inject step (pipeline step name) from context
+                structlog.stdlib.filter_by_level,
+                structlog.stdlib.add_logger_name,
+                structlog.stdlib.add_log_level,
+                structlog.stdlib.PositionalArgumentsFormatter(),
+                structlog.processors.TimeStamper(fmt="iso"),  # ISO 8601 timestamps
+                structlog.processors.StackInfoRenderer(),
+                structlog.processors.format_exc_info,  # Full stack traces
+                structlog.processors.UnicodeDecoder(),
+                structlog.processors.JSONRenderer(),  # Railway-compatible JSON
+            ],
+            wrapper_class=structlog.stdlib.BoundLogger,
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            cache_logger_on_first_use=True,
+        )
+
+
 def get_logger(name: str) -> StructuredLogger:
     """Get a structured logger instance for the given module.
 
@@ -60,14 +214,19 @@ def get_logger(name: str) -> StructuredLogger:
         name: Module name (typically __name__)
 
     Returns:
-        Configured StructuredLogger instance
+        Configured StructuredLogger instance with ISO 8601 timestamps
+
+    Story: 8.1 - Updated to use ISO8601Formatter instead of asctime
     """
     logger = logging.getLogger(name)
 
     # Configure basic logging if not already configured
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stdout)
-        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        # Use ISO 8601 formatter for timestamp only
+        # StructuredLogger._format_json() already includes all metadata in JSON
+        # Avoid duplicating levelname/name that's already in the JSON message
+        formatter = ISO8601Formatter("%(asctime)s - %(message)s")
         handler.setFormatter(formatter)
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)

@@ -48,6 +48,7 @@ Usage:
 """
 
 import asyncio
+import contextlib
 import re
 from uuid import UUID
 
@@ -55,9 +56,14 @@ import httpx
 
 from app.database import async_session_factory
 from app.models import Task, TaskStatus
+from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
+from app.services.credential_service import CredentialService
+from app.services.notion_asset_sync import sync_task_assets_to_notion
 from app.services.video_generation import VideoGenerationService
 from app.utils.cli_wrapper import CLIScriptError
+from app.utils.context import set_correlation_id
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -158,6 +164,8 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
     topic = None
     story_direction = None
     failed_clip_numbers = None  # Story 5.4 AC3: Partial regeneration
+    channel = None  # Store for Notion sync
+    notion_page_id = None
 
     # Step 1: Claim task (short transaction)
     async with async_session_factory() as db, db.begin():
@@ -169,11 +177,13 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
         # Get channel_id string from relationship
         await db.refresh(task, ["channel"])  # Ensure relationship is loaded
         channel_id_str = task.channel.channel_id
+        channel = task.channel  # Store channel for Notion sync
 
         # Store task details for video generation
         project_id = str(task.id)  # Use task UUID as project_id
         topic = task.topic
         story_direction = task.story_direction
+        notion_page_id = task.notion_page_id
 
         # Story 5.4 AC3: Check for partial regeneration
         if task.step_completion_metadata:
@@ -238,6 +248,94 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             total_cost_usd=str(result["total_cost_usd"]),
         )
 
+        # Step 2.5: Upload videos to R2 and record URLs (Story 8.4)
+        async with async_session_factory() as db:
+            task = await db.get(Task, task_id)
+            if not task:
+                log.error("task_not_found_for_r2_upload", task_id=str(task_id))
+                return
+
+            await db.refresh(task, ["channel"])
+            channel = task.channel
+            storage_strategy = channel.storage_strategy
+
+            if storage_strategy == "r2":
+                log.info(
+                    "r2_video_upload_start",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    clip_count=len(manifest.clips),
+                )
+
+                # Get R2 client
+                credential_service = CredentialService()
+                try:
+                    r2_client = await credential_service.get_r2_client(channel.channel_id, db)
+                except ValueError as e:
+                    log.error(
+                        "r2_client_initialization_failed",
+                        task_id=str(task_id),
+                        error=str(e),
+                    )
+                    storage_strategy = "notion"
+
+                if storage_strategy == "r2":
+                    uploaded_count = 0
+                    for clip in manifest.clips:
+                        if not clip.output_path.exists():
+                            log.warning(
+                                "video_file_missing",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                output_path=str(clip.output_path),
+                            )
+                            continue
+
+                        asset_name = clip.output_path.name
+                        r2_key = f"{channel.channel_id}/{project_id}/videos/{asset_name}"
+
+                        try:
+                            asset_url = await r2_client.upload_asset(
+                                local_file_path=clip.output_path,
+                                r2_key=r2_key,
+                                content_type="video/mp4",
+                            )
+
+                            async with async_session_factory() as db2, db2.begin():
+                                await record_asset_url(
+                                    db=db2,
+                                    task_id=task.id,
+                                    channel_id=channel.id,
+                                    asset_type="video_clip",
+                                    asset_name=asset_name,
+                                    storage_strategy="r2",
+                                    asset_url=asset_url,
+                                    local_file_path=str(clip.output_path),
+                                )
+
+                            uploaded_count += 1
+                            log.info(
+                                "video_uploaded_to_r2",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                asset_url=asset_url,
+                            )
+
+                        except Exception as e:
+                            log.error(
+                                "r2_video_upload_failed",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                error=str(e),
+                            )
+
+                    log.info(
+                        "r2_video_upload_complete",
+                        task_id=str(task_id),
+                        uploaded=uploaded_count,
+                        total=len(manifest.clips),
+                    )
+
         # Step 3: Track costs (short transaction)
         async with async_session_factory() as db, db.begin():
             task = await db.get(Task, task_id)
@@ -248,12 +346,12 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
             await track_api_cost(
                 db=db,
                 task_id=task.id,
-                component="kling_video_clips",
+                component="kling_video",
                 cost_usd=result["total_cost_usd"],
                 api_calls=result["generated"],
                 units_consumed=result["generated"],
             )
-            await db.commit()
+            # Note: track_api_cost() commits internally (line 101)
 
         # Step 4: Update task (short transaction)
         async with async_session_factory() as db, db.begin():
@@ -285,6 +383,60 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 "task_updated_video_ready",
                 task_id=str(task_id),
                 status="video_ready",
+            )
+
+        # Step 4.5: Sync video URLs to Notion (fire-and-forget - Story 8.3)
+        try:
+            # Validate channel exists (Issue #4: Missing channel validation)
+            if not channel:
+                log.warning(
+                    "notion_asset_sync_skipped_no_channel",
+                    task_id=str(task_id),
+                    reason="Channel not loaded",
+                )
+                return
+
+            # Validate Notion credentials exist (Issue #5: Missing credential validation)
+            if not channel.notion_token_encrypted:
+                log.info(
+                    "notion_asset_sync_skipped_no_credentials",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    reason="Channel not configured with Notion credentials",
+                )
+                return
+
+            # Decrypt Notion token from channel
+            encryption_service = get_encryption_service()
+            notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
+
+            # Create fire-and-forget task for Notion asset sync
+            async def _sync_assets_to_notion() -> None:
+                # Set correlation ID for distributed tracing (Issue #3)
+                set_correlation_id(str(task_id))
+                async with async_session_factory() as db:
+                    await sync_task_assets_to_notion(db, task_id, notion_token)
+
+            notion_task = asyncio.create_task(_sync_assets_to_notion())
+
+            def handle_notion_task_done(task: asyncio.Task[None]) -> None:
+                # Notion updates are best-effort; don't fail task on Notion errors
+                with contextlib.suppress(Exception):
+                    task.result()
+
+            notion_task.add_done_callback(handle_notion_task_done)
+
+            log.info(
+                "notion_asset_sync_queued",
+                task_id=str(task_id),
+                notion_page_id=notion_page_id,
+            )
+        except Exception as e:
+            # Log but don't fail task if Notion sync setup fails
+            log.warning(
+                "notion_asset_sync_setup_failed",
+                task_id=str(task_id),
+                error=str(e),
             )
 
         # Step 5: Cleanup service resources

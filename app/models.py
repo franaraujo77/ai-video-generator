@@ -20,6 +20,7 @@ Example:
 import enum
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 from typing import Any, ClassVar
 
 from sqlalchemy import (
@@ -33,9 +34,12 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     PrimaryKeyConstraint,
     String,
     Text,
+    func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
@@ -408,6 +412,27 @@ class Channel(Base):
 
     # Relationship to audit logs (one-to-many)
     audit_logs: Mapped[list["ReviewActionAuditLog"]] = relationship("ReviewActionAuditLog")
+
+    # Relationship to asset metadata (one-to-many) - Story 8.3
+    assets: Mapped[list["AssetMetadata"]] = relationship(
+        "AssetMetadata",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
+
+    # Relationship to weekly metrics (one-to-many) - Story 8.6
+    weekly_metrics: Mapped[list["WeeklyMetrics"]] = relationship(
+        "WeeklyMetrics",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
+
+    # Relationship to cost thresholds (one-to-many) - Story 8.8
+    cost_thresholds: Mapped[list["CostThreshold"]] = relationship(
+        "CostThreshold",
+        back_populates="channel",
+        cascade="all, delete-orphan",
+    )
 
     def __repr__(self) -> str:
         """Return string representation for debugging.
@@ -857,6 +882,17 @@ class Task(Base):
         onupdate=utcnow,
     )
 
+    # Cleanup tracking (Story 8.5)
+    # Timestamp when workspace cleanup was performed for this task
+    # NULL if cleanup has not yet been performed
+    # Used to prevent duplicate cleanup attempts (idempotent operation)
+    cleanup_performed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True,  # Index for efficient cleanup eligibility queries
+        comment="Timestamp when workspace cleanup was performed (Story 8.5)",
+    )
+
     # Relationship to channel
     channel: Mapped["Channel"] = relationship("Channel", back_populates="tasks")
 
@@ -867,6 +903,22 @@ class Task(Base):
 
     # Relationship to audit logs (one-to-many)
     audit_logs: Mapped[list["ReviewActionAuditLog"]] = relationship("ReviewActionAuditLog")
+
+    # Relationship to cost records (one-to-many) - Story 8.2
+    costs: Mapped[list["VideoCost"]] = relationship(
+        "VideoCost",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="VideoCost.timestamp",
+    )
+
+    # Relationship to asset metadata (one-to-many) - Story 8.3
+    assets: Mapped[list["AssetMetadata"]] = relationship(
+        "AssetMetadata",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="AssetMetadata.created_at",
+    )
 
     # Indexes for efficient queue queries
     # Note: Migration is source of truth for indexes. Model defines indexes
@@ -1412,6 +1464,225 @@ class AutoRecoveryMetrics(Base):
         )
 
 
+class WeeklyMetrics(Base):
+    """Weekly pipeline success metrics per channel (Story 8.6).
+
+    Tracks overall pipeline health, success rate, and failure patterns on a weekly basis.
+    Workers calculate metrics weekly (Monday 00:00 UTC) for previous week's data.
+
+    Composite Primary Key:
+        (channel_id, week_starting_date) - One row per channel per week (ISO week).
+
+    Success Rate Calculation:
+        success_rate = (successful_videos / total_videos_processed) * 100
+
+    Alert Thresholds:
+        - success_rate < 90%: WARNING alert to Discord webhook with failure patterns
+        - Includes week-over-week trend comparison
+        - Identifies most common failure stage for investigation
+
+    Attributes:
+        channel_id: Foreign key to channels.id (part of composite PK).
+        week_starting_date: Monday of ISO week (part of composite PK).
+        total_videos_processed: Tasks reaching any terminal state (default: 0).
+        successful_videos: Tasks reaching 'published' status (default: 0).
+        success_rate: Percentage of successful videos (default: 0.00).
+        avg_processing_time_seconds: Average end-to-end duration (nullable).
+        auto_recovery_rate: % of failed tasks that auto-recovered (nullable).
+        transient_failures: error_category=TRANSIENT count (default: 0).
+        permanent_failures: error_category=PERMANENT count (default: 0).
+        unknown_failures: error_category=UNKNOWN count (default: 0).
+        failed_at_assets: status=asset_error count (default: 0).
+        failed_at_video: status=video_error count (default: 0).
+        failed_at_audio: status=audio_error count (default: 0).
+        failed_at_upload: status=upload_error count (default: 0).
+        calculated_at: When metrics were calculated (UTC).
+        updated_at: Last update timestamp (UTC).
+
+    Indexes:
+        - Composite PK on (channel_id, week_starting_date) for fast lookups
+        - DESC index on week_starting_date for trend queries (most recent first)
+        - Index on calculated_at for audit trail
+
+    Constraints:
+        - total_videos_processed >= 0
+        - successful_videos >= 0
+        - successful_videos <= total_videos_processed
+        - success_rate >= 0.0 AND success_rate <= 100.0
+        - Failure counts >= 0
+
+    Usage:
+        # Calculate metrics for previous week
+        week_start = get_week_starting_date(date.today() - timedelta(days=7))
+        metrics = await calculate_weekly_metrics(channel_id, week_start, db)
+
+        # Check threshold and alert if needed
+        await check_success_rate_thresholds(metrics, db)
+
+    Related:
+        - Story 8.6: Weekly Success Rate Calculation
+        - Story 6.10: Auto-Recovery Metrics (similar pattern)
+        - Story 8.2: Cost Tracking (similar aggregate metrics pattern)
+    """
+
+    __tablename__ = "weekly_metrics"
+
+    # Composite primary key: (channel_id, week_starting_date)
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False,
+    )
+
+    week_starting_date: Mapped[date] = mapped_column(
+        Date,
+        primary_key=True,
+        nullable=False,
+    )
+
+    # Volume metrics
+    total_videos_processed: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    successful_videos: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    success_rate: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),  # 0.00-100.00
+        nullable=False,
+        default=Decimal("0.00"),
+        server_default="0.00",
+    )
+
+    # Performance metrics
+    avg_processing_time_seconds: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+
+    # Recovery metrics
+    auto_recovery_rate: Mapped[Decimal | None] = mapped_column(
+        Numeric(5, 2),  # 0.00-100.00
+        nullable=True,
+    )
+
+    # Failure breakdown by category
+    transient_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    permanent_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    unknown_failures: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Failure breakdown by stage
+    failed_at_assets: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    failed_at_video: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    failed_at_audio: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    failed_at_upload: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+
+    # Metadata
+    calculated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+    # Relationship to channel
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="weekly_metrics")
+
+    __table_args__ = (
+        # Composite primary key constraint (explicit name)
+        PrimaryKeyConstraint("channel_id", "week_starting_date", name="pk_weekly_metrics"),
+        # Index for trend queries (most recent first)
+        Index(
+            "ix_weekly_metrics_channel_week_desc",
+            "channel_id",
+            "week_starting_date",
+            postgresql_ops={"week_starting_date": "DESC"},
+        ),
+        # Index for audit trail
+        Index("ix_weekly_metrics_calculated_at", "calculated_at"),
+        # Check constraints for data integrity
+        CheckConstraint("total_videos_processed >= 0", name="ck_weekly_metrics_total_non_negative"),
+        CheckConstraint("successful_videos >= 0", name="ck_weekly_metrics_successful_non_negative"),
+        CheckConstraint(
+            "successful_videos <= total_videos_processed",
+            name="ck_weekly_metrics_successful_le_total",
+        ),
+        CheckConstraint(
+            "success_rate >= 0.0 AND success_rate <= 100.0", name="ck_weekly_metrics_rate_range"
+        ),
+        CheckConstraint("transient_failures >= 0", name="ck_weekly_metrics_transient_non_negative"),
+        CheckConstraint("permanent_failures >= 0", name="ck_weekly_metrics_permanent_non_negative"),
+        CheckConstraint("unknown_failures >= 0", name="ck_weekly_metrics_unknown_non_negative"),
+        CheckConstraint("failed_at_assets >= 0", name="ck_weekly_metrics_assets_non_negative"),
+        CheckConstraint("failed_at_video >= 0", name="ck_weekly_metrics_video_non_negative"),
+        CheckConstraint("failed_at_audio >= 0", name="ck_weekly_metrics_audio_non_negative"),
+        CheckConstraint("failed_at_upload >= 0", name="ck_weekly_metrics_upload_non_negative"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<WeeklyMetrics(channel_id={self.channel_id!s:.8}, "
+            f"week={self.week_starting_date!s}, success_rate={self.success_rate:.1f}%, "
+            f"videos={self.successful_videos}/{self.total_videos_processed})>"
+        )
+
+
 class FallbackYouTubeURL(Base):
     """Fallback storage for YouTube URLs when Notion sync fails (Story 7.5).
 
@@ -1703,8 +1974,8 @@ class ReviewActionAuditLog(Base):
     )
 
     # Relationships
-    task: Mapped["Task"] = relationship("Task")
-    channel: Mapped["Channel"] = relationship("Channel")
+    task: Mapped["Task"] = relationship("Task", overlaps="audit_logs")
+    channel: Mapped["Channel"] = relationship("Channel", overlaps="audit_logs")
 
     # Composite indexes for compliance queries
     __table_args__ = (
@@ -1725,4 +1996,485 @@ class ReviewActionAuditLog(Base):
             f"<ReviewActionAuditLog(id={self.id!s:.8}, "
             f"task_id={self.task_id!s:.8}, action_type={self.action_type!r}, "
             f"action_status={self.action_status!r}, reviewer_user_id={self.reviewer_user_id!r})>"
+        )
+
+
+class VideoCost(Base):
+    """Per-component cost tracking for video generation (Story 8.2).
+
+    Tracks costs at granular level (per API component) for financial analysis.
+    Complements task.total_cost_usd which provides quick access to total cost.
+
+    Cost breakdown per video:
+    - gemini_assets: ~$1.50 (22 images @ $0.068/image)
+    - kling_video: ~$7.56 (18 clips @ $0.42/clip)
+    - elevenlabs_narration: ~$0.72 (18 clips @ $0.04/clip)
+    - elevenlabs_sfx: ~$0.72 (18 clips @ $0.04/clip)
+    Total per video: ~$10.50
+
+    Relationships:
+    - task: One-to-many (task has many cost records, one per component)
+    - channel: Via task.channel_id for aggregation
+
+    Indexes:
+    - Primary key: id (auto-increment)
+    - Foreign key: task_id (for task cost breakdown)
+    - Composite: (task_id, timestamp) for efficient queries
+    - Single: timestamp (for trend analysis)
+    """
+
+    __tablename__ = "video_costs"
+
+    # Primary key
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+
+    # Foreign key to task
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Component identifier (gemini_assets, kling_video, elevenlabs_narration, elevenlabs_sfx)
+    component: Mapped[str] = mapped_column(String(50), nullable=False)
+
+    # Cost in USD (Decimal for financial precision, stored as NUMERIC(10, 4))
+    cost_usd: Mapped[Decimal] = mapped_column(Numeric(10, 4), nullable=False)
+
+    # Units consumed (API-specific: tokens, clips, characters, etc.)
+    units_used: Mapped[int] = mapped_column(nullable=False)
+
+    # Timestamp (UTC) - server-side default
+    timestamp: Mapped[datetime] = mapped_column(
+        nullable=False,
+        server_default=func.now(),
+        comment="UTC timestamp when cost was recorded",
+    )
+
+    # Correlation ID for distributed tracing (from Story 8.1)
+    correlation_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+
+    # Relationship to Task
+    task: Mapped["Task"] = relationship("Task", back_populates="costs")
+
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index("ix_video_costs_task_id_timestamp", "task_id", "timestamp"),
+        Index("ix_video_costs_timestamp", "timestamp"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<VideoCost(id={self.id}, task_id={self.task_id}, "
+            f"component={self.component!r}, cost_usd={self.cost_usd})>"
+        )
+
+
+class AssetMetadata(Base):
+    """Track generated assets with URLs and storage details (Story 8.3).
+
+    Tracks all generated assets (images, videos, audio) with public URLs
+    for access from Notion. Supports both Notion-hosted and R2 storage.
+
+    Asset types:
+    - "character": Character images (transparent PNG)
+    - "environment": Environment backgrounds
+    - "props": Prop/object images
+    - "composite": 16:9 composite images for video generation
+    - "video_clip": Generated video clips (MP4)
+    - "narration": Narration audio files (MP3)
+    - "sfx": Sound effects audio files (MP3/WAV)
+
+    Storage strategies:
+    - "notion": Assets uploaded to Notion as file attachments (24h URL expiration)
+    - "r2": Assets uploaded to Cloudflare R2 bucket (permanent URLs)
+
+    Notion sync:
+    - notion_synced_at: Timestamp of last successful Notion update
+    - NULL indicates asset not yet synced to Notion
+    - Use for retry queue: WHERE notion_synced_at IS NULL
+
+    Relationships:
+    - task: One-to-many (task has many assets)
+    - channel: Many-to-one (assets belong to channel for R2 bucket resolution)
+
+    Indexes:
+    - Primary key: id (UUID)
+    - Foreign key: task_id (for task asset lookup)
+    - Composite: (channel_id, asset_type) for channel-level asset queries
+    - Partial: (task_id) WHERE notion_synced_at IS NULL (unsync'd asset queue)
+    """
+
+    __tablename__ = "asset_metadata"
+
+    # Primary key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+
+    # Foreign keys
+    task_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    # Asset identification
+    asset_type: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+    )
+    asset_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    # Storage details
+    storage_strategy: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+    local_file_path: Mapped[str | None] = mapped_column(
+        String(512),
+        nullable=True,
+    )
+    asset_url: Mapped[str] = mapped_column(
+        String(1024),
+        nullable=False,
+    )
+
+    # Notion integration
+    notion_asset_property_id: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+    notion_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    task: Mapped["Task"] = relationship("Task", back_populates="assets")
+    channel: Mapped["Channel"] = relationship("Channel", back_populates="assets")
+
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index("ix_asset_metadata_task_id", "task_id"),
+        Index("ix_asset_metadata_channel_type", "channel_id", "asset_type"),
+        Index(
+            "ix_asset_metadata_unsynced",
+            "task_id",
+            postgresql_where=text("notion_synced_at IS NULL"),
+        ),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<AssetMetadata(id={self.id!s:.8}, task_id={self.task_id!s:.8}, "
+            f"asset_type={self.asset_type!r}, asset_name={self.asset_name!r})>"
+        )
+
+
+class WorkerHeartbeat(Base):
+    """Worker heartbeat tracking for health check monitoring (Story 8.7).
+
+    Tracks worker process liveness and activity for system health monitoring.
+    Each worker (worker-1, worker-2, worker-3) updates its heartbeat every 30 seconds.
+    Health check endpoint queries this table to determine system operational status.
+
+    Architecture:
+        - Atomic Upsert: Unique constraint on worker_id enables INSERT ON CONFLICT UPDATE
+        - 5-Minute Timeout: Workers inactive for 5+ minutes trigger "degraded" health status
+        - Railway Integration: Health check endpoint uses this data for liveness probes
+
+    Worker Lifecycle:
+        1. Worker startup: Initial heartbeat with status="online"
+        2. Every 30s: Atomic upsert updates last_seen_at timestamp
+        3. Task processing: Updates active_task_count field
+        4. Health check: Queries workers with last_seen_at within last 5 minutes
+
+    Composite Unique Constraint:
+        - worker_id: Unique identifier per worker (e.g., "worker-1", "worker-2")
+        - Enables atomic upsert pattern using PostgreSQL INSERT ON CONFLICT UPDATE
+
+    Indexes:
+        - ix_worker_heartbeats_worker_id: Unique index for atomic upserts
+        - ix_worker_heartbeats_last_seen_at: Index for active worker queries (< 100ms)
+
+    Example Usage:
+        ```python
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        # Atomic upsert heartbeat
+        stmt = pg_insert(WorkerHeartbeat).values(
+            worker_id="worker-1",
+            last_seen_at=datetime.now(timezone.utc),
+            status="online",
+            active_task_count=2,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["worker_id"],
+            set_={
+                "last_seen_at": stmt.excluded.last_seen_at,
+                "status": stmt.excluded.status,
+                "active_task_count": stmt.excluded.active_task_count,
+                "updated_at": datetime.now(timezone.utc),
+            },
+        )
+        await db.execute(stmt)
+        await db.commit()
+
+        # Query active workers (last 5 minutes)
+        five_minutes_ago = datetime.now(timezone.utc) - timedelta(minutes=5)
+        result = await db.execute(
+            select(func.count(WorkerHeartbeat.id)).where(
+                WorkerHeartbeat.last_seen_at >= five_minutes_ago
+            )
+        )
+        active_count = result.scalar_one()
+        ```
+
+    Related:
+        - Story 8.7: Health Check Endpoint
+        - AC3: Worker Heartbeat Monitoring
+        - FR-R1: System health and liveness monitoring
+    """
+
+    __tablename__ = "worker_heartbeats"
+
+    # Primary Key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=lambda: uuid.uuid4(),
+        nullable=False,
+        comment="Unique heartbeat record ID",
+    )
+
+    # Worker Identification
+    worker_id: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        unique=True,
+        comment="Worker identifier (e.g., worker-1, worker-2, worker-3)",
+    )
+
+    # Heartbeat Timestamp
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        comment="Last heartbeat timestamp (UTC)",
+    )
+
+    # Worker Status
+    status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="online",
+        server_default="online",
+        comment="Worker status: online, idle, processing",
+    )
+
+    # Active Task Count
+    active_task_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+        comment="Number of tasks currently processing",
+    )
+
+    # Audit Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="Record creation timestamp",
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="Record last update timestamp",
+    )
+
+    # Indexes and constraints
+    __table_args__ = (
+        # Unique index on worker_id for atomic upserts
+        Index("ix_worker_heartbeats_worker_id", "worker_id", unique=True),
+        # Index on last_seen_at for efficient active worker queries (< 100ms)
+        Index("ix_worker_heartbeats_last_seen_at", "last_seen_at"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<WorkerHeartbeat(worker_id={self.worker_id!r}, "
+            f"last_seen_at={self.last_seen_at}, status={self.status!r})>"
+        )
+
+
+class CostThreshold(Base):
+    """Cost threshold configuration for budget management and alerting (Story 8.8).
+
+    Enables per-channel budget limits with configurable alert thresholds.
+    Supports weekly and monthly periods for flexible budget tracking.
+
+    Alert Behavior:
+        - enabled=True: Threshold checking active
+        - alert_on_approach=True: Alert at 80% threshold (early warning)
+        - Alert at 100%: Threshold exceeded notification
+        - Alerts sent via Discord webhook (Story 6.6 integration)
+
+    Database Schema:
+        - Primary Key: UUID
+        - Foreign Key: channel_id → channels.id (CASCADE)
+        - Indexes: channel_id, enabled
+        - Constraints: threshold_usd > 0, period IN ('weekly', 'monthly')
+
+    Usage Example:
+        ```python
+        # Create weekly threshold for channel
+        threshold = CostThreshold(
+            channel_id=channel.id,
+            threshold_usd=Decimal("500.00"),
+            period="weekly",
+            enabled=True,
+            alert_on_approach=True,
+        )
+        db.add(threshold)
+        await db.commit()
+
+        # Check if current costs exceed threshold
+        from app.services.cost_tracker import get_weekly_cost_summary
+
+        summary = await get_weekly_cost_summary(db, channel.id)
+        if summary["total_cost"] >= threshold.threshold_usd:
+            # Send alert via Discord
+            pass
+        ```
+
+    Related:
+        - Story 8.8: Cost Dashboard & Reporting
+        - Story 8.2: Per-Video Cost Tracking (video_costs table)
+        - Story 6.6: Alert System (Discord webhooks)
+        - AC4: Weekly Cost Report Generation with threshold alerts
+    """
+
+    __tablename__ = "cost_thresholds"
+
+    # Primary Key
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=lambda: uuid.uuid4(),
+        nullable=False,
+        comment="Unique threshold ID",
+    )
+
+    # Channel Reference
+    channel_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("channels.id", ondelete="CASCADE"),
+        nullable=False,
+        comment="Channel this threshold applies to",
+    )
+
+    # Threshold Configuration
+    threshold_usd: Mapped[Decimal] = mapped_column(
+        Numeric(10, 2),
+        nullable=False,
+        comment="Cost limit in USD (e.g., 500.00 for $500 weekly limit)",
+    )
+
+    # Period (weekly, monthly)
+    period: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        comment="Threshold period: 'weekly' (Mon-Sun) or 'monthly' (1st-last day)",
+    )
+
+    # Alert Configuration
+    enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Whether threshold alerting is active",
+    )
+
+    alert_on_approach: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        comment="Alert at 80% threshold (early warning before overspending)",
+    )
+
+    # Discord Webhook (Optional per-threshold override)
+    discord_webhook_url: Mapped[str | None] = mapped_column(
+        String(500),
+        nullable=True,
+        comment="Optional per-threshold Discord webhook override (uses global webhook if None)",
+    )
+
+    # Audit Timestamps
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        comment="Threshold creation timestamp",
+    )
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+        comment="Threshold last update timestamp",
+    )
+
+    # Relationship
+    channel: Mapped["Channel"] = relationship(
+        "Channel",
+        back_populates="cost_thresholds",
+    )
+
+    # Indexes and constraints
+    __table_args__ = (
+        # Index on channel_id for threshold lookups by channel
+        Index("ix_cost_thresholds_channel_id", "channel_id"),
+        # Index on enabled for active threshold queries
+        Index("ix_cost_thresholds_enabled", "enabled"),
+        # Check constraints
+        CheckConstraint("threshold_usd > 0", name="ck_cost_thresholds_positive_threshold"),
+        CheckConstraint("period IN ('weekly', 'monthly')", name="ck_cost_thresholds_valid_period"),
+    )
+
+    def __repr__(self) -> str:
+        """Return string representation for debugging."""
+        return (
+            f"<CostThreshold(channel_id={self.channel_id}, "
+            f"threshold_usd={self.threshold_usd}, period={self.period!r}, "
+            f"enabled={self.enabled})>"
         )

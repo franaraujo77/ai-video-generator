@@ -38,6 +38,8 @@ Usage:
     await process_narration_generation_task(task_id="uuid-here")
 """
 
+import asyncio
+import contextlib
 from decimal import Decimal
 from uuid import UUID
 
@@ -45,9 +47,14 @@ from sqlalchemy import select
 
 from app.database import async_session_factory
 from app.models import Channel, Task, TaskStatus
+from app.services.asset_url_storage import record_asset_url
 from app.services.cost_tracker import track_api_cost
+from app.services.credential_service import CredentialService
 from app.services.narration_generation import NarrationGenerationService
+from app.services.notion_asset_sync import sync_task_assets_to_notion
 from app.utils.cli_wrapper import CLIScriptError
+from app.utils.context import set_correlation_id
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -92,6 +99,10 @@ async def process_narration_generation_task(task_id: str | UUID) -> None:
     if isinstance(task_id, str):
         task_id = UUID(task_id)
 
+    # Initialize variables outside transaction scope
+    channel = None  # Store for Notion sync (Issue #6: Standardized naming)
+    notion_page_id = None
+
     # Step 1: Claim task (short transaction)
     if async_session_factory is None:
         log.error("database_not_configured", task_id=str(task_id))
@@ -105,12 +116,15 @@ async def process_narration_generation_task(task_id: str | UUID) -> None:
             log.error("task_not_found", task_id=str(task_id))
             return
 
+        # Store notion_page_id for later use
+        notion_page_id = task.notion_page_id
+
         # Update task status to generating_audio (video_approved → generating_audio)
         task.status = TaskStatus.GENERATING_AUDIO
         await db.commit()
         log.info("task_claimed", task_id=str(task_id), status="generating_audio")
 
-        # Load channel to get voice_id
+        # Load channel to get voice_id and store for Notion sync
         channel_result = await db.execute(select(Channel).where(Channel.id == task.channel_id))
         channel = channel_result.scalar_one_or_none()
         if not channel:
@@ -177,6 +191,93 @@ async def process_narration_generation_task(task_id: str | UUID) -> None:
             total_cost=str(generation_result["total_cost_usd"]),
         )
 
+        # Step 2.5: Upload narration to R2 and record URLs (Story 8.4)
+        async with async_session_factory() as db:
+            result_task = await db.execute(select(Task).where(Task.id == task_id))
+            task = result_task.scalar_one_or_none()
+            if not task:
+                log.error("task_not_found_for_r2_upload", task_id=str(task_id))
+                return
+
+            await db.refresh(task, ["channel"])
+            channel = task.channel
+            storage_strategy = channel.storage_strategy
+
+            if storage_strategy == "r2":
+                log.info(
+                    "r2_narration_upload_start",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    clip_count=len(manifest.clips),
+                )
+
+                credential_service = CredentialService()
+                try:
+                    r2_client = await credential_service.get_r2_client(channel.channel_id, db)
+                except ValueError as e:
+                    log.error(
+                        "r2_client_initialization_failed",
+                        task_id=str(task_id),
+                        error=str(e),
+                    )
+                    storage_strategy = "notion"
+
+                if storage_strategy == "r2":
+                    uploaded_count = 0
+                    for clip in manifest.clips:
+                        if not clip.output_path.exists():
+                            log.warning(
+                                "narration_file_missing",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                            )
+                            continue
+
+                        asset_name = clip.output_path.name
+                        r2_key = f"{channel.channel_id}/{project_id}/audio/narration/{asset_name}"
+
+                        try:
+                            asset_url = await r2_client.upload_asset(
+                                local_file_path=clip.output_path,
+                                r2_key=r2_key,
+                                content_type="audio/mpeg",
+                            )
+
+                            async with async_session_factory() as db2, db2.begin():
+                                await record_asset_url(
+                                    db=db2,
+                                    task_id=task.id,
+                                    channel_id=channel.id,
+                                    asset_type="narration",
+                                    asset_name=asset_name,
+                                    storage_strategy="r2",
+                                    asset_url=asset_url,
+                                    local_file_path=str(clip.output_path),
+                                )
+
+                            uploaded_count += 1
+                            log.info(
+                                "narration_uploaded_to_r2",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                asset_url=asset_url,
+                            )
+
+                        except Exception as e:
+                            log.error(
+                                "r2_narration_upload_failed",
+                                task_id=str(task_id),
+                                clip_number=clip.clip_number,
+                                error=str(e),
+                            )
+
+                    log.info(
+                        "r2_narration_upload_complete",
+                        task_id=str(task_id),
+                        uploaded=uploaded_count,
+                        total=len(manifest.clips),
+                    )
+
         # Step 3: Track costs (short transaction)
         async with async_session_factory() as db, db.begin():
             await track_api_cost(
@@ -206,14 +307,59 @@ async def process_narration_generation_task(task_id: str | UUID) -> None:
                 await db.commit()
                 log.info("task_updated", task_id=str(task_id), status="audio_ready")
 
-        # Step 5: Update Notion (async, non-blocking)
-        # Future enhancement: Extract notion_page_id and update via Notion API
-        # asyncio.create_task(update_notion_status(task.notion_page_id, "Audio Ready"))
-        log.info(
-            "notion_update_skipped",
-            task_id=str(task_id),
-            reason="Notion integration deferred to Story 5.6",
-        )
+        # Step 5: Sync narration URLs to Notion (fire-and-forget - Story 8.3)
+        try:
+            # Validate channel exists (Issue #4: Missing channel validation)
+            if not channel:
+                log.warning(
+                    "notion_asset_sync_skipped_no_channel",
+                    task_id=str(task_id),
+                    reason="Channel not loaded",
+                )
+                return
+
+            # Validate Notion credentials exist (Issue #5: Missing credential validation)
+            if not channel.notion_token_encrypted:
+                log.info(
+                    "notion_asset_sync_skipped_no_credentials",
+                    task_id=str(task_id),
+                    channel_id=channel.channel_id,
+                    reason="Channel not configured with Notion credentials",
+                )
+                return
+
+            # Decrypt Notion token from channel
+            encryption_service = get_encryption_service()
+            notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
+
+            # Create fire-and-forget task for Notion asset sync
+            async def _sync_assets_to_notion() -> None:
+                # Set correlation ID for distributed tracing (Issue #3)
+                set_correlation_id(str(task_id))
+                async with async_session_factory() as db:
+                    await sync_task_assets_to_notion(db, task_id, notion_token)
+
+            notion_task = asyncio.create_task(_sync_assets_to_notion())
+
+            def handle_notion_task_done(task: asyncio.Task[None]) -> None:
+                # Notion updates are best-effort; don't fail task on Notion errors
+                with contextlib.suppress(Exception):
+                    task.result()
+
+            notion_task.add_done_callback(handle_notion_task_done)
+
+            log.info(
+                "notion_asset_sync_queued",
+                task_id=str(task_id),
+                notion_page_id=notion_page_id,
+            )
+        except Exception as e:
+            # Log but don't fail task if Notion sync setup fails
+            log.warning(
+                "notion_asset_sync_setup_failed",
+                task_id=str(task_id),
+                error=str(e),
+            )
 
     except CLIScriptError as e:
         log.error(

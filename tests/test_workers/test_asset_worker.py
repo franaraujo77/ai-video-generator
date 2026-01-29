@@ -353,9 +353,19 @@ class TestProcessAssetGenerationTask:
         assert len(opens_after_gen) > 0, "DB should reopen after generation"
 
     async def test_notion_update_non_blocking(self, async_session, encryption_env):
-        """Test Notion status update is non-blocking."""
+        """Test Notion asset sync is non-blocking (fire-and-forget pattern - Story 8.3)."""
+        # Encrypt Notion token using EncryptionService (Issue #1 fix)
+        from app.utils.encryption import get_encryption_service
+
+        encryption_service = get_encryption_service()
+        encrypted_token = encryption_service.encrypt("test_notion_token_123")
+
         channel = Channel(
-            channel_id="poke1", channel_name="Test Channel", voice_id="test_voice", max_concurrent=2
+            channel_id="poke1",
+            channel_name="Test Channel",
+            voice_id="test_voice",
+            max_concurrent=2,
+            notion_token_encrypted=encrypted_token,
         )
         async_session.add(channel)
         await async_session.commit()
@@ -391,23 +401,31 @@ class TestProcessAssetGenerationTask:
 
                 mock_service.generate_assets = mock_generate_assets
 
-                # Mock Notion update with delay
-                with patch("app.workers.asset_worker._update_notion_status_async") as mock_notion:
+                # Mock Story 8.3 sync_task_assets_to_notion with delay (Issue #1 fix)
+                with patch(
+                    "app.workers.asset_worker.sync_task_assets_to_notion"
+                ) as mock_notion_sync:
 
-                    async def slow_notion_update(*args, **kwargs):
+                    async def slow_notion_sync(*args, **kwargs):
                         await asyncio.sleep(5)  # 5 second delay
 
-                    mock_notion.side_effect = slow_notion_update
+                    mock_notion_sync.side_effect = slow_notion_sync
 
-                    # Process should complete quickly (not wait for Notion)
+                    # Process should complete quickly (not wait for Notion sync)
                     import time
 
                     start = time.time()
                     await process_asset_generation_task(task_id)
                     duration = time.time() - start
 
-                    # Should complete in < 2 seconds (not wait for 5s Notion update)
-                    assert duration < 2.0, "Worker should not wait for Notion update"
+                    # Should complete in < 2 seconds (not wait for 5s Notion sync)
+                    assert duration < 2.0, (
+                        "Worker should not wait for Notion sync (fire-and-forget)"
+                    )
+
+                    # Verify sync was called (but not awaited)
+                    # Note: Due to fire-and-forget, the call happens asynchronously
+                    # We can't easily assert the call in this test without awaiting all tasks
 
     async def test_correlation_id_logging(self, async_session, encryption_env, caplog):
         """Test all log entries include task_id as correlation ID."""
