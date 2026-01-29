@@ -38,7 +38,7 @@ class ISO8601Formatter(logging.Formatter):
     Story: 8.1 - Structured Logging with Correlation IDs (AC: 7)
     """
 
-    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:
+    def formatTime(self, record: logging.LogRecord, datefmt: str | None = None) -> str:  # noqa: N802
         """Format timestamp as ISO 8601 in UTC timezone.
 
         Args:

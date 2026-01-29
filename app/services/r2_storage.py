@@ -179,7 +179,7 @@ class R2StorageClient:
                 region_name=self.region,
             ) as s3_client:
                 # Upload file to R2
-                with open(local_file_path, "rb") as file:
+                with open(local_file_path, "rb") as file:  # noqa: ASYNC230
                     await s3_client.upload_fileobj(
                         file,
                         self.bucket_name,

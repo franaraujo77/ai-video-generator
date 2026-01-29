@@ -23,17 +23,17 @@ from app.scheduler import (
 @pytest.mark.asyncio
 async def test_start_cleanup_scheduler_registers_job():
     """Test cleanup scheduler starts and registers job correctly."""
-    with patch("app.scheduler.AsyncIOScheduler") as MockScheduler:
+    with patch("app.scheduler.AsyncIOScheduler") as mock_scheduler:
         mock_scheduler_instance = MagicMock()
         mock_job = MagicMock()
         mock_job.next_run_time = datetime.now()
         mock_scheduler_instance.get_job.return_value = mock_job
-        MockScheduler.return_value = mock_scheduler_instance
+        mock_scheduler.return_value = mock_scheduler_instance
 
         await start_cleanup_scheduler()
 
         # Verify scheduler was created
-        MockScheduler.assert_called_once()
+        mock_scheduler.assert_called_once()
 
         # Verify job was added
         mock_scheduler_instance.add_job.assert_called_once()
@@ -53,11 +53,11 @@ async def test_start_cleanup_scheduler_disabled_when_env_false(monkeypatch):
     """Test cleanup scheduler doesn't start when disabled via env var."""
     monkeypatch.setenv("WORKSPACE_CLEANUP_ENABLED", "false")
 
-    with patch("app.scheduler.AsyncIOScheduler") as MockScheduler:
+    with patch("app.scheduler.AsyncIOScheduler") as mock_scheduler:
         await start_cleanup_scheduler()
 
         # Scheduler should not be created when disabled
-        MockScheduler.assert_not_called()
+        mock_scheduler.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -68,21 +68,21 @@ async def test_start_cleanup_scheduler_uses_custom_schedule(monkeypatch):
     # Reset global scheduler state
     with patch("app.scheduler._cleanup_scheduler", None):
         with (
-            patch("app.scheduler.AsyncIOScheduler") as MockScheduler,
-            patch("app.scheduler.CronTrigger") as MockCronTrigger,
+            patch("app.scheduler.AsyncIOScheduler") as mock_scheduler,
+            patch("app.scheduler.CronTrigger") as mock_cron_trigger,
         ):
             mock_scheduler_instance = MagicMock()
             mock_scheduler_instance.running = False
             mock_job = MagicMock()
             mock_job.next_run_time = datetime.now()
             mock_scheduler_instance.get_job.return_value = mock_job
-            MockScheduler.return_value = mock_scheduler_instance
+            mock_scheduler.return_value = mock_scheduler_instance
 
             await start_cleanup_scheduler()
 
             # Verify CronTrigger called with custom schedule
-            MockCronTrigger.assert_called_once()
-            call_kwargs = MockCronTrigger.call_args.kwargs
+            mock_cron_trigger.assert_called_once()
+            call_kwargs = mock_cron_trigger.call_args.kwargs
             assert call_kwargs["hour"] == 4
             assert call_kwargs["minute"] == 30
 
@@ -92,9 +92,9 @@ async def test_start_cleanup_scheduler_handles_invalid_schedule(monkeypatch):
     """Test cleanup scheduler handles invalid cron schedule gracefully."""
     monkeypatch.setenv("WORKSPACE_CLEANUP_SCHEDULE", "invalid")
 
-    with patch("app.scheduler.AsyncIOScheduler") as MockScheduler:
+    with patch("app.scheduler.AsyncIOScheduler") as mock_scheduler:
         mock_scheduler_instance = MagicMock()
-        MockScheduler.return_value = mock_scheduler_instance
+        mock_scheduler.return_value = mock_scheduler_instance
 
         await start_cleanup_scheduler()
 
@@ -110,12 +110,12 @@ async def test_start_cleanup_scheduler_already_running():
     mock_scheduler_instance.running = True
 
     with patch("app.scheduler._cleanup_scheduler", mock_scheduler_instance):
-        with patch("app.scheduler.AsyncIOScheduler") as MockScheduler:
+        with patch("app.scheduler.AsyncIOScheduler") as mock_scheduler:
             # Second call should detect running scheduler and return early
             await start_cleanup_scheduler()
 
             # Should not create new scheduler when already running
-            MockScheduler.assert_not_called()
+            mock_scheduler.assert_not_called()
 
 
 def test_shutdown_cleanup_scheduler():
@@ -173,16 +173,16 @@ async def test_cleanup_job_execution_success():
 
     # Patch where WorkspaceCleanupService is imported inside the function
     with (
-        patch("app.services.workspace_cleanup.WorkspaceCleanupService") as MockService,
-        patch("app.scheduler.AsyncSessionLocal") as MockSessionLocal,
+        patch("app.services.workspace_cleanup.WorkspaceCleanupService") as mock_service,
+        patch("app.scheduler.AsyncSessionLocal") as mock_session_local,
     ):
         # Setup mocks
         mock_db = AsyncMock()
-        MockSessionLocal.return_value.__aenter__.return_value = mock_db
+        mock_session_local.return_value.__aenter__.return_value = mock_db
 
         mock_service_instance = AsyncMock()
         mock_service_instance.cleanup_old_workspaces.return_value = mock_result
-        MockService.return_value = mock_service_instance
+        mock_service.return_value = mock_service_instance
 
         # Execute job
         await _cleanup_old_workspaces_job()
@@ -200,16 +200,16 @@ async def test_cleanup_job_execution_error_handling():
     from app.scheduler import _cleanup_old_workspaces_job
 
     with (
-        patch("app.services.workspace_cleanup.WorkspaceCleanupService") as MockService,
-        patch("app.scheduler.AsyncSessionLocal") as MockSessionLocal,
+        patch("app.services.workspace_cleanup.WorkspaceCleanupService") as mock_service,
+        patch("app.scheduler.AsyncSessionLocal") as mock_session_local,
     ):
         # Setup mocks
         mock_db = AsyncMock()
-        MockSessionLocal.return_value.__aenter__.return_value = mock_db
+        mock_session_local.return_value.__aenter__.return_value = mock_db
 
         mock_service_instance = AsyncMock()
         mock_service_instance.cleanup_old_workspaces.side_effect = Exception("Database error")
-        MockService.return_value = mock_service_instance
+        mock_service.return_value = mock_service_instance
 
         # Execute job - should not raise exception
         await _cleanup_old_workspaces_job()
@@ -232,15 +232,15 @@ async def test_cleanup_job_uses_custom_retention_days(monkeypatch):
     }
 
     with (
-        patch("app.services.workspace_cleanup.WorkspaceCleanupService") as MockService,
-        patch("app.scheduler.AsyncSessionLocal") as MockSessionLocal,
+        patch("app.services.workspace_cleanup.WorkspaceCleanupService") as mock_service,
+        patch("app.scheduler.AsyncSessionLocal") as mock_session_local,
     ):
         mock_db = AsyncMock()
-        MockSessionLocal.return_value.__aenter__.return_value = mock_db
+        mock_session_local.return_value.__aenter__.return_value = mock_db
 
         mock_service_instance = AsyncMock()
         mock_service_instance.cleanup_old_workspaces.return_value = mock_result
-        MockService.return_value = mock_service_instance
+        mock_service.return_value = mock_service_instance
 
         await _cleanup_old_workspaces_job()
 

@@ -113,7 +113,9 @@ class TestWeeklyMetricsModel:
         async_session.add(metrics2)
 
         # Assert: Should fail with integrity error
-        with pytest.raises(Exception):  # IntegrityError from SQLAlchemy
+        from sqlalchemy.exc import IntegrityError
+
+        with pytest.raises(IntegrityError):
             await async_session.commit()
 
     async def test_nullable_fields(self, async_session):
