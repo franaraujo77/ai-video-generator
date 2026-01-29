@@ -351,7 +351,7 @@ async def process_video_generation_task(task_id: str | UUID) -> None:
                 api_calls=result["generated"],
                 units_consumed=result["generated"],
             )
-            await db.commit()
+            # Note: track_api_cost() commits internally (line 101)
 
         # Step 4: Update task (short transaction)
         async with async_session_factory() as db, db.begin():
