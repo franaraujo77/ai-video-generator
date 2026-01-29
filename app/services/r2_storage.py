@@ -30,10 +30,10 @@ Usage:
 
 from pathlib import Path
 
-import aioboto3  # type: ignore[import-untyped]
+import aioboto3  # type: ignore[import-not-found]
 import httpx
 import structlog
-from botocore.exceptions import ClientError  # type: ignore[import-untyped]
+from botocore.exceptions import ClientError  # type: ignore[import-not-found]
 from tenacity import (
     retry,
     retry_if_exception_type,

@@ -24,8 +24,8 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from slowapi import Limiter  # type: ignore[import-not-found]
+from slowapi.util import get_remote_address  # type: ignore[import-not-found]
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
@@ -111,7 +111,7 @@ async def verify_admin_key(x_admin_key: str = Header(None)) -> None:
 
 
 @router.post("/quota-reset", response_model=QuotaResetResponse)
-@limiter.limit("5/minute")  # Max 5 quota reset attempts per minute (prevents brute-force)
+@limiter.limit("5/minute")  # type: ignore[misc]  # Max 5 quota reset attempts per minute (prevents brute-force)
 async def manual_quota_reset(
     quota_request: QuotaResetRequest,
     request: Request,  # Required by slowapi for rate limiting
