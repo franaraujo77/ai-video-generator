@@ -897,7 +897,9 @@ async def calculate_cost_trend(
     for week_offset in range(weeks, 0, -1):
         week_start = today - timedelta(days=(week_offset * 7) + today.weekday())
         week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
-        week_end = week_start + timedelta(days=6, hours=23, minutes=59, seconds=59)
+        week_end = (week_start + timedelta(days=6)).replace(
+            hour=23, minute=59, second=59, microsecond=999999
+        )
 
         summary = await get_channel_cost_summary(
             db=db, channel_id=channel_id, start_date=week_start, end_date=week_end
