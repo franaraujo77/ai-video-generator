@@ -1048,6 +1048,68 @@ None - story creation completed successfully.
 
 **Commit:** 31de165 - "fix: Replace ambiguous multiplication sign with letter x in test comments (RUF003)"
 
+### Fourth Code Review (2026-01-29) - Invalid Status Bug Fix
+
+**Claude PR Review Status:** ✅ CRITICAL BUG FIXED
+
+**Critical Bug Found:** 1 (invalid "pending" status in task_status_service.py)
+**Critical Bug Fixed:** 1 (100% fixed)
+
+**Bug: Invalid "pending" Status in get_queue_depth() (Story 8.7)**
+- **File:** app/services/task_status_service.py:45
+- **Issue:** Function used hardcoded string list `["pending", "queued"]` for status filtering
+- **Problem:** "pending" is NOT a valid TaskStatus enum value
+- **Root Cause:** TaskStatus enum only defines DRAFT and QUEUED as initial statuses, no "pending"
+- **Impact:** Query never matched tasks with invalid "pending" status, causing queue depth underreporting
+- **Database Impact:** Tasks with status="pending" would be stored but never counted
+
+**TaskStatus Enum Values:**
+```python
+class TaskStatus(enum.Enum):
+    DRAFT = "draft"        # Initial state
+    QUEUED = "queued"      # Queued for processing
+    CLAIMED = "claimed"    # Worker claimed
+    # ... other statuses
+    # NO "pending" status exists!
+```
+
+**PENDING_STATUSES Constant:**
+```python
+# From app/models.py:136
+PENDING_STATUSES = [TaskStatus.QUEUED]
+```
+
+**Fixes Applied:**
+
+1. **app/services/task_status_service.py:**
+   - Added import: `from app.models import PENDING_STATUSES, Task`
+   - Replaced: `Task.status.in_(["pending", "queued"])`
+   - With: `Task.status.in_(PENDING_STATUSES)`
+   - Updated docstring to reflect correct status filtering (QUEUED only)
+   - Removed invalid "pending" references from documentation
+
+2. **tests/test_services/test_task_status_service.py:**
+   - Added import: `from app.models import Task, TaskStatus`
+   - Replaced all: `status="pending"` → `status=TaskStatus.QUEUED`
+   - Updated test docstring: removed "pending + queued" → "queued tasks"
+   - All 7 tests updated to use valid TaskStatus enum values
+
+**Why This Matters:**
+- The service was querying for a status value that doesn't exist in the schema
+- Tests were creating tasks with invalid status values
+- This would cause silent failures in production (no tasks matched)
+- Health endpoint queue depth would always be underreported
+
+**Verification:**
+- All 7 task_status_service tests passing (were failing before fix)
+- All 30 Story 8.8 tests still passing
+- Query now correctly uses PENDING_STATUSES constant from models.py
+- Ruff format applied automatically (long line reformatted)
+
+**Note:** This bug was in Story 8.7 code but caught by Claude review of PR #12. Fixed as part of comprehensive PR review process.
+
+**Commit:** bf7501b - "fix: Replace invalid 'pending' status with PENDING_STATUSES constant"
+
 ### File List
 
 **Modified Files:**
