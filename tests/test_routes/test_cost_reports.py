@@ -116,7 +116,7 @@ async def test_get_monthly_cost_summary_endpoint(
     assert response.status_code == 200
     data = response.json()
     assert data["channel_id"] == str(channel.id)
-    assert Decimal(data["total_cost"]) == Decimal("40.00")  # 5 videos × $8
+    assert Decimal(data["total_cost"]) == Decimal("40.00")  # 5 videos x $8
     assert data["video_count"] == 5
     assert Decimal(data["avg_cost_per_video"]) == Decimal("8.00")
 

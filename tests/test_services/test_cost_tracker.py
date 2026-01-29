@@ -430,7 +430,7 @@ async def test_get_weekly_cost_summary_current_week(async_session: AsyncSession)
     summary = await get_weekly_cost_summary(async_session, channel.id)
 
     # Assert: Correct totals
-    assert summary["total_cost"] == Decimal("28.68")  # 3 × (2.00 + 7.56)
+    assert summary["total_cost"] == Decimal("28.68")  # 3 x (2.00 + 7.56)
     assert summary["video_count"] == 3
     assert summary["avg_cost_per_video"] == Decimal("9.56")
     assert "breakdown_by_component" in summary
@@ -491,7 +491,7 @@ async def test_get_monthly_cost_summary_current_month(async_session: AsyncSessio
     summary = await get_monthly_cost_summary(async_session, channel.id)
 
     # Assert: Correct totals
-    assert summary["total_cost"] == Decimal("75.60")  # 10 × 7.56
+    assert summary["total_cost"] == Decimal("75.60")  # 10 x 7.56
     assert summary["video_count"] == 10
     assert summary["avg_cost_per_video"] == Decimal("7.56")
     assert "start_date" in summary
@@ -586,7 +586,7 @@ async def test_get_cost_trend_data_30_days(async_session: AsyncSession):
     assert "daily_costs" in trend_data
     assert len(trend_data["daily_costs"]) <= 30  # At most 30 days
     assert "total_cost" in trend_data
-    assert trend_data["total_cost"] == Decimal("56.00")  # 7 days × $8
+    assert trend_data["total_cost"] == Decimal("56.00")  # 7 days x $8
 
 
 # ============================================================================
@@ -715,7 +715,7 @@ async def test_check_cost_thresholds_exceeded(async_session: AsyncSession):
         cost = VideoCost(
             task_id=task.id,
             component="kling_video",
-            cost_usd=Decimal("9.17"),  # 6 × 9.17 = 55.02
+            cost_usd=Decimal("9.17"),  # 6 x 9.17 = 55.02
             units_used=18,
             timestamp=current_time,
         )
