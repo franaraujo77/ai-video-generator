@@ -377,15 +377,12 @@ async def get_channel_comparison(
     status_code=status.HTTP_200_OK,
     summary="Get complete cost dashboard data",
     description=(
-        "Returns comprehensive cost dashboard with weekly, monthly, "
-        "comparison, and trend data"
+        "Returns comprehensive cost dashboard with weekly, monthly, comparison, and trend data"
     ),
 )
 async def get_cost_dashboard(
     channel_id: UUID = Query(..., description="Channel UUID"),
-    trend_days: int = Query(
-        30, ge=1, le=365, description="Days for trend analysis (default: 30)"
-    ),
+    trend_days: int = Query(30, ge=1, le=365, description="Days for trend analysis (default: 30)"),
     db: AsyncSession = Depends(get_session),
 ) -> CostDashboardResponse:
     """Get complete cost dashboard data for a channel.
