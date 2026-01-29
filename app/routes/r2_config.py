@@ -56,7 +56,7 @@ class R2TestConnectionResponse(BaseModel):
 async def store_r2_config(
     channel_id: str,
     config: R2ConfigRequest,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> R2ConfigResponse:
     """Store R2 credentials for channel.
 
@@ -101,7 +101,7 @@ async def store_r2_config(
             channel_id=channel_id,
             error=str(e),
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     except Exception as e:
         log.error(
@@ -110,13 +110,13 @@ async def store_r2_config(
             error=str(e),
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="Failed to store R2 configuration")
+        raise HTTPException(status_code=500, detail="Failed to store R2 configuration") from e
 
 
 @router.get("/{channel_id}/r2-config", response_model=R2ConfigResponse)
 async def get_r2_config(
     channel_id: str,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> R2ConfigResponse:
     """Get R2 configuration for channel (without decrypted credentials).
 
@@ -132,7 +132,7 @@ async def get_r2_config(
     """
     credential_service = CredentialService()
 
-    access_key, secret_key, bucket_name = await credential_service.get_r2_credentials(
+    access_key, _secret_key, bucket_name = await credential_service.get_r2_credentials(
         channel_id, db
     )
 
@@ -153,7 +153,7 @@ async def get_r2_config(
 @router.delete("/{channel_id}/r2-config", status_code=204)
 async def delete_r2_config(
     channel_id: str,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> None:
     """Remove R2 configuration for channel.
 
@@ -187,13 +187,13 @@ async def delete_r2_config(
             channel_id=channel_id,
             error=str(e),
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @router.post("/{channel_id}/r2-config/test", response_model=R2TestConnectionResponse)
 async def test_r2_connection(
     channel_id: str,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> R2TestConnectionResponse:
     """Test R2 connection for channel.
 
@@ -235,7 +235,7 @@ async def test_r2_connection(
             channel_id=channel_id,
             error=str(e),
         )
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
     except Exception as e:
         log.error(
@@ -244,4 +244,4 @@ async def test_r2_connection(
             error=str(e),
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail="R2 connection test failed")
+        raise HTTPException(status_code=500, detail="R2 connection test failed") from e

@@ -121,9 +121,9 @@ class WeeklySummaryResponse(BaseModel):
 )
 async def list_weekly_metrics(
     channel_id: UUID,
-    start_date: date = Query(description="Range start date (Monday)"),
-    end_date: date = Query(description="Range end date (Monday)"),
-    db: AsyncSession = Depends(get_session),
+    start_date: date = Query(description="Range start date (Monday)"),  # noqa: B008
+    end_date: date = Query(description="Range end date (Monday)"),  # noqa: B008
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> WeeklyMetricsListResponse:
     """List weekly metrics for a channel within date range.
 
@@ -195,7 +195,7 @@ async def list_weekly_metrics(
 async def get_single_week_metrics(
     channel_id: UUID,
     week_date: date,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> WeeklyMetricsResponse:
     """Get metrics for a specific week.
 
@@ -271,7 +271,7 @@ async def get_single_week_metrics(
 async def get_channel_success_rate_trend(
     channel_id: UUID,
     weeks: int = Query(default=12, ge=1, le=52, description="Number of recent weeks"),
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> SuccessRateTrendResponse:
     """Get success rate trend for charting.
 
@@ -315,8 +315,8 @@ async def get_channel_success_rate_trend(
     description="Returns aggregated weekly metrics across all active channels",
 )
 async def get_weekly_summary(
-    week_date: date = Query(description="Week starting date (defaults to last completed week)"),
-    db: AsyncSession = Depends(get_session),
+    week_date: date = Query(description="Week starting date (defaults to last completed week)"),  # noqa: B008
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> WeeklySummaryResponse:
     """Get cross-channel weekly summary for specified week.
 

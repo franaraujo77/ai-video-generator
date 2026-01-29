@@ -35,13 +35,24 @@ from app.workers.video_generation_worker import process_video_generation_task
 
 @pytest.fixture
 def patch_session_factory(async_session, monkeypatch):
-    """Patch async_session_factory to use test database session.
+    """Patch async_session_factory to use test database session with nested transactions.
 
     This fixture patches the session factory to always return the same test
     session, ensuring that all operations within a test share the same session
-    and can see each other's changes.
+    and can see each other's changes. Uses nested transactions (SAVEPOINTs)
+    to avoid transaction conflicts.
     """
     from contextlib import asynccontextmanager
+    from unittest.mock import AsyncMock
+
+    # Wrap the session to intercept begin() calls
+    original_begin = async_session.begin
+
+    def mock_begin():
+        """Mock begin() to use begin_nested() instead."""
+        return async_session.begin_nested()
+
+    async_session.begin = mock_begin
 
     @asynccontextmanager
     async def mock_factory():
@@ -50,7 +61,11 @@ def patch_session_factory(async_session, monkeypatch):
 
     monkeypatch.setattr("app.services.webhook_handler.async_session_factory", mock_factory)
     monkeypatch.setattr("app.workers.video_generation_worker.async_session_factory", mock_factory)
-    return async_session
+
+    yield async_session
+
+    # Restore original begin method
+    async_session.begin = original_begin
 
 
 class TestVideoReviewApprovalFlow:
@@ -75,7 +90,7 @@ class TestVideoReviewApprovalFlow:
             review_started_at=datetime.now(timezone.utc),
         )
         async_session.add(task)
-        await async_session.commit()
+        await async_session.flush()  # Use flush instead of commit to keep transaction open
 
         # Act: Handle approval status change
         await _handle_approval_status_change(
@@ -116,7 +131,7 @@ class TestVideoReviewApprovalFlow:
             review_started_at=review_start,
         )
         async_session.add(task)
-        await async_session.commit()
+        await async_session.flush()  # Use flush instead of commit to keep transaction open
 
         # Act
         await _handle_approval_status_change(
@@ -154,7 +169,7 @@ class TestVideoReviewRejectionFlow:
             review_started_at=datetime.now(timezone.utc),
         )
         async_session.add(task)
-        await async_session.commit()
+        await async_session.flush()  # Use flush instead of commit to keep transaction open
 
         # Mock Notion page data with Error Log containing clip numbers
         notion_page = {
@@ -232,7 +247,7 @@ class TestPartialRegeneration:
             step_completion_metadata={"failed_clip_numbers": [5, 12, 17]},
         )
         async_session.add(task)
-        await async_session.commit()
+        await async_session.flush()  # Use flush instead of commit to keep transaction open
 
         # Mock video generation service
         with patch(
@@ -320,7 +335,7 @@ class Test60SecondReviewWorkflow:
             review_started_at=review_start,
         )
         async_session.add(task)
-        await async_session.commit()
+        await async_session.flush()  # Use flush instead of commit to keep transaction open
 
         # Act: Fast approval (within 60 seconds)
         await _handle_approval_status_change(
@@ -354,7 +369,7 @@ class Test60SecondReviewWorkflow:
             review_started_at=review_start,
         )
         async_session.add(task)
-        await async_session.commit()
+        await async_session.flush()  # Use flush instead of commit to keep transaction open
 
         # Mock Notion page
         notion_page = {

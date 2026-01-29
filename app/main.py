@@ -123,7 +123,7 @@ app.include_router(weekly_reports.router)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK)
-async def health_check(db: AsyncSession = Depends(get_session)) -> JSONResponse:
+async def health_check(db: AsyncSession = Depends(get_session)) -> JSONResponse:  # noqa: B008
     """Health check endpoint for Railway deployment and system monitoring (Story 8.7).
 
     Performs comprehensive system health checks within 500ms response budget:

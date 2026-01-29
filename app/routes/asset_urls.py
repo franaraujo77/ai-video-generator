@@ -53,7 +53,7 @@ async def get_task_asset_urls(
     asset_type: str | None = Query(
         None, description="Filter by asset type (character, video_clip, etc.)"
     ),
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> TaskAssetsResponse:
     """Get all asset URLs for a task, optionally filtered by asset type.
 
@@ -83,7 +83,7 @@ async def get_task_asset_urls(
 @router.get("/tasks/{task_id}/assets/unsynced", response_model=TaskAssetsResponse)
 async def get_task_unsynced_assets(
     task_id: UUID,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> TaskAssetsResponse:
     """Get all assets for task that haven't been synced to Notion.
 
@@ -108,7 +108,7 @@ async def get_task_unsynced_assets(
 @router.post("/tasks/{task_id}/sync-assets")
 async def trigger_asset_sync(
     task_id: UUID,
-    db: AsyncSession = Depends(get_session),
+    db: AsyncSession = Depends(get_session),  # noqa: B008
 ) -> dict:
     """Trigger manual Notion asset sync for task.
 
