@@ -236,7 +236,7 @@ class WorkspaceCleanupService:
 
             # Get R2 client with decrypted credentials
             credential_service = CredentialService()
-            r2_client = await credential_service.get_r2_client(db, task.channel.channel_id)
+            r2_client = await credential_service.get_r2_client(task.channel.channel_id, db)
 
         deleted_count = 0
 

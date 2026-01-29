@@ -279,17 +279,19 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                     worker_state.increment_audio_tasks()
 
                 # Transition: claimed → processing (with dynamic status based on task type)
+                # Save original status BEFORE changing to CLAIMED
+                original_status = task.status
                 task.status = TaskStatus.CLAIMED
                 await db.commit()
 
-                # Determine next processing status based on current status
+                # Determine next processing status based on original status
                 status_transitions = {
                     TaskStatus.QUEUED: TaskStatus.GENERATING_ASSETS,
                     TaskStatus.COMPOSITES_READY: TaskStatus.GENERATING_VIDEO,
                     TaskStatus.VIDEO_APPROVED: TaskStatus.GENERATING_AUDIO,
                     TaskStatus.FINAL_REVIEW: TaskStatus.UPLOADING,
                 }
-                next_status = status_transitions.get(task.status, TaskStatus.GENERATING_ASSETS)
+                next_status = status_transitions.get(original_status, TaskStatus.GENERATING_ASSETS)
                 task.status = next_status
                 await db.commit()
 
