@@ -5,6 +5,7 @@ Used by content creators to access all generated assets directly from API.
 """
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -14,8 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.models import Channel, Task
 from app.services.asset_url_storage import get_task_assets, get_unsynced_assets
-from app.services.credential_service import CredentialService
 from app.services.notion_asset_sync import sync_task_assets_to_notion
+from app.utils.encryption import get_encryption_service
 from app.utils.logging import get_logger
 
 log = get_logger(__name__)
@@ -109,7 +110,7 @@ async def get_task_unsynced_assets(
 async def trigger_asset_sync(
     task_id: UUID,
     db: AsyncSession = Depends(get_session),  # noqa: B008
-) -> dict:
+) -> dict[str, Any]:
     """Trigger manual Notion asset sync for task.
 
     Retries failed Notion syncs for all unsynced assets. Use this endpoint
@@ -142,8 +143,8 @@ async def trigger_asset_sync(
         raise HTTPException(status_code=400, detail="Channel has no Notion token")
 
     # Decrypt Notion token
-    credential_service = CredentialService()
-    notion_token = credential_service.decrypt(channel.notion_token_encrypted)
+    encryption_service = get_encryption_service()
+    notion_token = encryption_service.decrypt(channel.notion_token_encrypted)
 
     # Get unsynced assets count before sync
     unsynced_before = await get_unsynced_assets(db, task_id)

@@ -140,7 +140,7 @@ def register_entrypoints(pgq: PgQueuer) -> None:
                 # Story 8.1: Bind correlation_id and channel_id to async context
                 # This makes them available to all logs throughout task processing
                 set_correlation_id(str(task.id))
-                set_channel_id(task.channel_id)
+                set_channel_id(str(task.channel_id))
 
                 # Log claim with priority context (Story 4.3)
                 # Note: correlation_id, channel_id, worker_id auto-injected by structlog processors

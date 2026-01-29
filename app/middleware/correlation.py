@@ -15,6 +15,7 @@ Story: 8.1 - Structured Logging with Correlation IDs (Task 3, AC: 4)
 """
 
 import uuid
+from collections.abc import Awaitable, Callable
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -30,7 +31,9 @@ class CorrelationMiddleware(BaseHTTPMiddleware):
     available to all downstream code without manual parameter passing.
     """
 
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         """Process request and inject correlation ID.
 
         Args:

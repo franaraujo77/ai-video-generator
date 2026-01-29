@@ -170,7 +170,7 @@ async def health_check(db: AsyncSession = Depends(get_session)) -> JSONResponse:
     # Initialize response data
     overall_status = "healthy"
     database_status = "connected"
-    worker_info = {"count": 0, "active_timestamp": None}
+    worker_info: dict[str, int | str | None] = {"count": 0, "active_timestamp": None}
     queue_depth = 0
 
     # Check 1: Database Connectivity (< 100ms timeout)
@@ -200,7 +200,8 @@ async def health_check(db: AsyncSession = Depends(get_session)) -> JSONResponse:
             worker_info = await get_active_worker_count(db)
 
             # Degraded if fewer than 3 workers active
-            if worker_info["count"] < 3 and overall_status == "healthy":
+            worker_count = worker_info["count"]
+            if isinstance(worker_count, int) and worker_count < 3 and overall_status == "healthy":
                 overall_status = "degraded"
                 log.warning(
                     "health_check_degraded_workers",

@@ -22,6 +22,7 @@ Enhanced Features (Story 8.1):
 import json
 import logging
 import sys
+from collections.abc import MutableMapping
 from datetime import datetime, timezone
 from typing import Any
 
@@ -85,7 +86,9 @@ class StructuredLogger:
         self._logger.debug(self._format_json(event, **kwargs))
 
 
-def add_correlation_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def add_correlation_id(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Inject correlation_id from async context into every log entry.
 
     Args:
@@ -104,7 +107,9 @@ def add_correlation_id(logger: Any, method_name: str, event_dict: dict[str, Any]
     return event_dict
 
 
-def add_channel_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def add_channel_id(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Inject channel_id from async context into every log entry.
 
     Args:
@@ -123,7 +128,9 @@ def add_channel_id(logger: Any, method_name: str, event_dict: dict[str, Any]) ->
     return event_dict
 
 
-def add_worker_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def add_worker_id(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Inject worker_id from RAILWAY_SERVICE_NAME env var into every log entry.
 
     Args:
@@ -142,7 +149,9 @@ def add_worker_id(logger: Any, method_name: str, event_dict: dict[str, Any]) -> 
     return event_dict
 
 
-def add_step(logger: Any, method_name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
+def add_step(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> MutableMapping[str, Any]:
     """Inject step (pipeline step name) from async context into every log entry.
 
     Args:

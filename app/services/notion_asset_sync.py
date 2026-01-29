@@ -16,6 +16,7 @@ Dependencies:
 """
 
 import re
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -102,7 +103,7 @@ class NotionAssetSyncService:
         # CRITICAL: 3 requests per 1 second (Notion API limit)
         self.rate_limiter = AsyncLimiter(max_rate=3, time_period=1)
 
-    async def close(self):
+    async def close(self) -> None:
         """Close HTTP client (cleanup)."""
         await self.client.aclose()
 
@@ -112,7 +113,7 @@ class NotionAssetSyncService:
         retry=retry_if_exception_type(NotionSyncRetryError),
         reraise=True,
     )
-    async def update_asset_urls(self, page_id: str, assets: list[AssetMetadata]) -> dict:
+    async def update_asset_urls(self, page_id: str, assets: list[AssetMetadata]) -> dict[str, Any]:
         """Update Notion page with asset URLs (rate limited, with retry).
 
         Args:
@@ -192,7 +193,8 @@ class NotionAssetSyncService:
                 correlation_id=correlation_id,
             )
 
-            return response.json()
+            result: dict[str, Any] = response.json()
+            return result
 
         except (NotionSyncError, NotionSyncRetryError):
             # Re-raise for retry logic

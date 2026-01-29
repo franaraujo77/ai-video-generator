@@ -51,7 +51,7 @@ def extract_notion_file_url(notion_response: dict[str, Any], property_name: str 
         if not files:
             raise ValueError(f"No files found in Notion property '{property_name}'")
 
-        file_url = files[0]["file"]["url"]
+        file_url: str = files[0]["file"]["url"]
         return file_url
     except (KeyError, IndexError, TypeError) as e:
         raise ValueError(f"Failed to extract file URL from Notion response: {e}") from e

@@ -12,6 +12,7 @@ Endpoints:
 
 from datetime import date
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -67,7 +68,7 @@ class SuccessRateTrendResponse(BaseModel):
 
     channel_id: UUID
     weeks: int
-    trend: list[dict] = Field(
+    trend: list[dict[str, Any]] = Field(
         description="List of {week_starting_date, success_rate, total_videos, successful_videos}"
     )
 
@@ -76,13 +77,13 @@ class WeekOverWeekComparisonResponse(BaseModel):
     """Response schema for week-over-week comparison."""
 
     channel_id: UUID
-    current_week: dict | None = Field(
+    current_week: dict[str, Any] | None = Field(
         description="Current week metrics (week_starting_date, success_rate, ...)"
     )
-    previous_week: dict | None = Field(
+    previous_week: dict[str, Any] | None = Field(
         description="Previous week metrics (week_starting_date, success_rate, ...)"
     )
-    delta: dict | None = Field(
+    delta: dict[str, Any] | None = Field(
         description="Week-over-week changes (success_rate_change, total_videos_change, ...)"
     )
 
@@ -92,11 +93,13 @@ class FailurePatternAnalysisResponse(BaseModel):
 
     channel_id: UUID
     weeks: int
-    time_range: dict = Field(description="Analysis time range (start_week, end_week)")
-    category_breakdown: dict = Field(
+    time_range: dict[str, Any] = Field(description="Analysis time range (start_week, end_week)")
+    category_breakdown: dict[str, Any] = Field(
         description="Failures by category (transient, permanent, unknown)"
     )
-    stage_breakdown: dict = Field(description="Failures by stage (assets, video, audio, upload)")
+    stage_breakdown: dict[str, Any] = Field(
+        description="Failures by stage (assets, video, audio, upload)"
+    )
     most_common_category: str
     most_common_stage: str
 

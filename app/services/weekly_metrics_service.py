@@ -24,6 +24,7 @@ Pattern:
 import os
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select
@@ -374,7 +375,7 @@ async def check_success_rate_thresholds(metrics: WeeklyMetrics, db: AsyncSession
         }
 
         if any(failure_stages.values()):
-            most_common_stage = max(failure_stages, key=failure_stages.get)
+            most_common_stage = max(failure_stages, key=lambda k: failure_stages[k])
             failure_detail = f"{most_common_stage} ({failure_stages[most_common_stage]} failures)"
         else:
             failure_detail = "none"
@@ -547,7 +548,7 @@ async def get_success_rate_trend(
     channel_id: UUID,
     db: AsyncSession,
     weeks: int = 12,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Get success rate trend for charting (Task 5).
 
     Retrieves most recent N weeks of metrics formatted for time-series charts.
@@ -602,7 +603,7 @@ async def get_week_over_week_comparison(
     channel_id: UUID,
     week_date: date,
     db: AsyncSession,
-) -> dict:
+) -> dict[str, Any]:
     """Get week-over-week comparison with delta calculations (Task 5).
 
     Compares specified week with previous week, calculating deltas for all metrics.
@@ -679,7 +680,7 @@ async def get_failure_pattern_analysis(
     channel_id: UUID,
     db: AsyncSession,
     weeks: int = 4,
-) -> dict:
+) -> dict[str, Any]:
     """Analyze failure patterns over recent weeks (Task 5).
 
     Aggregates failure counts by category and stage over the most recent N weeks

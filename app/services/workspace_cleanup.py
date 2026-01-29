@@ -20,6 +20,7 @@ Dependencies:
 
 import shutil
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 import structlog
 from sqlalchemy import select
@@ -35,7 +36,7 @@ log = structlog.get_logger()
 class WorkspaceCleanupService:
     """Service for cleaning up old workspace directories."""
 
-    def __init__(self, session_factory=None):
+    def __init__(self, session_factory: Any = None) -> None:
         """Initialize cleanup service.
 
         Args:
@@ -46,7 +47,9 @@ class WorkspaceCleanupService:
 
         self._session_factory = session_factory or DefaultSessionFactory
 
-    async def cleanup_old_workspaces(self, db: AsyncSession, retention_days: int = 7) -> dict:
+    async def cleanup_old_workspaces(
+        self, db: AsyncSession, retention_days: int = 7
+    ) -> dict[str, Any]:
         """Clean up workspace directories for completed tasks older than retention period.
 
         Args:
@@ -144,7 +147,7 @@ class WorkspaceCleanupService:
             "duration_seconds": round(duration, 2),
         }
 
-    async def _cleanup_task_workspace(self, task: Task) -> dict:
+    async def _cleanup_task_workspace(self, task: Task) -> dict[str, Any]:
         """Clean up workspace directory and R2 assets for a single task.
 
         Args:
