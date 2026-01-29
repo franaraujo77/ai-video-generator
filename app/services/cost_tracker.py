@@ -303,9 +303,13 @@ async def get_monthly_cost_summary(
 
     # Calculate last day of month
     if today.month == 12:
-        next_month_start = today.replace(year=today.year + 1, month=1, day=1)
+        next_month_start = today.replace(
+            year=today.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
     else:
-        next_month_start = today.replace(month=today.month + 1, day=1)
+        next_month_start = today.replace(
+            month=today.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
 
     month_end = next_month_start - timedelta(microseconds=1)
 

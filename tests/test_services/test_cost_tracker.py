@@ -497,6 +497,13 @@ async def test_get_monthly_cost_summary_current_month(async_session: AsyncSessio
     assert "start_date" in summary
     assert "end_date" in summary
 
+    # Bug fix validation: month_end should be 23:59:59.999999 of last day of month
+    # Not midnight of next month (which would include costs from next month)
+    assert summary["end_date"].hour == 23
+    assert summary["end_date"].minute == 59
+    assert summary["end_date"].second == 59
+    assert summary["end_date"].month == current_time.month  # Same month as current
+
 
 @pytest.mark.asyncio
 async def test_get_cost_comparison_across_channels(async_session: AsyncSession):
