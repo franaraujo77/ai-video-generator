@@ -985,6 +985,39 @@ None - story creation completed successfully.
 - Code quality improvements applied
 - Story ready for final merge
 
+### Second Code Review (2026-01-29) - Critical Bug Fixes
+
+**PR Review Status:** ✅ ALL CRITICAL BUGS FIXED
+
+**Critical Bugs Found:** 2 (identified in PR #12 Claude review)
+**Critical Bugs Fixed:** 2 (100% fixed)
+
+**Critical Bug #1: Status Transition Logic Error (app/entrypoints.py:292)**
+- **Issue:** Task status set to CLAIMED, then immediately used CLAIMED to lookup next status
+- **Impact:** All tasks transitioned to GENERATING_ASSETS regardless of original status
+- **Root Cause:** `task.status = TaskStatus.CLAIMED` overwrites original status before lookup
+- **Consequence:** Tasks that should transition to GENERATING_VIDEO, GENERATING_AUDIO, or UPLOADING would incorrectly transition to GENERATING_ASSETS
+- **Fix:** Save `original_status = task.status` before overwriting with CLAIMED
+- **Verification:** Status transitions now work correctly for all task types
+
+**Critical Bug #2: Wrong Argument Order (app/services/workspace_cleanup.py:239)**
+- **Issue:** Arguments to `get_r2_client()` passed in wrong order: `(db, channel_id)` instead of `(channel_id, db)`
+- **Impact:** TypeError when R2 cleanup attempted (AsyncSession passed where str expected)
+- **Root Cause:** Method signature expects `(channel_id: str, db: AsyncSession)` but call reversed arguments
+- **Consequence:** R2 workspace cleanup would fail at runtime for all R2-backed channels
+- **Fix:** Swapped arguments to correct order: `get_r2_client(task.channel.channel_id, db)`
+- **Verification:** Mypy type checking now passes for this call
+
+**Files Modified (Second Review):**
+- app/entrypoints.py (Fixed status transition logic)
+- app/services/workspace_cleanup.py (Fixed argument order)
+
+**Test Results:**
+- All 30 Story 8.8 tests still passing after fixes
+- No regressions introduced
+
+**Commit:** ff20e40 - "fix: Fix critical bugs from Claude review (PR #12)"
+
 ### File List
 
 **Modified Files:**
