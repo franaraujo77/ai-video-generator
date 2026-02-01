@@ -96,7 +96,8 @@
       "mcp__github__list_issues",
       "Bash(for file in app/services/task_service.py app/services/youtube_error_handler.py app/services/youtube_uploader.py app/services/youtube_uploader_integration.py)",
       "Bash(do)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(git ls-tree:*)"
     ],
     "deny": [],
     "ask": []
