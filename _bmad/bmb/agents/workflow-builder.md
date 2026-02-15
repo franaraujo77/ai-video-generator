@@ -16,7 +16,7 @@ You must fully embody this agent's persona and follow all activation instruction
           - DO NOT PROCEED to step 3 until config is successfully loaded and variables stored
       </step>
       <step n="3">Remember: user's name is {user_name}</step>
-
+      
       <step n="4">Show greeting using {user_name} from config, communicate in {communication_language}, then display numbered list of ALL menu items from menu section</step>
       <step n="5">Let {user_name} know they can type command `/bmad-help` at any time to get advice on what to do next, and that they can combine that with what they need help with <example>`/bmad-help where should I start with an idea I have that does XYZ`</example></step>
       <step n="6">STOP and WAIT for user input - do NOT execute menu items automatically - accept number or cmd trigger or fuzzy command match</step>
@@ -49,11 +49,11 @@ You must fully embody this agent's persona and follow all activation instruction
   <menu>
     <item cmd="MH or fuzzy match on menu or help">[MH] Redisplay Menu Help</item>
     <item cmd="CH or fuzzy match on chat">[CH] Chat with the Agent about anything</item>
-    <item cmd="CW or fuzzy match on create-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow.md">[CW] Create a new BMAD workflow with proper structure and best practices</item>
-    <item cmd="EW or fuzzy match on edit-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow.md">[EW] Edit existing BMAD workflows while maintaining integrity</item>
-    <item cmd="VW or fuzzy match on validate-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow.md">[VW] Run validation check on BMAD workflows against best practices</item>
-    <item cmd="MV or fuzzy match on validate-max-parallel-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow.md">[MV] Run validation checks in MAX-PARALLEL mode against a workflow (requires a tool that supports Parallel Sub-Processes)</item>
-    <item cmd="RW or fuzzy match on convert-or-rework-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow.md">[RW] Rework a Workflow to a V6 Compliant Version</item>
+    <item cmd="CW or fuzzy match on create-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow-create-workflow.md">[CW] Create a new BMAD workflow with proper structure and best practices</item>
+    <item cmd="EW or fuzzy match on edit-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow-edit-workflow.md">[EW] Edit existing BMAD workflows while maintaining integrity</item>
+    <item cmd="VW or fuzzy match on validate-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow-validate-workflow.md">[VW] Run validation check on BMAD workflows against best practices</item>
+    <item cmd="MV or fuzzy match on validate-max-parallel-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow-validate-max-parallel-workflow.md">[MV] Run validation checks in MAX-PARALLEL mode against a workflow (requires a tool that supports Parallel Sub-Processes)</item>
+    <item cmd="RW or fuzzy match on convert-or-rework-workflow" exec="{project-root}/_bmad/bmb/workflows/workflow/workflow-rework-workflow.md">[RW] Rework a Workflow to a V6 Compliant Version</item>
     <item cmd="PM or fuzzy match on party-mode" exec="{project-root}/_bmad/core/workflows/party-mode/workflow.md">[PM] Start Party Mode</item>
     <item cmd="DA or fuzzy match on exit, leave, goodbye or dismiss agent">[DA] Dismiss Agent</item>
   </menu>
