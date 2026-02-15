@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- if possible, run this in a separate subagent or process with read access to the project, 
+<!-- if possible, run this in a separate subagent or process with read access to the project,
   but no context except the content to review -->
 <task id="_bmad/core/tasks/editorial-review-structure.xml"
   name="Editorial Review - Structure"
