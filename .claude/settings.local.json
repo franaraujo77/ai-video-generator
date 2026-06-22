@@ -97,7 +97,8 @@
       "Bash(for file in app/services/task_service.py app/services/youtube_error_handler.py app/services/youtube_uploader.py app/services/youtube_uploader_integration.py)",
       "Bash(do)",
       "Bash(done)",
-      "Bash(git ls-tree:*)"
+      "Bash(git ls-tree:*)",
+      "Bash(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 output/episode.mp3)"
     ],
     "deny": [],
     "ask": []
